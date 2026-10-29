@@ -1,7 +1,7 @@
 import type { Cents } from '../lib/money.ts';
 import type { Issue } from '../lib/issues.ts';
 import type { CompanySettings } from '../industries/types.ts';
-import type { DeductionPlan, ExtendedYearToDate } from '../../engine/payroll/types.ts';
+import type { DeductionPlan, DirectDepositAccount, ExtendedYearToDate } from '../../engine/payroll/types.ts';
 import type { EmployerContext, FederalW4, StateWithholding, TaxLine } from '../../engine/src/types.ts';
 
 export type PayFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
@@ -27,21 +27,123 @@ export interface Company {
     federalSchedule?: 'monthly' | 'semiweekly';
     lookback941LiabilityDollars?: number;
   };
-  /** The employer's bank, held at Stripe. Totali never sees or stores the account number. */
+  /** Where the employer's payroll money is debited from, and the authorisation to do it. */
   funding: {
-    status: 'none' | 'pending' | 'ready';
-    stripeCustomerId?: string;
-    paymentMethodId?: string;
-    bankLast4?: string;
+    bankAccountId?: string;
+    debitAuthorization?: DebitAuthorization;
   };
+  /** The Stripe customer that owns this company's bank links. Stripe is used only to connect to banks. */
+  stripeCustomerId?: string;
   createdAt: string;
 }
 
+/** The employer's written authorisation for Totali to debit their account (NACHA requires one for every debit). */
+export interface DebitAuthorization {
+  bankAccountId: string;
+  acceptedAt: string;
+  acceptedBy: string;
+  /** The version of the authorisation text shown, so a later change in wording is traceable. */
+  textVersion: string;
+  ip?: string;
+}
+
+/** How one of an employee's bank accounts takes its share of net pay. Exactly one account is the 'remainder'. */
 export interface PayoutAccount {
-  status: 'none' | 'onboarding' | 'ready' | 'restricted';
-  /** A Stripe connected account that receives this employee's pay. Totali never sees or stores the bank account number. */
-  stripeAccountId?: string;
-  bankLast4?: string;
+  bankAccountId: string;
+  allocation: DirectDepositAccount['allocation'];
+  priority?: number;
+}
+
+/**
+ * A bank account Totali holds the numbers for, encrypted. Stripe Financial
+ * Connections proves the person can log in to the bank and reports the
+ * last four digits, the account owners and the balance; the full number is
+ * entered by the account holder and must agree with those last four digits.
+ */
+export interface BankAccount {
+  id: string;
+  companyId: string;
+  ownerKind: 'company' | 'employee';
+  /** The company id or employee id. */
+  ownerId: string;
+  holderType: 'business' | 'individual';
+  accountType: 'checking' | 'savings';
+  routingNumber: string;
+  accountNumberEncrypted: string;
+  last4: string;
+  institutionName?: string;
+  link?: {
+    provider: 'stripe_financial_connections';
+    sessionId: string;
+    fcAccountId: string;
+    linkedAt: string;
+    ownerNames: string[];
+    ownership: 'match' | 'mismatch' | 'unavailable';
+    /** What kind of account number Stripe holds for this link. Informational: Totali enters its own. */
+    stripeNumberType?: 'permanent' | 'tokenized' | 'none';
+    balanceCents?: Cents;
+    balanceAsOf?: string;
+  };
+  verification: {
+    method: 'bank_link' | 'prenote';
+    status: 'pending' | 'verified' | 'failed';
+    reason?: string;
+    prenoteFileId?: string;
+    prenoteSettlementDate?: string;
+    verifiedAt?: string;
+  };
+  status: 'pending' | 'active' | 'disabled' | 'needs_update';
+  disabledReason?: string;
+  /** A notification of change from the receiving bank: the corrected details to use. The account is held until a person applies it. */
+  notificationOfChange?: { changeCode: string; correctedData: string; receivedAt: string };
+  createdAt: string;
+}
+
+/** A Stripe Financial Connections session Totali started for one owner, so only that owner's accounts can complete it. */
+export interface BankLink {
+  /** The Stripe session id. */
+  id: string;
+  companyId: string;
+  ownerKind: 'company' | 'employee';
+  ownerId: string;
+  customerId: string;
+  permissions: string[];
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface AchFileEntry {
+  ref: string;
+  traceNumber: string;
+  kind: 'credit' | 'debit' | 'prenote_credit' | 'prenote_debit';
+  amountCents: Cents;
+  legId?: string;
+  bankAccountId?: string;
+}
+
+/** An ACH file Totali built. The content holds full account numbers, so it is stored encrypted. */
+export interface AchFile {
+  id: string;
+  companyId: string;
+  runId?: string;
+  kind: 'debit' | 'credit' | 'prenote';
+  fileName: string;
+  contentEncrypted: string;
+  effectiveDate: string;
+  entries: AchFileEntry[];
+  totals: { entryCount: number; debitCents: Cents; creditCents: Cents };
+  /** created: built, not yet handed over. queued: handed over (e.g. written to the outbox), waiting for the bank to acknowledge. accepted: the bank has it. rejected: the bank refused it. */
+  status: 'created' | 'queued' | 'accepted' | 'rejected';
+  submitter?: string;
+  reference?: string;
+  message?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Counter {
+  id: string;
+  value: number;
 }
 
 export interface Employee {
@@ -66,9 +168,14 @@ export interface Employee {
   ssnLast4?: string;
   /** Date the employee acknowledged the written tip-credit notice. */
   tipCreditNoticeDate?: string;
-  payout: PayoutAccount;
+  /** Where net pay goes. Empty means the employee is not set up for direct deposit. */
+  payoutAccounts: PayoutAccount[];
+  /** The Stripe customer that owns this employee's bank links. */
+  stripeCustomerId?: string;
   ytd: ExtendedYearToDate;
   ytdYear: number;
+  /** Set when opening balances were loaded from a previous provider. */
+  ytdImport?: { asOf: string; importedAt: string };
   createdAt: string;
 }
 
@@ -85,6 +192,8 @@ export interface Shift {
   /** A caller's own id (a POS shift id), so re-sending the same shift replaces it instead of paying it twice. */
   externalId?: string;
   rateCentsPerHour?: Cents;
+  /** Length of the regularly scheduled shift, when there is one. Caps New York call-in pay. */
+  scheduledMinutes?: number;
   chargedTipsCents: Cents;
   cashTipsCents: Cents;
   salesCents: Cents;
@@ -196,22 +305,36 @@ export interface PayRun {
   alerts?: Array<{ at: string; code: string; message: string }>;
 }
 
-/** One movement of money through Stripe. Created before the Stripe call so a crash can resume, never double-pay. */
+/**
+ * One ACH entry's worth of money: the employer debit, or one credit to one of
+ * an employee's accounts. Created before the file is built, with the trace
+ * number that will come back on any return.
+ *
+ *   pending    created, not yet in a file
+ *   queued     in a file the bank has not acknowledged
+ *   submitted  the bank has the file; waiting for the effective date
+ *   settled    the effective date has passed (a debit: the bank confirmed the funds arrived) and no return has come
+ *   returned   the receiving bank sent it back
+ *   failed     the bank rejected the file, or it could not be built
+ */
 export interface MoneyLeg {
   id: string;
   companyId: string;
   runId: string;
   kind: 'funding' | 'employee_payout';
   employeeId?: string;
+  bankAccountId: string;
   amountCents: Cents;
-  /** Stable per-leg idempotency key sent to Stripe. */
-  idempotencyKey: string;
-  /** Bumped when a failed leg is retried, because Stripe replays the stored result for a reused idempotency key. */
   attempt: number;
-  status: 'pending' | 'created' | 'processing' | 'succeeded' | 'failed' | 'reversed' | 'canceled';
-  stripeObjectId?: string;
-  stripeChargeId?: string;
+  status: 'pending' | 'queued' | 'submitted' | 'settled' | 'returned' | 'failed';
+  fileId?: string;
+  traceNumber?: string;
+  effectiveDate?: string;
+  settledAt?: string;
+  returnCode?: string;
   failureMessage?: string;
+  /** Anything the operator should know about how this leg was made, for example that the employer's balance could not be checked. */
+  note?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -229,14 +352,14 @@ export interface LedgerEntry {
 
 /**
  * Where money sits, from Totali's point of view.
- *   stripe_cash         the platform's Stripe balance (an asset: debits increase it)
+ *   bank_cash           Totali's settlement account at its bank (an asset: debits increase it)
  *   employee_net_pay    owed to employees until their transfer succeeds
  *   tax_withheld        employee taxes held for the agencies
  *   tax_employer        employer taxes held for the agencies
  *   deductions_held     benefit contributions, garnishments and the like held for their payees
  * The last four are liabilities: credits increase them.
  */
-export type LedgerAccount = 'stripe_cash' | 'employee_net_pay' | 'tax_withheld' | 'tax_employer' | 'deductions_held';
+export type LedgerAccount = 'bank_cash' | 'employee_net_pay' | 'tax_withheld' | 'tax_employer' | 'deductions_held';
 
 export interface ApiKey {
   id: string;
@@ -259,8 +382,15 @@ export interface TaxDeposit {
   createdAt: string;
 }
 
-export interface WebhookEvent {
+/** Who did what: every write through the API leaves one of these. Bodies are never recorded, so no secrets or PII land here. */
+export interface AuditEntry {
   id: string;
-  type: string;
-  receivedAt: string;
+  at: string;
+  /** 'admin' or the id of the company key's company. */
+  actor: string;
+  method: string;
+  path: string;
+  status: number;
+  companyId?: string;
+  ip?: string;
 }

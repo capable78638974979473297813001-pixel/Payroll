@@ -65,6 +65,12 @@ export interface ChecklistItem {
   coveredBy?: string;
   /** Totali does not compute or enforce this; the company has to. */
   notModelled?: boolean;
+  /**
+   * Whether the rule as written here was checked against a primary source, and
+   * where. `false` means it was written from general knowledge and has not been
+   * checked: treat it as a reminder to ask a specialist, not as an authority.
+   */
+  verified: { on: string; sources: string[] } | false;
 }
 
 export interface NicheProfile {

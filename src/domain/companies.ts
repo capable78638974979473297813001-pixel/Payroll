@@ -97,7 +97,7 @@ export function createCompany(store: Store, body: unknown): { company: Company; 
     employerContext: employerContext(o.employerContext),
     ...(o.typicalDailyEmployees !== undefined ? { typicalDailyEmployees: v.int(o, 'typicalDailyEmployees', 0, 100_000) } : {}),
     taxAccounts: taxAccounts(o.taxAccounts),
-    funding: { status: 'none' },
+    funding: {},
     createdAt: new Date().toISOString(),
   };
   assertRatesAgree(company);

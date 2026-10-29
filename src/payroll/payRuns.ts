@@ -9,6 +9,8 @@ import { PERIODS_PER_YEAR, type Deduction, type Earning, type PaycheckInput } fr
 import { accumulateYtd, freshYearToDate } from '../../engine/payroll/ytd.ts';
 import type { Store } from '../store/store.ts';
 import { employerContextFor } from '../domain/companies.ts';
+import { payoutReadiness } from '../banking/accounts.ts';
+import { FLSA_STANDARD_SALARY_LEVEL_WEEKLY, meetsStandardSalaryLevelTest } from '../../engine/payroll/flsaExemption.ts';
 import type { Adjustment, Company, Employee, EarningLine, Paycheck, PayRun } from '../domain/types.ts';
 import { distributeTips, type ShiftTips, type TipShift } from '../restaurant/tips.ts';
 import { computeHourlyWages, salaryForPeriod, type WageShift } from '../restaurant/wages.ts';
@@ -136,7 +138,8 @@ export function buildPayRun(store: Store, company: Company, input: DraftInput, k
     const flag = (i: Issue) => issues.push({ ...i, employeeId: employee.id });
 
     if (!employee.ssnEncrypted) flag(review('ssn_missing', `${name} has no SSN on file. It is needed for the W-2 and MasteryTax filings.`, {}));
-    if (employee.payout.status !== 'ready') flag(review('payout_account_not_ready', `${name} has no bank account connected, so their pay cannot be sent by direct deposit.`, {}));
+    const ready = payoutReadiness(store, employee);
+    if (!ready.ready) flag(review('payout_account_not_ready', `${name} is not set up for direct deposit (${ready.reason}), so their pay cannot be sent until they are.`, {}));
 
     // Hourly wages
     let paidMinutes = 0;
@@ -166,6 +169,9 @@ export function buildPayRun(store: Store, company: Company, input: DraftInput, k
           tipCreditRole: creditRole,
           mealBreakViolation: s.mealBreakViolation,
           restBreakViolation: s.restBreakViolation,
+          ...(s.clockIn ? { clockIn: s.clockIn } : {}),
+          ...(s.clockOut ? { clockOut: s.clockOut } : {}),
+          ...(s.scheduledMinutes !== undefined ? { scheduledMinutes: s.scheduledMinutes } : {}),
         });
       }
       const tipsReceivedByDate = new Map<string, Cents>();
@@ -191,6 +197,13 @@ export function buildPayRun(store: Store, company: Company, input: DraftInput, k
       for (const l of wages.lines) earnings.push({ code: l.code, category: 'regular', amountCents: l.amountCents, minutes: l.minutes, detail: l.detail, paidByPayroll: true });
     } else {
       earnings.push({ code: 'SALARY', category: 'regular', amountCents: salaryForPeriod(employee.payType.annualCents, periodsPerYear), detail: `${frequency} salary`, paidByPayroll: true });
+      // Salaried staff are not owed overtime only if they are exempt. The federal salary-level test is checked; the duties test, and states with a higher salary level, are not.
+      const weeklySalary = Math.round(employee.payType.annualCents / 52);
+      if (!meetsStandardSalaryLevelTest(weeklySalary)) {
+        flag(blocking('salary_below_exempt_threshold', `${name}'s salary (${weeklySalary}¢ a week) is below the federal exemption salary level (${FLSA_STANDARD_SALARY_LEVEL_WEEKLY}¢ a week), so they cannot be treated as exempt. Pay them hourly with overtime, or raise the salary.`, {}));
+      } else {
+        flag(info('exemption_duties_not_tested', `${name} is salaried and meets the federal salary level. Whether their duties qualify for an exemption, and whether a higher state salary level applies, is not tested.`, {}));
+      }
       if (employee.hireDate > periodStart || (employee.terminationDate && employee.terminationDate < periodEnd)) {
         flag(review('salary_not_prorated', `${name} was hired or terminated inside this period. Salary is paid in full; proration is not modelled.`, {}));
       }

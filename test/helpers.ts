@@ -2,7 +2,8 @@ import { Store } from '../src/store/store.ts';
 import { createCompany } from '../src/domain/companies.ts';
 import { addEmployee } from '../src/domain/employees.ts';
 import { recordShift } from '../src/domain/timekeeping.ts';
-import type { Company, Employee } from '../src/domain/types.ts';
+import { encryptField } from '../src/lib/crypto.ts';
+import type { BankAccount, Company, Employee } from '../src/domain/types.ts';
 
 export const TEST_DATA_KEY = Buffer.alloc(32, 7).toString('base64');
 process.env.TOTALI_DATA_KEY ??= TEST_DATA_KEY;
@@ -41,7 +42,42 @@ export function shiftsFor(store: Store, companyId: string, employeeId: string, d
   for (const n of days) recordShift(store, companyId, { employeeId, workDate: day(n), minutes: 360, ...over });
 }
 
-export function ready(store: Store, employeeId: string): void {
+/** Test routing numbers that pass the ABA checksum. */
+export const ROUTING = '110000000';
+export const ROUTING_2 = '021000021';
+
+/** Put an active, verified bank account straight into the store, as a completed bank link would. */
+export function bankAccount(store: Store, over: Partial<BankAccount> & { companyId: string; ownerKind: 'company' | 'employee'; ownerId: string; accountNumber?: string }): BankAccount {
+  const { accountNumber = '000123456789', ...rest } = over;
+  const acct: BankAccount = {
+    id: `bank_${Math.random().toString(16).slice(2, 12)}`,
+    holderType: over.ownerKind === 'company' ? 'business' : 'individual',
+    accountType: 'checking',
+    routingNumber: ROUTING,
+    accountNumberEncrypted: encryptField(accountNumber),
+    last4: accountNumber.slice(-4),
+    institutionName: 'Test Bank',
+    verification: { method: 'bank_link', status: 'verified', verifiedAt: '2026-01-01T00:00:00Z' },
+    status: 'active',
+    createdAt: '2026-01-01T00:00:00Z',
+    ...rest,
+  };
+  store.tx(() => store.bankAccounts.put(acct));
+  return acct;
+}
+
+/** Give an employee an active bank account that takes all of their net pay. */
+export function ready(store: Store, employeeId: string, accountNumber = '000123456789'): BankAccount {
   const e = store.employees.require(employeeId, 'Employee');
-  store.tx(() => store.employees.put({ ...e, payout: { status: 'ready', stripeAccountId: `acct_${employeeId}`, bankLast4: '6789' } }));
+  const acct = bankAccount(store, { companyId: e.companyId, ownerKind: 'employee', ownerId: e.id, accountNumber });
+  store.tx(() => store.employees.put({ ...e, payoutAccounts: [{ bankAccountId: acct.id, allocation: { kind: 'remainder' } }] }));
+  return acct;
+}
+
+/** Give a company an active, authorised funding account. */
+export function fundingReady(store: Store, companyId: string): BankAccount {
+  const acct = bankAccount(store, { companyId, ownerKind: 'company', ownerId: companyId, routingNumber: ROUTING_2, accountNumber: '000987654321' });
+  const c = store.companies.require(companyId, 'Company');
+  store.tx(() => store.companies.put({ ...c, funding: { bankAccountId: acct.id, debitAuthorization: { bankAccountId: acct.id, acceptedAt: '2026-01-02T00:00:00Z', acceptedBy: 'Owner Person', textVersion: 'draft-1' } } }));
+  return acct;
 }

@@ -1,22 +1,29 @@
 /**
- * A small Stripe client over plain fetch, so the repo stays dependency-free
- * (the same choice the tax engine's own Stripe code makes). It reads the
- * secret key from STRIPE_SECRET_KEY and nothing else.
+ * Stripe, used for one thing: connecting to people's banks.
  *
- * Live-mode keys (sk_live_ / rk_live_) move real money. They are refused
- * unless STRIPE_ALLOW_LIVE=1, so a live key pasted into a dev environment
- * does nothing until someone says so on purpose.
+ * Totali moves the money itself, by ACH (see src/ach and src/money/ach.ts).
+ * Stripe Financial Connections is how an employer or an employee proves they
+ * can log in to a bank account, and how Totali learns that account's last
+ * four digits, its owners' names and its balance. Nothing here creates a
+ * payment, a payout or a transfer.
  *
- * Every call that creates money movement takes an idempotency key. A retry
- * after a timeout, crash or network error carries the same key, so Stripe
- * returns the first result instead of moving the money twice.
+ * It reads the secret key from STRIPE_SECRET_KEY, over plain fetch so the
+ * repo stays dependency-free. Live-mode keys (sk_live_ / rk_live_) are
+ * refused unless STRIPE_ALLOW_LIVE=1, so a live key pasted into a dev
+ * environment does nothing until someone says so on purpose.
+ *
+ * What Stripe does NOT hand over: Financial Connections returns tokenized
+ * account numbers that only work for ACH on Stripe. Full account numbers for
+ * ACH outside Stripe are available only to businesses Stripe approves. So the
+ * account holder enters the full number, and Totali checks its last four
+ * digits against what Stripe confirmed.
  */
 
 export class StripeError extends Error {
   status: number;
   type: string | undefined;
   code: string | undefined;
-  /** True when the request definitely did not complete (a 4xx Stripe rejected). False when the outcome is unknown (network, 5xx). */
+  /** True when Stripe definitely rejected the request. False when the outcome is unknown (network, 5xx). */
   definitive: boolean;
   constructor(message: string, status: number, opts: { type?: string; code?: string; definitive?: boolean } = {}) {
     super(message);
@@ -50,15 +57,15 @@ export function stripeMode(): 'live' | 'test' | 'unconfigured' {
   return /^(sk|rk)_live_/.test(k) ? 'live' : 'test';
 }
 
-/** Form-encode nested objects the way Stripe expects: a[b]=1, a[0]=x. */
+/** Form-encode nested objects the way Stripe expects: a[b]=1, a[]=x. */
 export function formEncode(obj: Record<string, unknown>, prefix = ''): string[] {
   const parts: string[] = [];
   for (const [k, v] of Object.entries(obj)) {
     if (v === undefined || v === null) continue;
     const key = prefix ? `${prefix}[${k}]` : k;
     if (Array.isArray(v)) {
-      v.forEach((item, i) => {
-        if (typeof item === 'object' && item !== null) parts.push(...formEncode(item as Record<string, unknown>, `${key}[${i}]`));
+      v.forEach((item) => {
+        if (typeof item === 'object' && item !== null) parts.push(...formEncode(item as Record<string, unknown>, `${key}[]`));
         else parts.push(`${encodeURIComponent(`${key}[]`)}=${encodeURIComponent(String(item))}`);
       });
     } else if (typeof v === 'object') parts.push(...formEncode(v as Record<string, unknown>, key));
@@ -67,40 +74,38 @@ export function formEncode(obj: Record<string, unknown>, prefix = ''): string[] 
   return parts;
 }
 
-export interface StripePaymentIntent {
+export type FcPermission = 'balances' | 'ownership' | 'payment_method' | 'transactions';
+
+export interface FcAccount {
   id: string;
-  status: 'requires_payment_method' | 'requires_confirmation' | 'requires_action' | 'processing' | 'succeeded' | 'canceled' | 'requires_capture';
-  amount: number;
-  latest_charge?: string | null;
-  last_payment_error?: { code?: string; message?: string } | null;
+  status: 'active' | 'inactive' | 'disconnected';
+  category: string;
+  subcategory: string;
+  last4?: string | null;
+  institution_name?: string;
+  display_name?: string | null;
+  account_holder?: { type?: string; customer?: string } | null;
+  permissions?: string[] | null;
+  balance?: { as_of?: number; type?: string; cash?: { available?: { usd?: number } }; current?: { usd?: number } } | null;
+  balance_refresh?: { status?: string; next_refresh_available_at?: number | null } | null;
+  /** Present as an id until expanded; an object with owners once `expand[]=ownership` is used and a refresh has completed. */
+  ownership?: string | { owners?: { data?: Array<{ name?: string }> } } | null;
+  ownership_refresh?: { status?: string; next_refresh_available_at?: number | null } | null;
+  account_numbers?: Array<{ identifier_type?: 'account_number' | 'tokenized_account_number'; status?: string }> | null;
 }
 
-export interface StripeTransfer {
+export interface FcSession {
   id: string;
-  amount: number;
-  destination: string;
-  reversed?: boolean;
-}
-
-export interface StripeAccount {
-  id: string;
-  payouts_enabled?: boolean;
-  details_submitted?: boolean;
-  requirements?: { disabled_reason?: string | null };
-  external_accounts?: { data?: Array<{ last4?: string }> };
+  client_secret?: string;
+  accounts?: { data?: FcAccount[] };
 }
 
 export interface StripeApi {
-  createCustomer(p: { name: string; email?: string; metadata?: Record<string, string> }, key: string): Promise<{ id: string }>;
-  createSetupIntent(p: { customer: string; metadata?: Record<string, string> }, key: string): Promise<{ id: string; client_secret: string }>;
-  retrievePaymentMethod(id: string): Promise<{ id: string; us_bank_account?: { last4?: string; bank_name?: string } }>;
-  createPaymentIntent(p: { amount: number; customer: string; paymentMethod: string; transferGroup: string; description: string; metadata: Record<string, string> }, key: string): Promise<StripePaymentIntent>;
-  retrievePaymentIntent(id: string): Promise<StripePaymentIntent>;
-  createAccount(p: { email?: string; metadata: Record<string, string> }, key: string): Promise<StripeAccount>;
-  createAccountLink(p: { account: string; refreshUrl: string; returnUrl: string }): Promise<{ url: string }>;
-  retrieveAccount(id: string): Promise<StripeAccount>;
-  createTransfer(p: { amount: number; destination: string; transferGroup: string; metadata: Record<string, string>; description: string }, key: string): Promise<StripeTransfer>;
-  availableBalanceCents(): Promise<number>;
+  createCustomer(p: { name: string; email?: string; metadata?: Record<string, string> }, idempotencyKey: string): Promise<{ id: string }>;
+  createFcSession(p: { customer: string; permissions: FcPermission[]; prefetch?: Array<'balances' | 'ownership'> }, idempotencyKey: string): Promise<{ id: string; client_secret: string }>;
+  retrieveFcSession(id: string): Promise<FcSession>;
+  retrieveFcAccount(id: string, opts?: { expandOwnership?: boolean }): Promise<FcAccount>;
+  refreshFcAccount(id: string, features: Array<'balance' | 'ownership'>): Promise<FcAccount>;
 }
 
 export class StripeClient implements StripeApi {
@@ -119,15 +124,16 @@ export class StripeClient implements StripeApi {
 
   private async call<T>(method: 'GET' | 'POST', path: string, params: Record<string, unknown> = {}, idempotencyKey?: string): Promise<T> {
     const key = this.key();
-    const body = method === 'POST' ? formEncode(params).join('&') : undefined;
-    const query = method === 'GET' && Object.keys(params).length ? `?${formEncode(params).join('&')}` : '';
+    const encoded = formEncode(params).join('&');
+    const body = method === 'POST' ? encoded : undefined;
+    const query = method === 'GET' && encoded ? `?${encoded}` : '';
     const headers: Record<string, string> = { Authorization: `Bearer ${key}` };
     if (method === 'POST') headers['Content-Type'] = 'application/x-www-form-urlencoded';
     if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
     if (process.env.STRIPE_API_VERSION) headers['Stripe-Version'] = process.env.STRIPE_API_VERSION;
 
     let lastErr: unknown;
-    // A retry is only safe when an idempotency key makes it so, or the call is a read.
+    // A retry is safe for reads, and for writes that carry an idempotency key.
     const attempts = method === 'GET' || idempotencyKey ? 3 : 1;
     for (let i = 0; i < attempts; i++) {
       try {
@@ -162,82 +168,25 @@ export class StripeClient implements StripeApi {
     return this.call<{ id: string }>('POST', '/v1/customers', p, key);
   }
 
-  createSetupIntent(p: { customer: string; metadata?: Record<string, string> }, key: string) {
+  createFcSession(p: { customer: string; permissions: FcPermission[]; prefetch?: Array<'balances' | 'ownership'> }, key: string) {
     return this.call<{ id: string; client_secret: string }>(
       'POST',
-      '/v1/setup_intents',
-      {
-        customer: p.customer,
-        usage: 'off_session',
-        payment_method_types: ['us_bank_account'],
-        payment_method_options: { us_bank_account: { financial_connections: { permissions: ['payment_method'] }, verification_method: 'automatic' } },
-        metadata: p.metadata,
-      },
+      '/v1/financial_connections/sessions',
+      { account_holder: { type: 'customer', customer: p.customer }, permissions: p.permissions, filters: { country: 'US' }, ...(p.prefetch?.length ? { prefetch: p.prefetch } : {}) },
       key,
     );
   }
 
-  retrievePaymentMethod(id: string) {
-    return this.call<{ id: string; us_bank_account?: { last4?: string; bank_name?: string } }>('GET', `/v1/payment_methods/${encodeURIComponent(id)}`);
+  retrieveFcSession(id: string) {
+    return this.call<FcSession>('GET', `/v1/financial_connections/sessions/${encodeURIComponent(id)}`);
   }
 
-  createPaymentIntent(p: { amount: number; customer: string; paymentMethod: string; transferGroup: string; description: string; metadata: Record<string, string> }, key: string) {
-    return this.call<StripePaymentIntent>(
-      'POST',
-      '/v1/payment_intents',
-      {
-        amount: p.amount,
-        currency: 'usd',
-        customer: p.customer,
-        payment_method: p.paymentMethod,
-        payment_method_types: ['us_bank_account'],
-        confirm: true,
-        off_session: true,
-        transfer_group: p.transferGroup,
-        description: p.description,
-        metadata: p.metadata,
-      },
-      key,
-    );
+  retrieveFcAccount(id: string, opts: { expandOwnership?: boolean } = {}) {
+    return this.call<FcAccount>('GET', `/v1/financial_connections/accounts/${encodeURIComponent(id)}`, opts.expandOwnership ? { expand: ['ownership'] } : {});
   }
 
-  retrievePaymentIntent(id: string) {
-    return this.call<StripePaymentIntent>('GET', `/v1/payment_intents/${encodeURIComponent(id)}`);
-  }
-
-  createAccount(p: { email?: string; metadata: Record<string, string> }, key: string) {
-    const recipient = (process.env.STRIPE_CONNECT_SERVICE_AGREEMENT ?? 'full').trim() === 'recipient';
-    return this.call<StripeAccount>(
-      'POST',
-      '/v1/accounts',
-      {
-        type: 'express',
-        country: 'US',
-        email: p.email,
-        business_type: 'individual',
-        capabilities: { transfers: { requested: true } },
-        ...(recipient ? { tos_acceptance: { service_agreement: 'recipient' } } : {}),
-        metadata: p.metadata,
-      },
-      key,
-    );
-  }
-
-  createAccountLink(p: { account: string; refreshUrl: string; returnUrl: string }) {
-    return this.call<{ url: string }>('POST', '/v1/account_links', { account: p.account, refresh_url: p.refreshUrl, return_url: p.returnUrl, type: 'account_onboarding' });
-  }
-
-  retrieveAccount(id: string) {
-    return this.call<StripeAccount>('GET', `/v1/accounts/${encodeURIComponent(id)}`);
-  }
-
-  createTransfer(p: { amount: number; destination: string; transferGroup: string; metadata: Record<string, string>; description: string }, key: string) {
-    return this.call<StripeTransfer>('POST', '/v1/transfers', { amount: p.amount, currency: 'usd', destination: p.destination, transfer_group: p.transferGroup, description: p.description, metadata: p.metadata }, key);
-  }
-
-  async availableBalanceCents(): Promise<number> {
-    const b = await this.call<{ available: Array<{ amount: number; currency: string }> }>('GET', '/v1/balance');
-    return b.available.filter((x) => x.currency === 'usd').reduce((a, x) => a + x.amount, 0);
+  refreshFcAccount(id: string, features: Array<'balance' | 'ownership'>) {
+    return this.call<FcAccount>('POST', `/v1/financial_connections/accounts/${encodeURIComponent(id)}/refresh`, { features });
   }
 }
 

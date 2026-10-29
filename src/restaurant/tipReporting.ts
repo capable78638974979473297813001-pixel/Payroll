@@ -12,14 +12,26 @@ import { applyBps, type Cents } from '../lib/money.ts';
  * minimum wage in effect on 1 January 2007).
  */
 
-/** Cash tips of $20 or more in a calendar month must be reported by the employee. */
-export const MONTHLY_CASH_TIP_REPORTING_THRESHOLD: Cents = 2000;
+/**
+ * An employee reports their cash, check, and debit and credit card tips to the
+ * employer unless the month's total from that job is under $20 (IRS Pub. 531,
+ * read 2026-10-29). The report is due by the 10th of the next month, or the next
+ * business day if that is a weekend or legal holiday.
+ */
+export const MONTHLY_TIP_REPORTING_THRESHOLD: Cents = 2000;
 
-export function mustReportCashTips(monthCashTipsCents: Cents): boolean {
-  return monthCashTipsCents >= MONTHLY_CASH_TIP_REPORTING_THRESHOLD;
+export function mustReportTips(monthTipsCents: Cents): boolean {
+  return monthTipsCents >= MONTHLY_TIP_REPORTING_THRESHOLD;
 }
 
-/** Large food or beverage establishment test. `typicalDailyEmployees` is the prior year's usual headcount on a business day. */
+/**
+ * Large food or beverage establishment test (Form 8027 instructions, read 2026-10-29):
+ * in the 50 states or DC, tipping customary, and normally more than 10 employees on
+ * a typical business day last year. The IRS counts employee hours: the test is met
+ * when the worksheet total exceeds 80 hours a day. Tipping is generally not customary
+ * when at least 95% of non-carryout sales carry a service charge of 10% or more.
+ * `typicalDailyEmployees` is the prior year's usual headcount on a business day.
+ */
 export function form8027Applies(typicalDailyEmployees: number, tippingCustomary: boolean): boolean {
   return tippingCustomary && typicalDailyEmployees > 10;
 }
@@ -47,11 +59,11 @@ export interface TipCreditResult {
 
 /**
  * The § 45B credit: for each employee, tips beyond what is needed to lift cash
- * wages to $5.15 an hour, times the employer's 7.65% FICA share. This applies
- * the formula to whatever period of hours, wages and tips the caller passes in;
- * Form 8846 itself is figured for the tax year. It does not cap the Social
- * Security part at the wage base, so for an employee above the base the figure
- * is an overstatement. Treat it as an estimate for planning.
+ * wages to $5.15 an hour, times the employer's 7.65% FICA share. The IRS's own
+ * Form 8846 example works one employee-month at a time, so pass one row per
+ * employee per month. It does not cap the Social Security part at the wage base,
+ * so for an employee above the base the figure is an overstatement. Treat it as an
+ * estimate for planning.
  */
 export function ficaTipCredit(rows: readonly TipCreditRow[]): TipCreditResult {
   const perEmployee = rows.map((r) => {
@@ -63,6 +75,6 @@ export function ficaTipCredit(rows: readonly TipCreditRow[]): TipCreditResult {
     creditableTipsCents,
     creditCents: applyBps(creditableTipsCents, EMPLOYER_FICA_BPS),
     perEmployee,
-    note: 'Estimate. Form 8846 is figured for the tax year, and the Social Security part is not capped at the wage base here. Confirm with your preparer before claiming.',
+    note: 'Estimate, figured one employee-month at a time as the IRS Form 8846 example does. The Social Security part is not capped at the wage base here. Confirm with your preparer before claiming.',
   };
 }

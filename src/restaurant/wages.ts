@@ -2,7 +2,7 @@ import { type Cents } from '../lib/money.ts';
 import { addDays, workweekStart } from '../lib/dates.ts';
 import { blocking, info, review, type Issue } from '../lib/issues.ts';
 import { dailyMealAndRestPremium } from '../../engine/payroll/mealRestBreaks.ts';
-import { classifyWorkweek, DAILY_OVERTIME_NOT_MODELLED, overtimeRuleFor } from './overtime.ts';
+import { classifyWorkweek, overtimeRuleFor } from './overtime.ts';
 import { wageFloors, type WageFloors } from './floors.ts';
 
 /**
@@ -40,6 +40,11 @@ export interface WageShift {
   tipCreditRole: boolean;
   mealBreakViolation: boolean;
   restBreakViolation: boolean;
+  /** ISO timestamps, when known. New York's spread-of-hours rule needs them. */
+  clockIn?: string;
+  clockOut?: string;
+  /** The length of the regularly scheduled shift this one replaces, when there is one. Caps New York call-in pay. */
+  scheduledMinutes?: number;
 }
 
 export interface WageParams {
@@ -57,7 +62,7 @@ export interface WageParams {
   tipsReceivedByDate: ReadonlyMap<string, Cents>;
 }
 
-export type WageCode = 'REG' | 'OT' | 'DT' | 'BREAK_PREMIUM' | 'TIP_MAKEUP';
+export type WageCode = 'REG' | 'OT' | 'DT' | 'BREAK_PREMIUM' | 'TIP_MAKEUP' | 'SPREAD_HOURS' | 'CALL_IN_PAY';
 
 export interface WageLine {
   code: WageCode;
@@ -92,9 +97,6 @@ type Cat = 'reg' | 'ot' | 'dt';
 export function computeHourlyWages(p: WageParams): WageResult {
   const issues: Issue[] = [];
   const rule = overtimeRuleFor(p.state);
-  if (DAILY_OVERTIME_NOT_MODELLED.includes(p.state)) {
-    issues.push(review('daily_overtime_not_modelled', `${p.state} has daily overtime rules on top of the weekly 40-hour rule. Only the weekly rule was applied. Check this employee's long days by hand.`, { employeeId: p.employeeId }));
-  }
 
   const floorsCache = new Map<string, WageFloors | null>();
   let floorsFailed = false;
@@ -151,6 +153,10 @@ export function computeHourlyWages(p: WageParams): WageResult {
   const premiumTotal = { ot: 0, dt: 0 };
   let breakPremium = 0;
   let breakDays = 0;
+  let spreadPay = 0;
+  let spreadDays = 0;
+  let callInPay = 0;
+  let callInDays = 0;
   let makeupTotal = 0;
   const weeks: WeekSummary[] = [];
 
@@ -159,19 +165,24 @@ export function computeHourlyWages(p: WageParams): WageResult {
     const weekEnd = addDays(weekStart, 6);
     const minutesByDate = new Map<string, number>();
     for (const s of shifts) minutesByDate.set(s.workDate, (minutesByDate.get(s.workDate) ?? 0) + s.minutes);
-    const classes = classifyWorkweek(weekStart, minutesByDate, rule);
-
     // Per-shift credit and straight-time value for the whole week.
     const totalMinutes = shifts.reduce((a, s) => a + s.minutes, 0);
     let straightValue = 0; // cents
     let creditClaimed = 0; // cents
-    const creditByShift = new Map<string, number>();
     for (const s of shifts) {
       const c = creditPerHour(s);
-      creditByShift.set(s.shiftId, c);
       straightValue += ((s.rateCentsPerHour + c) * s.minutes) / 60;
       creditClaimed += (c * s.minutes) / 60;
     }
+    const regularRate = totalMinutes > 0 ? Math.round((straightValue * 60) / totalMinutes) : 0;
+
+    // Nevada's daily rule applies only to an employee paid under 1.5 times the minimum wage.
+    let nevadaDailyApplies = false;
+    if (rule === 'nevada') {
+      const f = floorsFor(weekEnd);
+      nevadaDailyApplies = f ? regularRate < 1.5 * f.standardFloorCentsPerHour : true;
+    }
+    const classes = classifyWorkweek(weekStart, minutesByDate, rule, { nevadaDailyApplies });
 
     // Walk each day's shifts in order, handing out regular, then overtime, then double-time minutes.
     let weekReg = 0;
@@ -205,8 +216,6 @@ export function computeHourlyWages(p: WageParams): WageResult {
       premiumTotal.ot += (0.5 * straightValue * periodOtMinutes) / totalMinutes;
       premiumTotal.dt += (1.0 * straightValue * periodDtMinutes) / totalMinutes;
     }
-    const regularRate = totalMinutes > 0 ? Math.round((straightValue * 60) / totalMinutes) : 0;
-
     // California meal and rest premiums, once per category per day.
     for (const date of [...minutesByDate.keys()].filter(inPeriod)) {
       const dayShifts = shifts.filter((s) => s.workDate === date);
@@ -219,6 +228,45 @@ export function computeHourlyWages(p: WageParams): WageResult {
       }
       breakPremium += dailyMealAndRestPremium(meal, rest, regularRate);
       breakDays += 1;
+    }
+
+    // New York Hospitality Wage Order (12 NYCRR 146-1.5, 146-1.6): spread-of-hours pay and call-in pay.
+    if (p.state === 'NY') {
+      for (const date of [...minutesByDate.keys()].filter(inPeriod).sort()) {
+        const dayShifts = shifts.filter((s) => s.workDate === date);
+        const worked = dayShifts.reduce((a, s) => a + s.minutes, 0);
+        const f = floorsFor(date);
+        if (!f) continue;
+        const basic = f.standardFloorCentsPerHour;
+
+        // Spread of hours: first start to last finish, meals and gaps included. More than 10 hours earns one extra hour at the basic minimum rate.
+        const known = dayShifts.every((s) => s.clockIn && s.clockOut);
+        let spread: number | undefined;
+        if (known) {
+          const starts = dayShifts.map((s) => Date.parse(s.clockIn!));
+          const ends = dayShifts.map((s) => Date.parse(s.clockOut!));
+          if ([...starts, ...ends].every((t) => !Number.isNaN(t))) spread = Math.round((Math.max(...ends) - Math.min(...starts)) / 60_000);
+        }
+        // Without clock times the spread is at least the time worked, which is enough to prove it over 10 hours but not to prove it under.
+        const owed = spread !== undefined ? spread > 600 : worked > 600;
+        if (owed) {
+          spreadPay += basic;
+          spreadDays += 1;
+        } else if (spread === undefined && dayShifts.length > 1) {
+          issues.push(review('spread_of_hours_unknown', `${date} has several shifts without clock times, so New York's spread-of-hours rule (more than 10 hours from first start to last finish) cannot be checked. Enter clockIn and clockOut.`, { employeeId: p.employeeId, date }));
+        }
+
+        // Call-in pay: at least 3 hours for one shift, 6 for two shifts totalling 6 or less, 8 for three totalling 8 or less, or the regularly scheduled shift if that is shorter.
+        // Time worked is paid at the regular rate; the balance at the basic minimum rate with no tip credit.
+        const n = dayShifts.length;
+        const floorMinutes = n === 1 ? 180 : n === 2 ? (worked <= 360 ? 360 : 0) : worked <= 480 ? 480 : 0;
+        const scheduled = dayShifts.every((s) => s.scheduledMinutes !== undefined) ? dayShifts.reduce((a, s) => a + (s.scheduledMinutes ?? 0), 0) : undefined;
+        const required = scheduled !== undefined ? Math.min(floorMinutes, scheduled) : floorMinutes;
+        if (worked < required) {
+          callInPay += ((required - worked) * basic) / 60;
+          callInDays += 1;
+        }
+      }
     }
 
     // Tip credit make-up, in the run that contains the workweek's last day.
@@ -261,6 +309,8 @@ export function computeHourlyWages(p: WageParams): WageResult {
   push('OT', Math.round(cash.ot + premiumTotal.ot), paid.ot, `${(paid.ot / 60).toFixed(2)} overtime hours at time and a half of the regular rate`);
   push('DT', Math.round(cash.dt + premiumTotal.dt), paid.dt, `${(paid.dt / 60).toFixed(2)} double-time hours at twice the regular rate`);
   push('BREAK_PREMIUM', breakPremium, 0, `${breakDays} day(s) with a missed meal or rest break, one hour's pay per category (CA Labor Code § 226.7)`);
+  push('SPREAD_HOURS', spreadPay, 0, `${spreadDays} day(s) with more than 10 hours from first start to last finish: one extra hour at the basic minimum wage (12 NYCRR 146-1.6)`);
+  push('CALL_IN_PAY', Math.round(callInPay), 0, `${callInDays} day(s) worked less than the call-in minimum: the balance at the basic minimum wage, no tip credit (12 NYCRR 146-1.5)`);
   push('TIP_MAKEUP', makeupTotal, 0, 'Tips fell short of the tip credit claimed; employer pays the difference (29 U.S.C. § 203(m)(2)(A))');
 
   return { lines, weeks, paidMinutes: paid.reg + paid.ot + paid.dt, issues };

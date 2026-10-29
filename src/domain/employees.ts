@@ -97,7 +97,7 @@ export function addEmployee(store: Store, companyId: string, body: unknown): Emp
     deductionPlans: deductionPlans(o.deductionPlans),
     ...(o.ageAtYearEnd !== undefined ? { ageAtYearEnd: v.int(o, 'ageAtYearEnd', 14, 120) } : {}),
     ...(o.tipCreditNoticeDate !== undefined ? { tipCreditNoticeDate: v.date(o, 'tipCreditNoticeDate') } : {}),
-    payout: { status: 'none' },
+    payoutAccounts: [],
     ytd: freshYearToDate(),
     ytdYear: Number(hireDate.slice(0, 4)),
     createdAt: new Date().toISOString(),
@@ -122,7 +122,7 @@ export function updateEmployee(store: Store, companyId: string, employeeId: stri
   const o = v.obj(body);
   const company = store.companies.require(companyId, 'Company');
   const e = requireEmployee(store, companyId, employeeId);
-  const forbidden = ['id', 'companyId', 'hireDate', 'terminationDate', 'ytd', 'ytdYear', 'payout', 'ssnEncrypted'].filter((k) => o[k] !== undefined);
+  const forbidden = ['id', 'companyId', 'hireDate', 'terminationDate', 'ytd', 'ytdYear', 'payoutAccounts', 'stripeCustomerId', 'ssnEncrypted'].filter((k) => o[k] !== undefined);
   if (forbidden.length) throw badRequest(`${forbidden.join(', ')} cannot be changed here`);
 
   if (o.firstName !== undefined) e.firstName = v.str(o, 'firstName', { max: 60 });
@@ -163,6 +163,75 @@ export function updateEmployee(store: Store, companyId: string, employeeId: stri
     e.ssnLast4 = ssn.slice(-4);
   }
   return store.tx(() => store.employees.put(e));
+}
+
+/**
+ * Where an employee's net pay goes. One account takes it all; several split
+ * it by percent of net or a flat amount, and exactly one is the 'remainder'
+ * that takes whatever is left, so no cent of net pay is ever without a place
+ * to go. Every account must be this employee's own and not disabled.
+ */
+export function setPayoutAccounts(store: Store, companyId: string, employeeId: string, body: unknown): Employee {
+  const o = v.obj(body);
+  const e = requireEmployee(store, companyId, employeeId);
+  if (!Array.isArray(o.accounts)) throw badRequest('accounts must be a list');
+  const out: Employee['payoutAccounts'] = [];
+  const seen = new Set<string>();
+  for (const [i, raw] of o.accounts.entries()) {
+    const a = v.obj(raw, `accounts[${i}]`);
+    const bankAccountId = v.str(a, 'bankAccountId');
+    if (seen.has(bankAccountId)) throw badRequest(`accounts[${i}] repeats a bank account`);
+    seen.add(bankAccountId);
+    const bank = store.bankAccounts.get(bankAccountId);
+    if (!bank || bank.companyId !== companyId || bank.ownerKind !== 'employee' || bank.ownerId !== employeeId) throw badRequest(`accounts[${i}] is not one of this employee's own bank accounts`);
+    if (bank.status === 'disabled') throw badRequest(`accounts[${i}] is disabled (${bank.disabledReason ?? 'no reason recorded'})`);
+    const al = v.obj(a.allocation ?? { kind: 'remainder' }, `accounts[${i}].allocation`);
+    const kind = v.oneOf(al, 'kind', ['remainder', 'percent', 'flatAmount'] as const);
+    let allocation: Employee['payoutAccounts'][number]['allocation'];
+    if (kind === 'remainder') allocation = { kind };
+    else if (kind === 'percent') {
+      const pct = al.percentOfNet;
+      if (typeof pct !== 'number' || !(pct > 0) || pct > 100) throw badRequest(`accounts[${i}].allocation.percentOfNet must be above 0 and at most 100`);
+      allocation = { kind, percentOfNet: pct };
+    } else allocation = { kind, amount: v.cents(al, 'amount', { min: 1 }) };
+    out.push({ bankAccountId, allocation, ...(a.priority !== undefined ? { priority: v.int(a, 'priority', 0, 100) } : {}) });
+  }
+  if (out.length > 0 && out.filter((x) => x.allocation.kind === 'remainder').length !== 1) {
+    throw badRequest("Exactly one account must be the 'remainder', which takes whatever the other accounts do not.");
+  }
+  e.payoutAccounts = out;
+  return store.tx(() => store.employees.put(e));
+}
+
+/**
+ * Opening year-to-date balances for someone who was paid by another provider
+ * earlier this year. They set where the Social Security, Medicare and
+ * unemployment wage bases already stand, so caps are not applied again from
+ * zero. Allowed only before Totali has paid them anything. It does NOT bring
+ * earlier wages into Totali's W-2 or quarterly filings: those need the earlier
+ * provider's records.
+ */
+export function importYtd(store: Store, companyId: string, employeeId: string, body: unknown): Employee {
+  const o = v.obj(body);
+  const e = requireEmployee(store, companyId, employeeId);
+  const asOf = v.date(o, 'asOf');
+  if (asOf > new Date().toISOString().slice(0, 10)) throw badRequest('asOf cannot be in the future');
+  const paid = store.payRuns.where((r) => r.companyId === companyId && r.status !== 'voided' && r.status !== 'draft' && r.paychecks.some((p) => p.employeeId === employeeId));
+  if (paid.length > 0) throw conflict('already_paid', 'This employee has already been paid through Totali, so opening balances can no longer be set.');
+  const ytd = freshYearToDate();
+  ytd.socialSecurity = v.cents(o, 'socialSecurityWagesCents');
+  ytd.medicare = v.cents(o, 'medicareWagesCents');
+  ytd.futa = v.cents(o, 'futaWagesCents');
+  if (o.supplementalWagesCents !== undefined) ytd.supplemental = v.cents(o, 'supplementalWagesCents');
+  if (o.stateUnemploymentWagesCents !== undefined) {
+    const su = v.obj(o.stateUnemploymentWagesCents, 'stateUnemploymentWagesCents');
+    ytd.stateUnemployment = {};
+    for (const [code, val] of Object.entries(su)) {
+      if (!/^[A-Z]{2}$/.test(code) || typeof val !== 'number' || !Number.isSafeInteger(val) || val < 0) throw badRequest(`stateUnemploymentWagesCents.${code} must be a non-negative integer of cents`);
+      ytd.stateUnemployment[code] = val;
+    }
+  }
+  return store.tx(() => store.employees.put({ ...e, ytd, ytdYear: Number(asOf.slice(0, 4)), ytdImport: { asOf, importedAt: new Date().toISOString() } }));
 }
 
 export function terminateEmployee(store: Store, companyId: string, employeeId: string, body: unknown): Employee {

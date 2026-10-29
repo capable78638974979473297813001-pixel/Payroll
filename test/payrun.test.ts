@@ -85,7 +85,7 @@ test('a missing tip-credit notice blocks approval and removes the credit', () =>
 
 test('review issues must be acknowledged before approval', () => {
   const { store, company } = restaurant();
-  store.tx(() => store.employees.all().forEach((e) => store.employees.put({ ...e, payout: { status: 'none' } })));
+  store.tx(() => store.employees.all().forEach((e) => store.employees.put({ ...e, payoutAccounts: [] })));
   const run = draftPayRun(store, company.id, RUN);
   assert.ok(run.issues.some((i) => i.code === 'payout_account_not_ready'));
   assert.throws(() => approvePayRun(store, company.id, run.id, {}), (e: any) => e.code === 'review_not_acknowledged');
@@ -94,7 +94,7 @@ test('review issues must be acknowledged before approval', () => {
 
 test('approval locks shifts and rolls year-to-date; the next run sees the wage base', () => {
   const { store, company, eli } = restaurant();
-  for (const e of store.employees.all()) store.tx(() => store.employees.put({ ...e, payout: { status: 'ready' } }));
+  for (const e of store.employees.all()) ready(store, e.id);
   const run = draftPayRun(store, company.id, RUN);
   const approved = approvePayRun(store, company.id, run.id, { acknowledgeReviewIssues: true });
   assert.equal(approved.status, 'approved');
@@ -115,7 +115,7 @@ test('a period that overlaps an existing run is refused (the double-pay guard)',
 
 test('voiding an approved run restores year-to-date and unlocks shifts exactly', () => {
   const { store, company, eli } = restaurant();
-  for (const e of store.employees.all()) store.tx(() => store.employees.put({ ...e, payout: { status: 'ready' } }));
+  for (const e of store.employees.all()) ready(store, e.id);
   const before = JSON.stringify(store.employees.get(eli.id)!.ytd);
   const run = draftPayRun(store, company.id, RUN);
   approvePayRun(store, company.id, run.id, { acknowledgeReviewIssues: true });

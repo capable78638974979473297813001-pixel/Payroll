@@ -26,12 +26,12 @@ export function postEntry(
   return store.ledger.put(entry);
 }
 
-/** Net position per account. stripe_cash is debit-positive; the liability accounts are credit-positive. */
+/** Net position per account. bank_cash is debit-positive; the liability accounts are credit-positive. */
 export function ledgerBalances(store: Store, companyId: string, runId?: string): Record<LedgerAccount, Cents> {
-  const out: Record<LedgerAccount, Cents> = { stripe_cash: 0, employee_net_pay: 0, tax_withheld: 0, tax_employer: 0, deductions_held: 0 };
+  const out: Record<LedgerAccount, Cents> = { bank_cash: 0, employee_net_pay: 0, tax_withheld: 0, tax_employer: 0, deductions_held: 0 };
   for (const entry of store.ledger.where((x) => x.companyId === companyId && (!runId || x.runId === runId))) {
     for (const l of entry.lines) {
-      out[l.account] += l.account === 'stripe_cash' ? l.debitCents - l.creditCents : l.creditCents - l.debitCents;
+      out[l.account] += l.account === 'bank_cash' ? l.debitCents - l.creditCents : l.creditCents - l.debitCents;
     }
   }
   return out;

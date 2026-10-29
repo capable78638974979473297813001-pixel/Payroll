@@ -1,5 +1,5 @@
 import { newId } from '../lib/ids.ts';
-import { badRequest, conflict, notFound } from '../lib/errors.ts';
+import { ApiError, badRequest, conflict, notFound } from '../lib/errors.ts';
 import * as v from '../lib/validate.ts';
 import type { Store } from '../store/store.ts';
 import type { HouseDay, Shift } from './types.ts';
@@ -72,6 +72,7 @@ export function recordShift(store: Store, companyId: string, body: unknown): Shi
     ...(clockIn ? { clockIn, clockOut } : {}),
     ...(externalId ? { externalId } : {}),
     ...(o.rateCentsPerHour !== undefined ? { rateCentsPerHour: v.cents(o, 'rateCentsPerHour', { min: 1, max: 100_000 }) } : {}),
+    ...(o.scheduledMinutes !== undefined ? { scheduledMinutes: v.int(o, 'scheduledMinutes', 1, 1440) } : {}),
     chargedTipsCents,
     cashTipsCents,
     salesCents: o.salesCents === undefined ? 0 : v.cents(o, 'salesCents'),
@@ -112,4 +113,28 @@ export function recordHouseDay(store: Store, companyId: string, body: unknown): 
     serviceChargesCents: o.serviceChargesCents === undefined ? 0 : v.cents(o, 'serviceChargesCents'),
   };
   return store.tx(() => store.houseDays.put(day));
+}
+
+/**
+ * Record many shifts at once (a POS export). All or nothing: if any one is
+ * invalid, none is saved, and the error says which. Shifts that carry an
+ * externalId replace the earlier copy, so re-sending a day is safe.
+ */
+export function recordShifts(store: Store, companyId: string, body: unknown): Shift[] {
+  const o = v.obj(body);
+  if (!Array.isArray(o.shifts) || o.shifts.length === 0) throw badRequest('shifts must be a non-empty list');
+  if (o.shifts.length > 500) throw badRequest('At most 500 shifts per request');
+  return store.tx(() =>
+    (o.shifts as unknown[]).map((raw, i) => {
+      try {
+        return recordShift(store, companyId, raw);
+      } catch (e) {
+        if (e instanceof Error && 'status' in e) {
+          const err = e as Error & { status: number; code: string; details?: unknown };
+          throw new ApiError(err.status, err.code, `shifts[${i}]: ${err.message}`, err.details);
+        }
+        throw e;
+      }
+    }),
+  );
 }

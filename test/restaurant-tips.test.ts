@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { distributeTips, type DayHouse, type TipShift } from '../src/restaurant/tips.ts';
 import { getNiche, settingsFromProfile } from '../src/industries/index.ts';
 import { allocate } from '../src/lib/money.ts';
-import { ficaTipCredit, form8027Applies, mustReportCashTips } from '../src/restaurant/tipReporting.ts';
+import { ficaTipCredit, form8027Applies, mustReportTips } from '../src/restaurant/tipReporting.ts';
 
 const D = '2026-06-05';
 const sh = (id: string, roleKey: string, over: Partial<TipShift> = {}): TipShift => ({
@@ -182,8 +182,8 @@ test('conservation across a messy day', () => {
 });
 
 test('tip reporting: $20 monthly threshold, Form 8027 headcount test', () => {
-  assert.equal(mustReportCashTips(1_999), false);
-  assert.equal(mustReportCashTips(2_000), true);
+  assert.equal(mustReportTips(1_999), false);
+  assert.equal(mustReportTips(2_000), true);
   assert.equal(form8027Applies(10, true), false);
   assert.equal(form8027Applies(11, true), true);
   assert.equal(form8027Applies(40, false), false);
@@ -197,4 +197,10 @@ test('FICA tip credit: only tips beyond what lifts cash wages to $5.15 an hour, 
   ]);
   assert.deepEqual(r.perEmployee.map((p) => p.creditableTipsCents), [37_920, 0]);
   assert.equal(r.creditCents, Math.round(37_920 * 0.0765));
+});
+
+test('the $20 monthly threshold counts card tips as well as cash (IRS Pub. 531)', async () => {
+  const { mustReportTips } = await import('../src/restaurant/tipReporting.ts');
+  assert.equal(mustReportTips(1_999), false);
+  assert.equal(mustReportTips(2_000), true);
 });
