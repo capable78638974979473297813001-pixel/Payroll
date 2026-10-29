@@ -1,0 +1,78 @@
+{
+  "jurisdiction": {
+    "level": "state",
+    "code": "ME",
+    "name": "Maine"
+  },
+  "year": 2027,
+  "asOf": "2026-10-25",
+  "hasStateMinimumWage": true,
+  "standard": {
+    "hourly": 15.7,
+    "hourlyCents": 1570,
+    "effectiveFrom": "2027-01-01",
+    "coverage": "All covered employers.",
+    "note": "26 M.R.S. 664 annual CPI adjustment (up from $14.65 in 2025). 2027: $15.70 (see provisional.updatedFor2027)."
+  },
+  "tipped": {
+    "tipCreditAllowed": true,
+    "cashWage": 7.85,
+    "cashWageCents": 785,
+    "maxTipCredit": 7.85,
+    "maxTipCreditCents": 785,
+    "tippedEmployeeThreshold": {
+      "amount": 191.0,
+      "period": "month",
+      "note": "Maine defines a service employee as one who receives more than $191 a month in tips -- by far the highest tipped-employee threshold of any state."
+    },
+    "note": "Maine caps the tip credit at 50% of the minimum wage."
+  },
+  "youthAndTraining": [],
+  "variants": [],
+  "indexation": {
+    "indexed": true,
+    "basis": "CPI-W (Northeast region)",
+    "adjustmentDate": "01-01"
+  },
+  "scheduledChanges": [],
+  "knownGaps": [
+    "Portland and Rockland set higher local rates -- see local/ME-local-2026.json."
+  ],
+  "sources": [
+    {
+      "title": "Maine DOL -- Maine's minimum wage to increase to $15.70 per hour in 2027",
+      "url": "https://www.maine.gov/labor/news_events/article.shtml?id=13362373",
+      "verifiedOn": "2026-10-25",
+      "verifiedBy": "Read directly 2026-10-25: standard $15.70, service-employee (tip) wage $7.85."
+    },
+    {
+      "id": "dol-state-mw",
+      "title": "U.S. DOL Wage and Hour Division -- State Minimum Wage Laws (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/minimum-wage/state",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. DOL's own state-by-state table is the spine of every standard rate in this database; where a state's own labor department was ALSO read directly, that source is listed too and wins on any disagreement (see South Dakota's tipped cash wage for the one case where they disagreed)."
+    },
+    {
+      "id": "dol-tipped-mw",
+      "title": "U.S. DOL Wage and Hour Division -- Minimum Wages for Tipped Employees (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/state/minimum-wage/tipped",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. Source of the combined rate / maximum tip credit / minimum cash wage triple and the 'tipped employee' monthly-tips definition for every state and territory in this database."
+    }
+  ],
+  "confidence": "primary_source_confirmed",
+  "provisional": {
+    "status": "carry-forward-from-2026",
+    "createdOn": "2026-10-25",
+    "basedOn": "data/minimum-wage/states/ME-2026.json",
+    "note": "Carried forward from the 2026 file on 2026-10-25 so that a 2027-dated query resolves instead of failing. Every figure is 2026's unless listed in updatedFor2027 (each with the state agency's own announcement or the statute). Remove this block only after every figure has been re-read against a 2027 source.",
+    "updatedFor2027": [
+      {
+        "path": "standard.hourly",
+        "from": 15.1,
+        "to": 15.7,
+        "source": "https://www.maine.gov/labor/news_events/article.shtml?id=13362373"
+      }
+    ]
+  }
+}

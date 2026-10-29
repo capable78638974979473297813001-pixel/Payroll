@@ -1,0 +1,89 @@
+{
+  "jurisdiction": {
+    "level": "state",
+    "code": "WA",
+    "name": "Washington"
+  },
+  "year": 2027,
+  "asOf": "2026-10-25",
+  "hasStateMinimumWage": true,
+  "standard": {
+    "hourly": 17.73,
+    "hourlyCents": 1773,
+    "effectiveFrom": "2027-01-01",
+    "coverage": "All covered employers, aged 16 and over. The highest STATE minimum wage in the country for 2026.",
+    "note": "RCW 49.46.020 annual CPI-W adjustment. 2027: $17.73 (see provisional.updatedFor2027)."
+  },
+  "tipped": {
+    "tipCreditAllowed": false,
+    "cashWage": 17.73,
+    "cashWageCents": 1773,
+    "maxTipCredit": 0.0,
+    "maxTipCreditCents": 0,
+    "tippedEmployeeThreshold": null,
+    "note": "This state allows NO tip credit: the full state minimum wage must be paid in cash before any tips. RCW 49.46.020 -- Washington has never allowed a tip credit, and neither do any of its eight local ordinances."
+  },
+  "variants": [
+    {
+      "hourly": 15.07,
+      "hourlyCents": 1507,
+      "id": "minor_14_15",
+      "label": "Employees aged 14 and 15",
+      "test": "85% of the state minimum wage -- 85% of $17.73 = $15.0705, published by L&I as $15.07.",
+      "confidence": "primary_source_confirmed"
+    }
+  ],
+  "youthAndTraining": [],
+  "indexation": {
+    "indexed": true,
+    "basis": "CPI-W (US city average)",
+    "adjustmentDate": "01-01"
+  },
+  "scheduledChanges": [],
+  "knownGaps": [
+    "Eight Washington cities and counties set higher local rates, several with employer-size tiers and one with a MID-YEAR step -- see local/WA-local-2026.json."
+  ],
+  "sources": [
+    {
+      "title": "Washington L&I -- FY27-075 2027 Minimum Wage Announcement",
+      "url": "https://www.lni.wa.gov/workers-rights/_docs/2027-minimum-wage-announcement-Accessible.pdf",
+      "verifiedOn": "2026-10-25",
+      "verifiedBy": "Read directly 2026-10-25: 'Washington's minimum wage will be $17.73 per hour beginning Jan. 1, 2027. Workers who are 14 or 15 years old may be paid 85% of the adult minimum wage, or $15.07 per hour.'"
+    },
+    {
+      "id": "dol-state-mw",
+      "title": "U.S. DOL Wage and Hour Division -- State Minimum Wage Laws (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/minimum-wage/state",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. DOL's own state-by-state table is the spine of every standard rate in this database; where a state's own labor department was ALSO read directly, that source is listed too and wins on any disagreement (see South Dakota's tipped cash wage for the one case where they disagreed)."
+    },
+    {
+      "id": "dol-tipped-mw",
+      "title": "U.S. DOL Wage and Hour Division -- Minimum Wages for Tipped Employees (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/state/minimum-wage/tipped",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. Source of the combined rate / maximum tip credit / minimum cash wage triple and the 'tipped employee' monthly-tips definition for every state and territory in this database."
+    },
+    {
+      "title": "Washington State Department of Labor & Industries -- Washington's minimum wage going up to $17.13 an hour in 2026",
+      "url": "https://www.lni.wa.gov/news-events/article/25-27",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "cross_source_confirmed this session: L&I's own announcement gives $17.13 for 2026 and states that employers may pay 85 percent of the minimum wage to workers aged 14-15, i.e. $14.56."
+    }
+  ],
+  "confidence": "primary_source_confirmed",
+  "provisional": {
+    "status": "carry-forward-from-2026",
+    "createdOn": "2026-10-25",
+    "basedOn": "data/minimum-wage/states/WA-2026.json",
+    "note": "Carried forward from the 2026 file on 2026-10-25 so that a 2027-dated query resolves instead of failing. Every figure is 2026's unless listed in updatedFor2027 (each with the state agency's own announcement or the statute). Remove this block only after every figure has been re-read against a 2027 source.",
+    "updatedFor2027": [
+      {
+        "path": "standard.hourly",
+        "from": 17.13,
+        "to": 17.73,
+        "source": "https://www.lni.wa.gov/workers-rights/_docs/2027-minimum-wage-announcement-Accessible.pdf"
+      }
+    ]
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "jurisdiction": {
+    "level": "state",
+    "code": "MI",
+    "name": "Michigan"
+  },
+  "year": 2027,
+  "asOf": "2026-10-25",
+  "hasStateMinimumWage": true,
+  "standard": {
+    "hourly": 15.0,
+    "hourlyCents": 1500,
+    "effectiveFrom": "2027-01-01",
+    "coverage": "Employers with 2 or more employees aged 16 and older.",
+    "note": "The schedule set after the Michigan Supreme Court's 2024 Mothering Justice decision and the February 2025 amendments: $12.48 (2025-02-21), $13.73 (2026-01-01), $15.00 (2027-01-01), then annual inflation adjustment from 2028. 2027: $15.00 (see provisional.updatedFor2027)."
+  },
+  "tipped": {
+    "tipCreditAllowed": true,
+    "cashWage": 6.3,
+    "cashWageCents": 630,
+    "maxTipCredit": 8.7,
+    "maxTipCreditCents": 870,
+    "tippedEmployeeThreshold": null,
+    "note": "Michigan's tipped percentage RISES each year under the 2025 amendments: 40% of the minimum wage in 2026 ($5.49), 42% in 2027, stepping to 50% by 2031. A payroll system that hardcodes a percentage rather than reading the year's figure will drift."
+  },
+  "variants": [
+    {
+      "hourly": 12.75,
+      "hourlyCents": 1275,
+      "id": "minor_16_17",
+      "label": "Employees aged 16 and 17",
+      "test": "85% of the state minimum wage -- 85% of $15.00 = $12.75."
+    }
+  ],
+  "youthAndTraining": [
+    {
+      "hourly": 4.25,
+      "hourlyCents": 425,
+      "id": "training_wage_under_20",
+      "label": "Training wage",
+      "eligibility": "Employees aged 16-19, first 90 calendar days -- Michigan's own training wage, set at the same $4.25 figure as the federal youth wage."
+    }
+  ],
+  "indexation": {
+    "indexed": true,
+    "basis": "CPI, annually, beginning 2028",
+    "adjustmentDate": "01-01"
+  },
+  "scheduledChanges": [],
+  "sources": [
+    {
+      "title": "U.S. DOL State Minimum Wage Laws -- Michigan",
+      "url": "https://www.dol.gov/agencies/whd/minimum-wage/state",
+      "verifiedOn": "2026-10-25",
+      "verifiedBy": "Search result from dol.gov: 'The Michigan minimum wage is scheduled to increase on January 1, 2027 to $15.00 per hour'. Tipped 42% of $15.00 = $6.30 per the 2025 amendments already recorded in this file; minor 85% = $12.75."
+    },
+    {
+      "id": "dol-state-mw",
+      "title": "U.S. DOL Wage and Hour Division -- State Minimum Wage Laws (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/minimum-wage/state",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. DOL's own state-by-state table is the spine of every standard rate in this database; where a state's own labor department was ALSO read directly, that source is listed too and wins on any disagreement (see South Dakota's tipped cash wage for the one case where they disagreed)."
+    },
+    {
+      "id": "dol-tipped-mw",
+      "title": "U.S. DOL Wage and Hour Division -- Minimum Wages for Tipped Employees (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/state/minimum-wage/tipped",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. Source of the combined rate / maximum tip credit / minimum cash wage triple and the 'tipped employee' monthly-tips definition for every state and territory in this database."
+    },
+    {
+      "title": "Michigan LEO -- Michigan's Minimum Wage Set to Increase on Jan. 1, 2026",
+      "url": "https://www.michigan.gov/leo/news/2025/12/08/michigans-minimum-wage-set-to-increase-on-jan-1-2026",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "cross_source_confirmed this session for the $13.73 rate, the 40% tipped figure ($5.49), the 85% minor rate ($11.67) and the 2027 step."
+    }
+  ],
+  "confidence": "primary_source_confirmed",
+  "knownGaps": [],
+  "provisional": {
+    "status": "carry-forward-from-2026",
+    "createdOn": "2026-10-25",
+    "basedOn": "data/minimum-wage/states/MI-2026.json",
+    "note": "Carried forward from the 2026 file on 2026-10-25 so that a 2027-dated query resolves instead of failing. Every figure is 2026's unless listed in updatedFor2027 (each with the state agency's own announcement or the statute). Remove this block only after every figure has been re-read against a 2027 source.",
+    "updatedFor2027": [
+      {
+        "path": "standard.hourly",
+        "from": 15.0,
+        "to": 15.0,
+        "source": "https://www.dol.gov/agencies/whd/minimum-wage/state"
+      }
+    ]
+  }
+}

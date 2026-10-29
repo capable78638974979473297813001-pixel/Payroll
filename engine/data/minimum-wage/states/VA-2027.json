@@ -1,0 +1,90 @@
+{
+  "jurisdiction": {
+    "level": "state",
+    "code": "VA",
+    "name": "Virginia"
+  },
+  "year": 2027,
+  "asOf": "2026-10-25",
+  "hasStateMinimumWage": true,
+  "standard": {
+    "hourly": 13.75,
+    "hourlyCents": 1375,
+    "effectiveFrom": "2027-01-01",
+    "coverage": "All covered employers.",
+    "note": "Va. Code 40.1-28.10, now on annual CPI adjustment ($12.41 in 2025). 2027: $13.75 (see provisional.updatedFor2027)."
+  },
+  "tipped": {
+    "tipCreditAllowed": true,
+    "cashWage": 2.13,
+    "cashWageCents": 213,
+    "maxTipCredit": 11.62,
+    "maxTipCreditCents": 1162,
+    "tippedEmployeeThreshold": {
+      "amount": 30.0,
+      "period": "month"
+    },
+    "note": "Virginia keeps the federal $2.13 cash wage, so its tip credit is the difference up to $12.77."
+  },
+  "youthAndTraining": [
+    {
+      "hourly": 4.25,
+      "hourlyCents": 425,
+      "id": "federal_youth_opportunity_wage",
+      "label": "Federal youth opportunity wage",
+      "eligibility": "Employees under 20, first 90 consecutive calendar days -- 29 U.S.C. 206(g). Not a state figure; carried here because it is the only sub-minimum wage available in this state."
+    }
+  ],
+  "variants": [],
+  "indexation": {
+    "indexed": true,
+    "basis": "CPI-U",
+    "adjustmentDate": "01-01"
+  },
+  "scheduledChanges": [
+    {
+      "hourly": 15.0,
+      "hourlyCents": 1500,
+      "note": "Va. Code 40.1-28.10: $15.00 from 2028-01-01.",
+      "effectiveDate": "2028-01-01"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Code of Virginia 40.1-28.10 -- Minimum wages",
+      "url": "https://law.lis.virginia.gov/vacode/title40.1/chapter3/section40.1-28.10/",
+      "verifiedOn": "2026-10-25",
+      "verifiedBy": "Search result from law.lis.virginia.gov: 'From January 1, 2027, until January 1, 2028, every employer shall pay to each of its employees wages at a rate not less than the greater of (i) $13.75 per hour'. $15.00 follows on 2028-01-01."
+    },
+    {
+      "id": "dol-state-mw",
+      "title": "U.S. DOL Wage and Hour Division -- State Minimum Wage Laws (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/minimum-wage/state",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. DOL's own state-by-state table is the spine of every standard rate in this database; where a state's own labor department was ALSO read directly, that source is listed too and wins on any disagreement (see South Dakota's tipped cash wage for the one case where they disagreed)."
+    },
+    {
+      "id": "dol-tipped-mw",
+      "title": "U.S. DOL Wage and Hour Division -- Minimum Wages for Tipped Employees (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/state/minimum-wage/tipped",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. Source of the combined rate / maximum tip credit / minimum cash wage triple and the 'tipped employee' monthly-tips definition for every state and territory in this database."
+    }
+  ],
+  "confidence": "primary_source_confirmed",
+  "knownGaps": [],
+  "provisional": {
+    "status": "carry-forward-from-2026",
+    "createdOn": "2026-10-25",
+    "basedOn": "data/minimum-wage/states/VA-2026.json",
+    "note": "Carried forward from the 2026 file on 2026-10-25 so that a 2027-dated query resolves instead of failing. Every figure is 2026's unless listed in updatedFor2027 (each with the state agency's own announcement or the statute). Remove this block only after every figure has been re-read against a 2027 source.",
+    "updatedFor2027": [
+      {
+        "path": "standard.hourly",
+        "from": 12.77,
+        "to": 13.75,
+        "source": "https://law.lis.virginia.gov/vacode/title40.1/chapter3/section40.1-28.10/"
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "totali-backend",
+  "version": "0.1.0",
+  "description": "Totali: industry-specific all-in-one payroll backend (restaurants first). Tax math from the vendored payroll-tax-engine, filings and deposits from MasteryTax, money movement through Stripe.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p . | grep -E '^(src|test|scripts)/' && exit 1 || exit 0",
+    "test:vendored": "cd engine && node --test tests/*.test.ts",
+    "check:stripe": "node scripts/check-stripe.ts",
+    "sync:upstream": "scripts/sync-upstream.sh"
+  },
+  "license": "UNLICENSED"
+}

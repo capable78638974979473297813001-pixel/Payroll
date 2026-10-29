@@ -1,0 +1,106 @@
+{
+  "jurisdiction": {
+    "level": "state",
+    "code": "OH",
+    "name": "Ohio"
+  },
+  "year": 2027,
+  "asOf": "2026-10-25",
+  "hasStateMinimumWage": true,
+  "standard": {
+    "hourly": 11.4,
+    "hourlyCents": 1140,
+    "effectiveFrom": "2027-01-01",
+    "coverage": "Employers with annual gross receipts of MORE THAN $419,000. The threshold itself is indexed each year, so it must be re-read annually, not just the rate.",
+    "note": "Ohio Const. art. II sec. 34a annual CPI adjustment. 2027: $11.40 (see provisional.updatedFor2027)."
+  },
+  "tipped": {
+    "tipCreditAllowed": true,
+    "cashWage": 5.7,
+    "cashWageCents": 570,
+    "maxTipCredit": 5.7,
+    "maxTipCreditCents": 570,
+    "tippedEmployeeThreshold": {
+      "amount": 30.0,
+      "period": "month"
+    },
+    "note": "Ohio caps the tip credit at 50% of the state minimum wage."
+  },
+  "variants": [
+    {
+      "hourly": 7.25,
+      "hourlyCents": 725,
+      "id": "small_employer",
+      "label": "Employers with annual gross receipts of $419,000 or less",
+      "test": "Ohio Const. art. II sec. 34a. These employers owe the federal minimum wage instead.",
+      "note": "The $419,000 receipts figure is the indexed 2027 threshold (Ohio Department of Commerce, 2026-09-30)."
+    },
+    {
+      "hourly": 7.25,
+      "hourlyCents": 725,
+      "id": "minor_14_15",
+      "label": "Employees aged 14 and 15",
+      "test": "Ohio exempts 14- and 15-year-olds from the state rate; the federal $7.25 applies."
+    }
+  ],
+  "youthAndTraining": [],
+  "indexation": {
+    "indexed": true,
+    "basis": "CPI-W, applied to BOTH the rate and the gross-receipts threshold",
+    "adjustmentDate": "01-01"
+  },
+  "scheduledChanges": [],
+  "sources": [
+    {
+      "title": "Ohio Department of Commerce -- Ohio minimum wage to increase by 3.5% in 2027",
+      "url": "https://com.ohio.gov/about-us/media-center/news/Ohio-Minimum-Wage-to-Increase-in-2027",
+      "verifiedOn": "2026-10-25",
+      "verifiedBy": "Read directly 2026-10-25: '$11.40 per hour for non-tipped employees and $5.70 per hour for tipped employees'; the gross-receipts threshold rises from $405,000 to $419,000."
+    },
+    {
+      "id": "dol-state-mw",
+      "title": "U.S. DOL Wage and Hour Division -- State Minimum Wage Laws (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/minimum-wage/state",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. DOL's own state-by-state table is the spine of every standard rate in this database; where a state's own labor department was ALSO read directly, that source is listed too and wins on any disagreement (see South Dakota's tipped cash wage for the one case where they disagreed)."
+    },
+    {
+      "id": "dol-tipped-mw",
+      "title": "U.S. DOL Wage and Hour Division -- Minimum Wages for Tipped Employees (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/state/minimum-wage/tipped",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. Source of the combined rate / maximum tip credit / minimum cash wage triple and the 'tipped employee' monthly-tips definition for every state and territory in this database."
+    },
+    {
+      "id": "dol-consolidated",
+      "title": "U.S. DOL Wage and Hour Division -- Consolidated Minimum Wage Table",
+      "url": "https://www.dol.gov/agencies/whd/mw-consolidated",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched this session as a THIRD cross-check on the two tables above (which state is above / at / below the federal floor, plus the Montana, New Jersey, New York, Ohio and Oregon sub-rates)."
+    },
+    {
+      "title": "Ohio Department of Commerce -- Ohio Minimum Wage Set to Increase in 2026",
+      "url": "https://com.ohio.gov/about-us/media-center/news/ohio%20minimum%20wage%20set%20to%20increase%20in%202026",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "cross_source_confirmed this session for $11.00, the $405,000 gross-receipts threshold, the $5.50 tipped cash wage and the 14-15 year-old carve-out. DOL's consolidated table independently carries the '$11.00 or $7.25' split and names the same $405,000 figure."
+    }
+  ],
+  "knownGaps": [
+    "This engine already models Ohio's municipal INCOME taxes (data/local/OH-municipalities-2026.json). Those are unrelated to minimum wage: Ohio municipalities do not set their own minimum wages, and no Ohio local rate is carried in this database."
+  ],
+  "confidence": "primary_source_confirmed",
+  "provisional": {
+    "status": "carry-forward-from-2026",
+    "createdOn": "2026-10-25",
+    "basedOn": "data/minimum-wage/states/OH-2026.json",
+    "note": "Carried forward from the 2026 file on 2026-10-25 so that a 2027-dated query resolves instead of failing. Every figure is 2026's unless listed in updatedFor2027 (each with the state agency's own announcement or the statute). Remove this block only after every figure has been re-read against a 2027 source.",
+    "updatedFor2027": [
+      {
+        "path": "standard.hourly",
+        "from": 11.0,
+        "to": 11.4,
+        "source": "https://com.ohio.gov/about-us/media-center/news/Ohio-Minimum-Wage-to-Increase-in-2027"
+      }
+    ]
+  }
+}

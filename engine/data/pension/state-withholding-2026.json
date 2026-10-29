@@ -1,0 +1,931 @@
+{
+  "year": 2026,
+  "$comment": "State income tax withholding on pension, annuity and IRA payments, by state of the payee's residence. Each state's rule comes from that state's revenue agency; every state not listed here, and every state marked not_modelled, produces no state line and a warning saying so. 4 U.S.C. 114 bars a state from taxing retirement income of a nonresident, so only the payee's own state ever withholds.",
+  "readOn": "2026-10-28",
+  "states": {
+    "AL": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Alabama income tax is not required to be withheld from retirement distributions or pensions; voluntary withholding is permitted at the payee's request.",
+      "sources": [
+        {
+          "title": "Alabama Admin. Code r. 810-3-75-.04, Voluntary Withholding",
+          "url": "https://www.revenue.alabama.gov/wp-content/uploads/2021/12/810-3-75-.04.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "AR": {
+      "status": "required",
+      "periodic": {
+        "kind": "wage_method",
+        "certificate": {
+          "exemptions": 3
+        }
+      },
+      "nonperiodic": {
+        "kind": "percent",
+        "percent": 3
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 5
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": false
+      },
+      "electable": [
+        "additionalAmount",
+        "certificate"
+      ],
+      "notes": "Periodic payments are withheld as wages on the Arkansas tables; with no AR4P the payer withholds as married with three allowances. Nonperiodic payments 3%, eligible rollover distributions a mandatory 5%. The payee cannot name a dollar amount, only an additional amount.",
+      "sources": [
+        {
+          "title": "Arkansas Form AR4P (R 12/04/2025) and instructions",
+          "url": "https://www.dfa.arkansas.gov/wp-content/uploads/AR4P2026.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "AZ": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Voluntary. The payee picks 0.5% to 3.5% of the taxable amount in half-point steps, plus an optional extra amount per payment (A.R.S. 43-404).",
+      "sources": [
+        {
+          "title": "Arizona Form A-4P (2026), Request for Voluntary Withholding on Retirement Income",
+          "url": "https://azdor.gov/sites/default/files/document/FORMS_WITHHOLDING_2026_A-4P_f.pdf",
+          "readOn": "2026-10-28"
+        }
+      ],
+      "percentChoices": [
+        0.5,
+        1,
+        1.5,
+        2,
+        2.5,
+        3,
+        3.5
+      ]
+    },
+    "CA": {
+      "status": "required",
+      "periodic": {
+        "kind": "percent_of_federal",
+        "percent": 10
+      },
+      "nonperiodic": {
+        "kind": "percent_of_federal",
+        "percent": 10
+      },
+      "eligibleRollover": {
+        "kind": "percent_of_federal",
+        "percent": 10
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": true
+      },
+      "electable": [
+        "percent",
+        "amount",
+        "certificate",
+        "additionalAmount"
+      ],
+      "notes": "Withheld unless the payee elects out. With no form the payer may use the California schedules as a married payee with three allowances, or 10% of the federal withholding; this uses the 10% method. The payee may instead name allowances, a dollar amount or elect none. Nothing is withheld for a payee who lives outside California.",
+      "sources": [
+        {
+          "title": "EDD DE 231P, Withholding from Pensions, Annuities, and Certain Other Deferred Income",
+          "url": "https://edd.ca.gov/siteassets/files/pdf_pub_ctr/de231p.pdf",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "EDD DE 4P (Rev. 46, 1-26)",
+          "url": "https://edd.ca.gov/siteassets/files/pdf_pub_ctr/de4p.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "CT": {
+      "status": "required",
+      "periodic": {
+        "kind": "percent",
+        "percent": 6.99,
+        "whenCertificate": "wage_method"
+      },
+      "nonperiodic": {
+        "kind": "percent",
+        "percent": 6.99
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 6.99
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": true
+      },
+      "entireBalanceNoOptOut": true,
+      "electable": [
+        "amount",
+        "certificate",
+        "additionalAmount"
+      ],
+      "notes": "A Connecticut-resident payee with no Form CT-W4P is withheld at 6.99% with no exemption. With a withholding code on CT-W4P, periodic payments use the Connecticut tables. Nonperiodic payments are 6.99% unless the payee enters code E ($0, or a fixed amount). A distribution of the entire account balance is 6.99% with no exemption.",
+      "sources": [
+        {
+          "title": "CT DRS, Pension Payers",
+          "url": "https://portal.ct.gov/drs/withholding-taxes/pension-payers",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "Form CT-W4P (Rev. 12/21)",
+          "url": "https://portal.ct.gov/-/media/DRS/Forms/2022/WTH/CT-W4P_1221.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "DC": {
+      "status": "required",
+      "periodic": {
+        "kind": "not_modelled",
+        "reason": "The District's published guidance read for this build covers lump-sum distributions only."
+      },
+      "nonperiodic": {
+        "kind": "percent",
+        "percent": 10.75,
+        "onlyWhen": "entireAccountBalance",
+        "otherwise": {
+          "kind": "not_modelled",
+          "reason": "The District's published rule read for this build withholds at 10.75% on lump-sum distributions of a whole account; other nonperiodic payments were not confirmed."
+        }
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 10.75,
+        "onlyWhen": "entireAccountBalance",
+        "otherwise": {
+          "kind": "not_modelled",
+          "reason": "The District's published rule read for this build withholds at 10.75% on lump-sum distributions of a whole account; other payments were not confirmed."
+        }
+      },
+      "optOut": {
+        "periodic": false,
+        "nonperiodic": false,
+        "eligibleRollover": false
+      },
+      "electable": [],
+      "notes": "The District requires withholding at its highest rate (10.75%) for DC residents on lump-sum distributions from retirement accounts, except amounts previously taxed and direct trustee-to-trustee transfers or rollovers.",
+      "sources": [
+        {
+          "title": "DC OTR, 2024 FR-900NP instructions",
+          "url": "https://otr.cfo.dc.gov/sites/default/files/dc/sites/otr/publication/attachments/2024_FR900NP_Instructions_v1.0.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "DE": {
+      "status": "not_modelled",
+      "reason": "Delaware's pension office offers its own form; the Division of Revenue's payer rule was not confirmed."
+    },
+    "GA": {
+      "status": "required",
+      "periodic": {
+        "kind": "wage_method",
+        "certificate": {}
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": false,
+        "eligibleRollover": false
+      },
+      "electable": [
+        "certificate",
+        "additionalAmount",
+        "amount",
+        "percent"
+      ],
+      "notes": "Periodic pension and annuity payments are withheld as wages unless the recipient elects not to on Form G-4P (O.C.G.A. 48-7-101). Nonperiodic payments are withheld only when the payee elects it, in an amount no lower than wage withholding would be.",
+      "sources": [
+        {
+          "title": "Georgia DOR 2023 Employer's Tax Guide: pension and annuity payments",
+          "url": "https://dor.georgia.gov/document/document/2023-employers-tax-guidepdf/download",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "Georgia Form G-4P (Rev. 06/03/26)",
+          "url": "https://dor.georgia.gov/document/form/withholdingcertificateforpensionorannuitypaymentsg-4ppdf/download",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "IA": {
+      "status": "required",
+      "gate": "iowa_exclusion",
+      "periodic": {
+        "kind": "percent",
+        "percent": 3.8
+      },
+      "nonperiodic": {
+        "kind": "percent",
+        "percent": 3.8
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 3.8
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": true
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Withheld at 3.8% unless the payee qualifies for the retirement-income exclusion (age 55 or older, disabled, or a surviving spouse of someone who would have), in which case the administrator is generally not required to withhold. Not required when no federal withholding is required.",
+      "sources": [
+        {
+          "title": "Iowa Department of Revenue, Withholding Tax Information (IAC 701-307.1(2))",
+          "url": "https://revenue.iowa.gov/taxes/tax-guidance/withholding-tax/iowa-withholding-tax-information",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "ID": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Payers of retirement income are not required to withhold Idaho income tax.",
+      "sources": [
+        {
+          "title": "Idaho State Tax Commission, withholding: retirement-income payers",
+          "url": "https://tax.idaho.gov/search-category/income-tax/withholding/",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "IL": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Withholding on pensions and annuities is by voluntary agreement only.",
+      "sources": [
+        {
+          "title": "Illinois Publication 131 / Form IL-941 instructions: voluntary withholding agreements",
+          "url": "https://tax.illinois.gov/content/dam/soi/en/web/tax/research/publications/pubs/documents/pub-131.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "IN": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Voluntary: the payee requests withholding in writing on Form WH-4P.",
+      "sources": [
+        {
+          "title": "Indiana Information Bulletin #13 and Form WH-4P",
+          "url": "https://www.in.gov/dor/files/reference/ib13.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "KS": {
+      "status": "not_modelled",
+      "reason": "Kansas follows federal withholding (required when federal is required, voluntary when federal is), but the guide does not state a method for pension payments."
+    },
+    "LA": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Withholding on pensions, retirement income and annuities is not required (R.S. 47:111(A)(9)); a recipient may ask for it.",
+      "sources": [
+        {
+          "title": "Louisiana Department of Revenue FAQ: Does Louisiana require withholding on pensions, retirement income, and annuities?",
+          "url": "https://revenue.louisiana.gov/tax-education-and-faqs/faqs/withholding-tax/does-louisiana-require-withholding-on-pensions-retirement-income-and-annuities/",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "MA": {
+      "status": "required",
+      "gate": "federal_required",
+      "periodic": {
+        "kind": "wage_method",
+        "certificate": {}
+      },
+      "nonperiodic": {
+        "kind": "not_modelled",
+        "reason": "The Massachusetts withholding rate for nonperiodic payments was not confirmed from a current document (Form M-4P is Rev. 1/08)."
+      },
+      "eligibleRollover": {
+        "kind": "not_modelled",
+        "reason": "The Massachusetts withholding rate for eligible rollover distributions was not confirmed from a current document (Form M-4P is Rev. 1/08)."
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": true
+      },
+      "electable": [
+        "certificate",
+        "additionalAmount"
+      ],
+      "notes": "Massachusetts withholding applies to pension payments unless the payee has elected out of federal withholding; with no Form M-4P it is based on zero exemptions. Payments to a nonresident from certain plans are not subject to tax (4 U.S.C. 114).",
+      "sources": [
+        {
+          "title": "Massachusetts Form M-4P",
+          "url": "https://www.mass.gov/doc/form-m-4p-massachusetts-withholding-exemption-certificate-for-pension-annuity-and-other-periodic-and-nonperiodic-payments/download",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "MD": {
+      "status": "required",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 7.75
+      },
+      "optOut": {
+        "periodic": false,
+        "nonperiodic": false,
+        "eligibleRollover": false
+      },
+      "electable": [
+        "amount"
+      ],
+      "notes": "Maryland requires withholding only on eligible rollover distributions that carry mandatory federal withholding: 7.75% (Tax-General 10-908(f)). On any other annuity or retirement distribution it withholds only when the payee asks, for a fixed amount of at least $5 a month on Form MW507P.",
+      "sources": [
+        {
+          "title": "Maryland Administrative Release No. 41, Withholding on Designated Distributions from Retirement Plans",
+          "url": "https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/legal-publications/administrative-releases/income-and-estate-tax/ar_it41.pdf",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "Maryland Form MW507P",
+          "url": "https://www.marylandcomptroller.gov/content/dam/mdcomp/tax/forms/2026/mw507p.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "ME": {
+      "status": "required",
+      "gate": "federal_required",
+      "periodic": {
+        "kind": "wage_method",
+        "certificate": {}
+      },
+      "nonperiodic": {
+        "kind": "percent",
+        "percent": 5
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 5
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": true
+      },
+      "electable": [
+        "certificate",
+        "additionalAmount"
+      ],
+      "notes": "If payments from an employer-sponsored retirement plan carry federal withholding, Maine tax must also be withheld unless the payee elects out of Maine withholding. Periodic payments use the Maine wage methods; lump sums and nonperiodic payments, IRA and 401(k) distributions a flat 5%. Pensions and annuities paid to a nonresident are not withheld.",
+      "sources": [
+        {
+          "title": "Maine Revenue Services, 2026 Withholding Tables for Individual Income Tax and Instructions, table of common items of income",
+          "url": "https://www.maine.gov/revenue/sites/maine.gov.revenue/files/inline-files/26_wh_tab_instr.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "MI": {
+      "status": "required",
+      "periodic": {
+        "kind": "percent",
+        "percent": 4.25,
+        "whenCertificate": "wage_method"
+      },
+      "nonperiodic": {
+        "kind": "percent",
+        "percent": 4.25
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 4.25
+      },
+      "optOut": {
+        "periodic": false,
+        "nonperiodic": false,
+        "eligibleRollover": false
+      },
+      "electable": [
+        "certificate",
+        "additionalAmount"
+      ],
+      "notes": "Mandatory on taxable pension distributions except as the payee directs on an MI W-4P. With no MI W-4P: 4.25% of the taxable amount. With one, 4.25% after the personal-exemption allowance claimed. Recipients born before 1946 follow separate limits that are not modelled.",
+      "sources": [
+        {
+          "title": "Michigan 2026 Income Tax Withholding Guide (446)",
+          "url": "https://www.michigan.gov/taxes/-/media/Project/Websites/taxes/Forms/SUW/TY2026/446_Withholding-Guide_2026.pdf",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "Michigan: Withholding for Pension Administrators FAQ",
+          "url": "https://www.michigan.gov/taxes/questions/iit/accordion/pension/withholding-for-pension-administrators-frequently-asked-questions-faq",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "MN": {
+      "status": "required",
+      "periodic": {
+        "kind": "percent",
+        "percent": 6.25,
+        "whenCertificate": "wage_method"
+      },
+      "nonperiodic": {
+        "kind": "percent",
+        "percent": 6.25
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 6.25
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": true
+      },
+      "electable": [
+        "percent",
+        "amount",
+        "certificate"
+      ],
+      "notes": "Minnesota residents are withheld at 6.25% unless the payee gives Form W-4MNP, which can choose a percentage, an amount, allowances (periodic payments use the Minnesota tables) or zero. The payer must request a W-4MNP before starting the 6.25% default.",
+      "sources": [
+        {
+          "title": "Minnesota 2026 Withholding Tax Instructions and Tables",
+          "url": "https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "MO": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Voluntary for the recipient; the plan administrator must withhold if the recipient asks (Form MO W-4P).",
+      "sources": [
+        {
+          "title": "Missouri DOR withholding FAQ: pension withholding is voluntary",
+          "url": "https://dor.mo.gov/faq/taxation/business/withholding.html",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "MS": {
+      "status": "not_required",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [],
+      "notes": "Retirement income, pensions and annuities are not subject to Mississippi income tax, so nothing is withheld.",
+      "sources": [
+        {
+          "title": "Mississippi DOR business tax FAQ",
+          "url": "https://www.dor.ms.gov/business/business-tax-frequently-asked-questions",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "NC": {
+      "status": "required",
+      "gate": "federal_required",
+      "periodic": {
+        "kind": "wage_method",
+        "certificate": {}
+      },
+      "nonperiodic": {
+        "kind": "percent",
+        "percent": 4
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 4
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": false
+      },
+      "electable": [
+        "certificate",
+        "additionalAmount"
+      ],
+      "notes": "Required when federal withholding is required on a payment to a North Carolina resident. Periodic payments: as a single payee with no allowances unless Form NC-4P says otherwise. Nonperiodic and eligible rollover distributions: 4% of the distribution; the payee can opt out of the nonperiodic rate but not of the rollover rate.",
+      "sources": [
+        {
+          "title": "North Carolina 2026 Income Tax Withholding Tables and Instructions for Employers, Section 6",
+          "url": "https://www.ncdor.gov/income-tax-withholding-tables-and-instructions-employers/open",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "ND": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Voluntary: only if the recipient requests it and the payer agrees.",
+      "sources": [
+        {
+          "title": "North Dakota Income Tax Withholding & Information Returns Guideline",
+          "url": "https://www.tax.nd.gov/sites/www/files/documents/guidelines/business/it-withhold/income-tax-withholding-information-returns-guideline.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "NE": {
+      "status": "required",
+      "gate": "federal_required",
+      "periodic": {
+        "kind": "wage_method",
+        "certificate": {}
+      },
+      "nonperiodic": {
+        "kind": "percent",
+        "percent": 3.5
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 3.5
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": true
+      },
+      "electable": [
+        "certificate",
+        "additionalAmount"
+      ],
+      "notes": "Follows the federal method. Periodic payments: as wages on the Nebraska tables with the payee's W-4N. Nonperiodic payments and eligible rollover distributions that carry federal withholding: 3.5% of the distribution. No Nebraska withholding when none is withheld federally.",
+      "sources": [
+        {
+          "title": "Nebraska 2026 Circular EN, Pensions and Annuities",
+          "url": "https://revenue.nebraska.gov/sites/default/files/doc/business/Cir_En_2025/2026cir_en_whole.pdf",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "Nebraska Reg-21-004.06",
+          "url": "https://revenue.nebraska.gov/about/chapter-21-income-tax-withholding",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "NJ": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Voluntary: withholding starts only when the payee files Form NJ-W-4P.",
+      "sources": [
+        {
+          "title": "New Jersey Form NJ-W-4P, Certificate of Voluntary Withholding",
+          "url": "https://www.nj.gov/treasury/taxation/pdf/current/njw4p.pdf",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "NJ-WT Income Tax Withholding Instructions",
+          "url": "https://www.nj.gov/treasury/taxation/pdf/current/njwt.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "NM": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "New Mexico does not require payers to withhold on pensions and annuities unless the payee asks.",
+      "sources": [
+        {
+          "title": "New Mexico FYI-104, New Mexico Withholding Tax",
+          "url": "https://realfile.tax.newmexico.gov/FYI-104.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "NY": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Payers are not required to withhold; the annuitant may request it on Form IT-2104-P (at least $5 a month, and not enough to cut the payment below $10).",
+      "sources": [
+        {
+          "title": "New York Form IT-2104-P, Annuitant's Request for Income Tax Withholding",
+          "url": "https://www.tax.ny.gov/pdf/current_forms/it/it2104p_fill_in.pdf",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "Tax.NY.gov: information for retired persons",
+          "url": "https://www.tax.ny.gov/pit/file/information_for_seniors.htm",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "OK": {
+      "status": "required",
+      "periodic": {
+        "kind": "wage_method",
+        "certificate": {
+          "filingStatus": "married",
+          "allowances": 3
+        }
+      },
+      "nonperiodic": {
+        "kind": "percent",
+        "percent": 4.5
+      },
+      "eligibleRollover": {
+        "kind": "percent",
+        "percent": 4.5
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": true
+      },
+      "electable": [
+        "certificate",
+        "additionalAmount"
+      ],
+      "notes": "Periodic payments are withheld as wages; with no Form OK-W-4-P the payer withholds as married with three allowances. Nonperiodic payments, including eligible rollover distributions, are withheld at the top marginal income tax rate (4.5% for 2026, the top rate in the OW-2 tables). The payee can choose no withholding on either form.",
+      "sources": [
+        {
+          "title": "Okla. Admin. Code 710:90-1-13, Pensions, annuities, and certain other deferred income",
+          "url": "https://www.law.cornell.edu/regulations/oklahoma/OAC-710-90-1-13",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "Oklahoma OW-2 percentage method tables (top bracket 4.5%)",
+          "url": "https://oklahoma.gov/tax/businesses/withholding-tax.html",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "OR": {
+      "status": "not_modelled",
+      "reason": "Oregon pension payers commonly default to 8% on lump sums, but Oregon's own payer rule was not found."
+    },
+    "PA": {
+      "status": "not_modelled",
+      "reason": "Pennsylvania's guidance read for this build does not address payer withholding on retirement distributions."
+    },
+    "VA": {
+      "status": "required",
+      "periodic": {
+        "kind": "wage_method",
+        "certificate": {}
+      },
+      "nonperiodic": {
+        "kind": "not_modelled",
+        "reason": "Virginia's published guidance read for this build covers periodic payments on Form VA-4P; the rate for nonperiodic distributions was not confirmed."
+      },
+      "eligibleRollover": {
+        "kind": "not_modelled",
+        "reason": "Virginia's published guidance read for this build covers periodic payments on Form VA-4P; the rate for eligible rollover distributions was not confirmed."
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": true
+      },
+      "electable": [
+        "certificate",
+        "additionalAmount"
+      ],
+      "notes": "Payers of pensions and annuities to Virginia residents withhold on the Virginia tables; with no Form VA-4P, as if no exemptions were claimed. Financial institutions are not payers for IRA or SEP distributions.",
+      "sources": [
+        {
+          "title": "Virginia Tax, Income Tax Withholding Guide for Employers (Rev. 10/26)",
+          "url": "https://www.tax.virginia.gov/sites/default/files/vatax-pdf/employer-withholding-instructions.pdf",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "Form VA-4P instructions",
+          "url": "https://www.tax.virginia.gov/sites/default/files/taxforms/withholding/any/va-4p-any.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "VT": {
+      "status": "required",
+      "gate": "federal_required",
+      "periodic": {
+        "kind": "wage_method",
+        "certificate": {}
+      },
+      "nonperiodic": {
+        "kind": "percent_of_federal",
+        "percent": 30
+      },
+      "eligibleRollover": {
+        "kind": "percent_of_federal",
+        "percent": 30
+      },
+      "optOut": {
+        "periodic": true,
+        "nonperiodic": true,
+        "eligibleRollover": true
+      },
+      "electable": [
+        "certificate",
+        "additionalAmount"
+      ],
+      "notes": "Required when federal withholding is required or the payee elects it and does not claim exemption from Vermont. Periodic payments use the Vermont tables; nonperiodic payments are estimated at 30% of the federal withholding.",
+      "sources": [
+        {
+          "title": "Vermont Department of Taxes, Withholding Tax Instructions",
+          "url": "https://tax.vermont.gov/business-and-corp/withholding-tax/instructions",
+          "readOn": "2026-10-28"
+        }
+      ]
+    },
+    "WI": {
+      "status": "election_only",
+      "periodic": {
+        "kind": "none"
+      },
+      "nonperiodic": {
+        "kind": "none"
+      },
+      "eligibleRollover": {
+        "kind": "none"
+      },
+      "electable": [
+        "percent",
+        "amount"
+      ],
+      "notes": "Pension and retirement income are not wages under Wisconsin law, so withholding is not required; a recipient who asks in writing can have it withheld.",
+      "sources": [
+        {
+          "title": "Wisconsin Department of Revenue, Withholding Tax Guide (Publication W-166, January 2026)",
+          "url": "https://www.revenue.wi.gov/dor%20publications/pb166.pdf",
+          "readOn": "2026-10-28"
+        },
+        {
+          "title": "Wisconsin Withholding Tax Update, October 2025",
+          "url": "https://www.revenue.wi.gov/withholdingtaxupdate/25-1.pdf",
+          "readOn": "2026-10-28"
+        }
+      ]
+    }
+  }
+}

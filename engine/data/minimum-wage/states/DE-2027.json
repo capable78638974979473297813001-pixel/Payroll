@@ -1,0 +1,61 @@
+{
+  "jurisdiction": {
+    "level": "state",
+    "code": "DE",
+    "name": "Delaware"
+  },
+  "year": 2027,
+  "asOf": "2026-10-25",
+  "hasStateMinimumWage": true,
+  "standard": {
+    "hourly": 15.0,
+    "hourlyCents": 1500,
+    "effectiveFrom": "2025-01-01",
+    "coverage": "All covered employers.",
+    "note": "Final step of SB 15 (2021): $10.50 (2022), $11.75 (2023), $13.25 (2024), $15.00 (2025). No further increase for 2026 and no escalator."
+  },
+  "tipped": {
+    "tipCreditAllowed": true,
+    "cashWage": 2.23,
+    "cashWageCents": 223,
+    "maxTipCredit": 12.77,
+    "maxTipCreditCents": 1277,
+    "tippedEmployeeThreshold": {
+      "amount": 30.0,
+      "period": "month"
+    },
+    "note": "Delaware's $2.23 cash wage is one of the lowest in the country in a $15 state -- a $12.77 tip credit, the second largest of any state after Nebraska's."
+  },
+  "youthAndTraining": [],
+  "variants": [],
+  "indexation": {
+    "indexed": false,
+    "note": "SB 15 contained no escalator; the rate is flat until the legislature acts."
+  },
+  "scheduledChanges": [],
+  "sources": [
+    {
+      "id": "dol-state-mw",
+      "title": "U.S. DOL Wage and Hour Division -- State Minimum Wage Laws (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/minimum-wage/state",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. DOL's own state-by-state table is the spine of every standard rate in this database; where a state's own labor department was ALSO read directly, that source is listed too and wins on any disagreement (see South Dakota's tipped cash wage for the one case where they disagreed)."
+    },
+    {
+      "id": "dol-tipped-mw",
+      "title": "U.S. DOL Wage and Hour Division -- Minimum Wages for Tipped Employees (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/state/minimum-wage/tipped",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. Source of the combined rate / maximum tip credit / minimum cash wage triple and the 'tipped employee' monthly-tips definition for every state and territory in this database."
+    }
+  ],
+  "confidence": "primary_source_confirmed",
+  "knownGaps": [],
+  "provisional": {
+    "status": "carry-forward-from-2026",
+    "createdOn": "2026-10-25",
+    "basedOn": "data/minimum-wage/states/DE-2026.json",
+    "note": "Carried forward from the 2026 file on 2026-10-25 so that a 2027-dated query resolves instead of failing. Every figure is 2026's unless listed in updatedFor2027 (each with the state agency's own announcement or the statute). Remove this block only after every figure has been re-read against a 2027 source.",
+    "updatedFor2027": []
+  }
+}

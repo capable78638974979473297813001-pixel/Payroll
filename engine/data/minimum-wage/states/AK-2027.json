@@ -1,0 +1,73 @@
+{
+  "jurisdiction": {
+    "level": "state",
+    "code": "AK",
+    "name": "Alaska"
+  },
+  "year": 2027,
+  "asOf": "2026-10-25",
+  "hasStateMinimumWage": true,
+  "standard": {
+    "hourly": 14.0,
+    "hourlyCents": 1400,
+    "effectiveFrom": "2026-07-01",
+    "coverage": "All covered employers, regardless of size.",
+    "note": "Third step of 2024 Ballot Measure 1: $13.00 on 2025-07-01, $14.00 on 2026-07-01, $15.00 on 2027-07-01, then annual inflation adjustment. Alaska's step date is July 1, not January 1 -- a January-only refresh cycle will carry a stale Alaska rate for six months of every year."
+  },
+  "tipped": {
+    "tipCreditAllowed": false,
+    "cashWage": 14.0,
+    "cashWageCents": 1400,
+    "maxTipCredit": 0.0,
+    "maxTipCreditCents": 0,
+    "tippedEmployeeThreshold": null,
+    "note": "This state allows NO tip credit: the full state minimum wage must be paid in cash before any tips. Alaska Stat. 23.10.065 bars counting tips toward the minimum wage."
+  },
+  "youthAndTraining": [],
+  "variants": [],
+  "indexation": {
+    "indexed": true,
+    "basis": "Anchorage CPI-U, annually",
+    "adjustmentDate": "01-01",
+    "note": "Inflation indexing resumes AFTER the legislated $15.00 step on 2027-07-01."
+  },
+  "scheduledChanges": [
+    {
+      "hourly": 15.0,
+      "hourlyCents": 1500,
+      "note": "Final legislated step of Ballot Measure 1 (2024).",
+      "effectiveDate": "2027-07-01"
+    }
+  ],
+  "sources": [
+    {
+      "id": "dol-state-mw",
+      "title": "U.S. DOL Wage and Hour Division -- State Minimum Wage Laws (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/minimum-wage/state",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. DOL's own state-by-state table is the spine of every standard rate in this database; where a state's own labor department was ALSO read directly, that source is listed too and wins on any disagreement (see South Dakota's tipped cash wage for the one case where they disagreed)."
+    },
+    {
+      "id": "dol-tipped-mw",
+      "title": "U.S. DOL Wage and Hour Division -- Minimum Wages for Tipped Employees (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/state/minimum-wage/tipped",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. Source of the combined rate / maximum tip credit / minimum cash wage triple and the 'tipped employee' monthly-tips definition for every state and territory in this database."
+    },
+    {
+      "title": "Alaska Ballot Measure 1 (2024) minimum wage schedule",
+      "url": "https://www.dol.gov/agencies/whd/minimum-wage/state",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "cross_source_confirmed this session for the 2027-07-01 $15.00 step; DOL's own table is the primary source for the $14.00 rate in effect now."
+    }
+  ],
+  "confidence": "primary_source_confirmed",
+  "knownGaps": [],
+  "provisional": {
+    "status": "carry-forward-from-2026",
+    "createdOn": "2026-10-25",
+    "basedOn": "data/minimum-wage/states/AK-2026.json",
+    "note": "Carried forward from the 2026 file on 2026-10-25 so that a 2027-dated query resolves instead of failing. Every figure is 2026's unless listed in updatedFor2027 (each with the state agency's own announcement or the statute). Remove this block only after every figure has been re-read against a 2027 source.",
+    "updatedFor2027": []
+  }
+}

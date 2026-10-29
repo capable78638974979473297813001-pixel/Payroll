@@ -1,0 +1,129 @@
+{
+  "code": "SD",
+  "name": "South Dakota",
+  "year": 2026,
+  "method": "no_income_tax",
+  "$scopeNote": "South Dakota has NO state individual income tax of any kind, and never has -- it is one of the states whose constitution (Art. XI, sec. 2, via the sales-tax-in-lieu-of-income-tax structure adopted last century) has never been amended to permit one, not a phase-out state like New Hampshire. No local income tax anywhere: municipalities may levy local SALES tax (general municipal sales tax + a municipal gross receipts tax on lodging/alcohol/entertainment/restaurant meals) but South Dakota law does not authorize any city or county to levy a tax on wages or earned income. No employee-paid unemployment, disability, or paid-leave program of any kind -- Reemployment Assistance (South Dakota's name for UI) is funded entirely by the employer, and South Dakota has no state Paid Family/Medical Leave program at all (voluntary or mandatory) -- a genuine structural difference from Vermont/New Hampshire, which at least have a voluntary program on the books.",
+  "sources": [
+    {
+      "title": "South Dakota Department of Labor and Regulation -- Reemployment Assistance Tax FAQ",
+      "url": "https://dlr.sd.gov/ra/businesses/faq.aspx",
+      "verifiedOn": "2026-08-20",
+      "verifiedBy": "Fetched and read directly (raw HTML, not just the summarized fetch). Quoted verbatim: 'For calendar year 2026 and each year thereafter, an administrative fee of eight-hundredths percent (.08%) or .0008 must be paid by the employer. For calendar year 2025 and 2024, if the employer's reserve ratio is less than two and one-quarter percent, an administrative fee of two hundredths percent (.02%) or .0002 shall be paid.' This resolved a real apparent conflict on first read: the page ALSO shows a 0.55% 'Administrative Fee' column in the NEW-EMPLOYER rate table. These are two DIFFERENT fees, not a contradiction -- the 0.55% is a component of the flat new-employer rate (years 1-3 only); the 0.08% (up from 0.02%, effective calendar year 2026) is a SEPARATE fee under SDCL 61-5-24 that applies only to employers who have graduated to experience rating, i.e. NOT new employers. Confirmed by the page's own structure: the 0.08% clause appears directly under its own 'Administrative Fee' subheading, distinct from and below the new-employer rate table. CORRECTION 2026-10-05: the 0.55% in the new-employer table is the INVESTMENT FEE column, not an administrative fee; that table's Administrative Fee column reads 'Not Applicable' (see unemploymentInsurance.newEmployerRates.correction). The 0.08% experience-rated administrative fee above is unaffected."
+    },
+    {
+      "title": "South Dakota DLR -- Reemployment Assistance for Businesses (rate notices)",
+      "url": "https://dlr.sd.gov/ra/businesses/default.aspx",
+      "verifiedOn": "2026-08-20",
+      "verifiedBy": "Fetched directly. Confirms the $15,000 taxable wage base (unchanged since 2015) and that '2026 rate notices were mailed to employers on Oct. 31, 2025' -- i.e. individual experienced-employer rates for 2026 are already final and notice-driven per employer, not something this engine can derive from a public table alone."
+    },
+    {
+      "title": "Wilmington-style local-tax and UI cross-check (secondary, corroborating only)",
+      "url": "https://onpay.com/payroll/calculator-tax-rates/south-dakota/",
+      "verifiedOn": "2026-08-20",
+      "verifiedBy": "Cross-source confirmation only, not independently fetched in full: corroborates no state or local income tax anywhere in South Dakota and the $15,000 UI wage base."
+    }
+  ],
+  "unemploymentInsurance": {
+    "$comment": "Employer-only (SUTA/RA tax) -- no employee contribution, confirmed directly. South Dakota calls this 'Reemployment Assistance' (RA), not 'UI', but it is the same FUTA-certified employer payroll tax as every other state's SUTA.",
+    "administeredBy": "South Dakota Department of Labor and Regulation (DLR), Reemployment Assistance Tax Unit",
+    "wageBase": 15000.0,
+    "newEmployerRates": {
+      "year1": { "raTax": 0.012, "raTaxConstruction": 0.06, "investmentFee": 0.0055, "administrativeFee": 0, "total": 0.0175, "totalConstruction": 0.0655 },
+      "years2and3": { "raTax": 0.01, "raTaxConstruction": 0.03, "investmentFee": 0.0055, "administrativeFee": 0, "total": 0.0155, "totalConstruction": 0.0355 },
+      "correction": "CORRECTED 2026-10-05 against the DLR FAQ's own table markup (dlr.sd.gov/ra/businesses/faq.aspx, New Employer Tax Rates): 'RA Tax' is a two-column group (Non-Construction 1.20% / 1.00%, Construction 6.00% / 3.00%), then Investment Fee 0.55%, then Administrative Fee 'Not Applicable'. This file previously read the Construction RA-tax column as the investment fee and the investment fee as the administrative fee, giving totals of 7.75% and 4.55%. A regular new employer pays 1.75% in year 1 and 1.55% in years 2 and 3; a new construction employer pays 6.55% and 3.55%.",
+      "comment": "Investment fee 'applies to those with a positive account balance' per the source's own footnote -- a hold-harmless clause also caps an employer's investment-fee rate at their 1987 fee rate if their account had a positive balance at the end of the last two years, an unusual legacy provision unique to South Dakota's statute among every state built in this project so far."
+    },
+    "experienceRatedAdministrativeFee": {
+      "2026andLater": 0.0008,
+      "2024and2025": { "rate": 0.0002, "condition": "only if the employer's reserve ratio is less than 2.25%" },
+      "statutoryAuthority": "SDCL 61-5-24",
+      "comment": "A REAL rate change effective exactly this tax year: the administrative fee for experience-rated (3+ year) employers rose from 0.02% (and only for low-reserve-ratio employers) to a flat 0.08% for ALL experience-rated employers starting calendar year 2026 -- both a rate increase and a base-broadening in the same change. This fee sits on top of the reserve-ratio-based Schedule A/B contribution rate below; it is not a component of the new-employer table above."
+    },
+    "experienceRatedSchedule": {
+      "$comment": "SUPERSEDED for 2026 (see schedule2026 below): Reserve-ratio-based Schedule A/B contribution rate table (SDCL 61-5-25.4), 'Beginning 2018' vintage, still shown on the DLR FAQ page, transcribed from the FAQ page's own table -- comprehensive but not directly usable by this engine, same class of gap as Wisconsin's 26-row Schedule D table: applying it requires an employer's account reserve ratio, which nothing in types.ts carries.",
+      "sampleRows": [
+        { "reserveRatio": "2.25% and Over", "scheduleA": 0.0, "scheduleB": 0.0 },
+        { "reserveRatio": "1.00% and Less than 1.25%", "scheduleA": 0.0035, "scheduleB": 0.0025 },
+        { "reserveRatio": "0.75% and Less than 1.00%", "scheduleA": 0.0055, "scheduleB": 0.0045 },
+        { "reserveRatio": "0.50% and Less than 0.75%", "scheduleA": 0.007, "scheduleB": 0.006 }
+      ],
+      "schedule2026": {
+        "statute": "SDCL 61-5-25.7 (SL 2025, ch 199, s 2), https://sdlegislature.gov/Statutes/61-5",
+        "appliesTo": "taxable wages paid on and after 2026-01-01 (the published statute's own sentence; the DLR-requested 2025 draft bill, 25.195.9, said July 1, 2026, but the enacted text says January 1, 2026)",
+        "whichSchedule": "SDCL 61-5-25(2), beginning 2024: Schedule A when the South Dakota average high cost multiplier ratio is below 1.30; Schedule B when it is 1.30 or more and below 1.50; Schedule C when it is 1.50 or more. The ratio is the unemployment fund balance on June 30 of the prior year divided by the fund balance required at a high cost multiple of 1.0 on December 31.",
+        "supersedes": "SDCL 61-5-25.6 (2024 and 2025 wages), whose own text now ends 'apply to taxable wages paid on and after from January 1, 2024, to December 31, 2025, inclusive'. The 2018-vintage table on the DLR FAQ page is stale for 2026.",
+        "reserveRatioDefinition": "Experience-rating account balance on July 31 of the prior year (contributions paid through July 31 less benefits paid through the preceding June 30), divided by total taxable payroll for the preceding three fiscal years (SDCL 61-5-25.7).",
+        "rows": [
+          { "reserveRatio": "Less than -7.00%", "scheduleA": 0.0939, "scheduleB": 0.0924, "scheduleC": 0.0852 },
+          { "reserveRatio": "-7.00% and Less than -6.50%", "scheduleA": 0.0889, "scheduleB": 0.0874, "scheduleC": 0.0802 },
+          { "reserveRatio": "-6.50% and Less than -6.00%", "scheduleA": 0.0839, "scheduleB": 0.0824, "scheduleC": 0.0752 },
+          { "reserveRatio": "-6.00% and Less than -5.50%", "scheduleA": 0.0789, "scheduleB": 0.0774, "scheduleC": 0.0702 },
+          { "reserveRatio": "-5.50% and Less than -5.00%", "scheduleA": 0.0739, "scheduleB": 0.0724, "scheduleC": 0.0652 },
+          { "reserveRatio": "-5.00% and Less than -4.50%", "scheduleA": 0.0689, "scheduleB": 0.0674, "scheduleC": 0.0602 },
+          { "reserveRatio": "-4.50% and Less than -4.00%", "scheduleA": 0.0639, "scheduleB": 0.0624, "scheduleC": 0.0552 },
+          { "reserveRatio": "-4.00% and Less than -3.50%", "scheduleA": 0.0589, "scheduleB": 0.0574, "scheduleC": 0.0502 },
+          { "reserveRatio": "-3.50% and Less than -3.00%", "scheduleA": 0.0539, "scheduleB": 0.0524, "scheduleC": 0.0452 },
+          { "reserveRatio": "-3.00% and Less than -2.50%", "scheduleA": 0.0489, "scheduleB": 0.0474, "scheduleC": 0.0402 },
+          { "reserveRatio": "-2.50% and Less than -2.00%", "scheduleA": 0.0439, "scheduleB": 0.0424, "scheduleC": 0.0352 },
+          { "reserveRatio": "-2.00% and Less than -1.50%", "scheduleA": 0.0389, "scheduleB": 0.0374, "scheduleC": 0.0302 },
+          { "reserveRatio": "-1.50% and Less than -1.00%", "scheduleA": 0.0339, "scheduleB": 0.0324, "scheduleC": 0.0252 },
+          { "reserveRatio": "-1.00% and Less than -0.75%", "scheduleA": 0.0289, "scheduleB": 0.0274, "scheduleC": 0.0202 },
+          { "reserveRatio": "-0.75% and Less than -0.50%", "scheduleA": 0.0239, "scheduleB": 0.0224, "scheduleC": 0.0152 },
+          { "reserveRatio": "-0.50% and Less than -0.25%", "scheduleA": 0.0189, "scheduleB": 0.0174, "scheduleC": 0.0102 },
+          { "reserveRatio": "-0.25% and Less than 0.00%", "scheduleA": 0.0139, "scheduleB": 0.0124, "scheduleC": 0.0052 },
+          { "reserveRatio": "0.00% and Less than 0.50%", "scheduleA": 0.0089, "scheduleB": 0.0074, "scheduleC": 0.0002 },
+          { "reserveRatio": "0.50% and Less than 0.75%", "scheduleA": 0.0064, "scheduleB": 0.0049, "scheduleC": 0 },
+          { "reserveRatio": "0.75% and Less than 1.00%", "scheduleA": 0.0049, "scheduleB": 0.0034, "scheduleC": 0 },
+          { "reserveRatio": "1.00% and Less than 1.25%", "scheduleA": 0.0029, "scheduleB": 0.0014, "scheduleC": 0 },
+          { "reserveRatio": "1.25% and Less than 1.50%", "scheduleA": 0.0019, "scheduleB": 0.0004, "scheduleC": 0 },
+          { "reserveRatio": "1.50% and Less than 1.75%", "scheduleA": 0.0009, "scheduleB": 0, "scheduleC": 0 },
+          { "reserveRatio": "1.75% and Less than 2.25%", "scheduleA": 0, "scheduleB": 0, "scheduleC": 0 },
+          { "reserveRatio": "2.25% and Over", "scheduleA": 0, "scheduleB": 0, "scheduleC": 0 }
+        ],
+        "note": "Contribution rate only. Experience-rated employers also pay the 0.08% administrative fee (2026 and later, SDCL 61-5-28.1) and an investment fee set by reserve ratio (0.53% below 1.00% down to 0.00% at 1.60% and over, SDCL 61-5-29). Not used by the engine: it needs the employer's reserve ratio and the state's fund multiplier ratio, which the input types do not carry; an experience-rated employer supplies its notice rate instead."
+      },
+      "correction": "CORRECTED 2026-10-05: the three banded rows were shifted down one row against the DLR table (the page's first rows are malformed HTML, which misaligned the earlier transcription). 1.00% to under 1.25% is 0.35% / 0.25%, 0.75% to under 1.00% is 0.55% / 0.45%, 0.50% to under 0.75% is 0.70% / 0.60%.",
+      "note": "NOT a full transcription -- only a representative sample of the reserve-ratio bands was captured (the source table has many more rows spanning both positive and negative reserve ratios, plus a separate 2011-vintage Investment Fee table keyed by its own reserve-ratio bands). Flagged honestly as partial rather than padded out with unread rows; South Dakota has no state income tax, so this table is lower-priority than an income-tax bracket table would be, and was intentionally not pursued to full completeness in this pass."
+    },
+    "knownGap": "Experience-rated schedule is only partially transcribed (see note above), and even fully transcribed would need a reserve-ratio input this engine's types.ts doesn't carry -- same structural gap as every other state's experience-rated SUTA in this project."
+  },
+  "localIncomeTax": {
+    "rule": "NONE. South Dakota has no constitutional or statutory mechanism for any city, county, or municipality to levy a tax on wages or earned income. Municipalities may levy local SALES tax (general + gross receipts on lodging/alcohol/restaurants/entertainment) -- a genuinely different tax, flagged explicitly so it isn't mistaken for a local income tax the way Wisconsin's county sales-tax table was flagged in that file.",
+    "confidence": "cross_source_confirmed -- consistent across every source checked, no dissent found, but not tied to one specific enabling/prohibiting statute citation the way this project's strongest 'no local tax' claims (e.g. Wisconsin's) are."
+  },
+  "paidLeave": {
+    "rule": "NONE. South Dakota has no state Paid Family/Medical Leave program, mandatory or voluntary -- a genuine structural difference from New Hampshire and Vermont, which each have at least a voluntary program on the books. Nothing to disclose as a knownGap here because there is no program of any kind to model, not an unmodelled one."
+  },
+  "reciprocity": {
+    "reciprocalStates": [],
+    "note": "Not applicable rather than 'checked, none found' -- South Dakota has no income tax to be reciprocal about. reciprocalStates left structurally empty for consistency with every other state file's shape, same convention as New Hampshire's."
+  },
+  "knownGaps": [
+    "The experience-rated Schedule A/B contribution-rate table is only partially transcribed (4 of many rows) -- not pursued to full completeness because South Dakota has no income tax and the table is unusable without a reserve-ratio input this engine doesn't carry regardless of completeness.",
+    "Local-tax and UI figures rest on the DLR's own primary pages (strong) plus one secondary cross-check (onpay.com, not independently fetched in full) -- not a weakness specific to this file, but recorded per this project's standing confidence-tier convention."
+  ],
+  "suiVerification": {
+    "checkedOn": "2026-10-18",
+    "result": "Wage base $15,000; new employer 1.20% + 0.55% investment fee = 1.75% (construction 6.00% + 0.55%); administrative fee 0.08% for experience-rated employers. Top-rate ceiling conflict noted in suiEmployer.experienceRangeSource.",
+    "sources": [
+      "https://dlr.sd.gov/ra/businesses/faq.aspx"
+    ]
+  },
+  "suiEmployer": {
+    "$comment": "Normalized employer-side unemployment parameters — the shape src/taxes/state.ts reads. The detailed unemploymentInsurance block above stays the record of research; this exists because that block's shape varies too much between states to compute from directly (wage bases as objects, industry-keyed rate maps, differently-named keys).",
+    "wageBase": 15000,
+    "wageBaseSource": "2026 taxable wage bases cross-checked against EY's published 2026 state-by-state table; where this file already carried a numeric wage base, the two agreed unless noted in wageBaseNote.",
+    "newEmployerRate": 0.0175,
+    "newEmployerRateSource": "CORRECTED 2026-10-05 from 0.012 (the RA-tax component alone) to the all-in 1.75% a regular new employer pays in year 1: 1.20% RA tax + 0.55% investment fee, per the DLR FAQ's New Employer Tax Rates table (dlr.sd.gov/ra/businesses/faq.aspx). Years 2 and 3 are 1.55%; the engine has no employer-age input, so it applies the year-1 rate, as Kansas does.",
+    "industryNewEmployerRates": { "construction": 0.0655 },
+    "industryNewEmployerRatesSource": "Same DLR table: year-1 construction employers pay 6.00% RA tax + 0.55% investment fee = 6.55% (years 2 and 3: 3.55%). Selected by input.employer.suiIndustry['SD'] === 'construction'.",
+    "experienceRange": {
+      "min": 0.0008,
+      "max": 0.1
+    },
+    "experienceRangeSource": "RESTATED 2026-10-06 as ALL-IN (contribution + administrative fee + investment fee), the same basis as newEmployerRate above. Informational: the engine does not read it. Floor 0.08%: the 2026 contribution schedule bottoms out at 0.00% (SDCL 61-5-25.7, reserve ratio 2.25% and over) and the investment fee is 0.00% at a 1.6% reserve ratio, but every experience-rated employer pays the 0.08% administrative fee for 2026 and later (SDCL 61-5-28.1; DLR FAQ: 'an administrative fee of eight-hundredths percent (.08%) ... must be paid by the employer'). Ceiling 10.00%: the top 2026 contribution rate is 9.39% (Schedule A, reserve ratio below -7.00%) + 0.08% fee + 0.53% investment fee (reserve ratio below 1.00%, SDCL 61-5-29). 2026-10-18 CONFLICT, UNRESOLVED: a separate check says the DLR FAQ's table (applies to wages paid on and after 2026-01-01) tops out at a 9.45% Schedule A rate, which would make the all-in ceiling about 10.06%; the FAQ's rate tables did not render in our fetch, so 9.39% / 10.00% is left as is. The engine tolerates +/-2 points around this range when flagging a supplied rate. Without the investment fee the ceiling is 9.47%; 9.53% would be the superseded 2024-2025 table's 9.45% plus the 0.08% fee.",
+    "employerSuppliedRateRequired": false,
+    "confidence": "cross_source_confirmed"
+  }
+}

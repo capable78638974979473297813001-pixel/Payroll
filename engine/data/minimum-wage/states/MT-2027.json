@@ -1,0 +1,82 @@
+{
+  "jurisdiction": {
+    "level": "state",
+    "code": "MT",
+    "name": "Montana"
+  },
+  "year": 2027,
+  "asOf": "2026-10-25",
+  "hasStateMinimumWage": true,
+  "standard": {
+    "hourly": 11.2,
+    "hourlyCents": 1120,
+    "effectiveFrom": "2027-01-01",
+    "coverage": "All covered employers.",
+    "note": "Mont. Code Ann. 39-3-409 annual CPI adjustment. 2027: $11.20 (see provisional.updatedFor2027)."
+  },
+  "tipped": {
+    "tipCreditAllowed": false,
+    "cashWage": 11.2,
+    "cashWageCents": 1120,
+    "maxTipCredit": 0.0,
+    "maxTipCreditCents": 0,
+    "tippedEmployeeThreshold": null,
+    "note": "This state allows NO tip credit: the full state minimum wage must be paid in cash before any tips. Montana allows no tip credit at either of its two rates."
+  },
+  "variants": [
+    {
+      "hourly": 4.0,
+      "hourlyCents": 400,
+      "id": "small_business_not_flsa_covered",
+      "label": "Business not covered by the FLSA with gross annual sales of $110,000 or less",
+      "test": "Mont. Code Ann. 39-3-409(2). Applies ONLY where the FLSA does not reach the employer at all -- an FLSA-covered employer of any size owes at least $7.25, and in practice the state rate.",
+      "note": "One of only two sub-$7.25 figures in this database that is a live state rule rather than a preempted relic (the other is Oklahoma's $2.00)."
+    }
+  ],
+  "youthAndTraining": [],
+  "indexation": {
+    "indexed": true,
+    "basis": "CPI-U",
+    "adjustmentDate": "01-01"
+  },
+  "scheduledChanges": [],
+  "sources": [
+    {
+      "title": "Montana DLI -- Montana's Minimum Wage",
+      "url": "https://erd.dli.mt.gov/labor-standards/wage-and-hour-payment-act/state-minimum-wage",
+      "verifiedOn": "2026-10-25",
+      "verifiedBy": "Search-result snippet of the DLI page (not a full-page read; the cached page body still showed 2026): 'Current Minimum Wage: $10.85 (Effective 1/1/2027: $11.20)'. HRMorning reports the same figure. Re-read the 2027 determination letter.",
+      "confidence": "cross_source_confirmed"
+    },
+    {
+      "id": "dol-state-mw",
+      "title": "U.S. DOL Wage and Hour Division -- State Minimum Wage Laws (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/minimum-wage/state",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. DOL's own state-by-state table is the spine of every standard rate in this database; where a state's own labor department was ALSO read directly, that source is listed too and wins on any disagreement (see South Dakota's tipped cash wage for the one case where they disagreed)."
+    },
+    {
+      "id": "dol-tipped-mw",
+      "title": "U.S. DOL Wage and Hour Division -- Minimum Wages for Tipped Employees (table current as of July 1, 2026)",
+      "url": "https://www.dol.gov/agencies/whd/state/minimum-wage/tipped",
+      "verifiedOn": "2026-09-08",
+      "verifiedBy": "Fetched and read directly this session. Source of the combined rate / maximum tip credit / minimum cash wage triple and the 'tipped employee' monthly-tips definition for every state and territory in this database."
+    }
+  ],
+  "confidence": "cross_source_confirmed",
+  "knownGaps": [],
+  "provisional": {
+    "status": "carry-forward-from-2026",
+    "createdOn": "2026-10-25",
+    "basedOn": "data/minimum-wage/states/MT-2026.json",
+    "note": "Carried forward from the 2026 file on 2026-10-25 so that a 2027-dated query resolves instead of failing. Every figure is 2026's unless listed in updatedFor2027 (each with the state agency's own announcement or the statute). Remove this block only after every figure has been re-read against a 2027 source.",
+    "updatedFor2027": [
+      {
+        "path": "standard.hourly",
+        "from": 10.85,
+        "to": 11.2,
+        "source": "https://erd.dli.mt.gov/labor-standards/wage-and-hour-payment-act/state-minimum-wage"
+      }
+    ]
+  }
+}
