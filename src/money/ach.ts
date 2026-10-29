@@ -1,16 +1,17 @@
 import { newId } from '../lib/ids.ts';
 import { badRequest, conflict } from '../lib/errors.ts';
 import { decryptField, encryptField } from '../lib/crypto.ts';
-import { addBankingDays, onOrAfterBankingDay, onOrBeforeBankingDay } from '../lib/bizdays.ts';
+import { addBankingDays, isBankingDay, onOrAfterBankingDay, onOrBeforeBankingDay } from '../lib/bizdays.ts';
 import { sum } from '../lib/money.ts';
 import { allocateNetPay } from '../../engine/payroll/directDeposit.ts';
 import { PRENOTE_WAITING_PERIOD_BUSINESS_DAYS } from '../../engine/payroll/directDepositVerification.ts';
 import type { DirectDepositAccount } from '../../engine/payroll/types.ts';
 import type { Store } from '../store/store.ts';
-import type { AchFile, AchFileEntry, BankAccount, MoneyLeg, PayRun } from '../domain/types.ts';
+import type { AchFile, AchFileEntry, BankAccount, Company, EmployerBankSetup, MoneyLeg, PayRun } from '../domain/types.ts';
 import { buildAchFile, type AchEntry, type Originator } from '../ach/nacha.ts';
 import { parseReturnFile, RETURN_CODES } from '../ach/returns.ts';
 import type { AchSubmitter } from '../ach/submitter.ts';
+import { fillTemplate, SftpDelivery } from '../ach/sftp.ts';
 import { numbersFor, payoutReadiness, type BankService } from '../banking/accounts.ts';
 import { getRun } from '../payroll/payRuns.ts';
 import { postEntry } from './ledger.ts';
@@ -78,6 +79,19 @@ export function planTimeline(today: string, checkDate: string, cfg: Pick<AchConf
   return { today, checkDate, debitEffectiveDate, earliestDisburseDate, earliestCreditEffectiveDate, targetCreditDate, onTime, daysLate };
 }
 
+export interface EmployerTimeline {
+  mode: 'employer_bank';
+  today: string;
+  checkDate: string;
+  targetCreditDate: string;
+  earliestCreditEffectiveDate: string;
+  onTime: boolean;
+  note: string;
+}
+
+/** Minutes to wait after a failed SFTP delivery before the reconcile loop tries again. */
+const SFTP_RETRY_MINUTES = 15;
+
 const OPEN: ReadonlyArray<MoneyLeg['status']> = ['pending', 'queued', 'submitted'];
 const LIVE: ReadonlyArray<MoneyLeg['status']> = ['pending', 'queued', 'submitted', 'settled'];
 
@@ -88,8 +102,10 @@ export class AchService {
   private readonly cfg: AchConfig;
   private readonly now: () => Date;
   private readonly inflight = new Set<string>();
+  private readonly sftp: SftpDelivery;
 
-  constructor(store: Store, banks: BankService, submitter: AchSubmitter, cfg: AchConfig, opts: { now?: () => Date } = {}) {
+  constructor(store: Store, banks: BankService, submitter: AchSubmitter, cfg: AchConfig, opts: { now?: () => Date; sftp?: SftpDelivery } = {}) {
+    this.sftp = opts.sftp ?? new SftpDelivery();
     this.store = store;
     this.banks = banks;
     this.submitter = submitter;
@@ -104,7 +120,7 @@ export class AchService {
   // ------------------------------------------------------------------ files
 
   /** Build a file, persist it with its legs' trace numbers. Call inside store.tx(). */
-  private createFile(p: { companyId: string; runId?: string; kind: AchFile['kind']; effectiveDate: string; entries: Array<AchEntry & { legId?: string; bankAccountId?: string }>; sec: 'PPD' | 'CCD'; description: string }): AchFile {
+  private createFile(p: { companyId: string; runId?: string; kind: AchFile['kind']; effectiveDate: string; entries: Array<AchEntry & { legId?: string; bankAccountId?: string }>; sec: 'PPD' | 'CCD'; description: string; originator?: Originator; rail?: 'totali' | 'employer'; fileNameTemplate?: string }): AchFile {
     const seqStart = this.store.nextCounter('ach_trace', 1);
     for (let i = 1; i < p.entries.length; i++) this.store.nextCounter('ach_trace', 1);
     if (seqStart + p.entries.length > 9_999_999) throw new Error('The ACH trace number sequence is exhausted. Totali staff must reset it with the bank.');
@@ -112,7 +128,8 @@ export class AchService {
     const dayCount = this.store.achFiles.where((f) => f.createdAt.slice(0, 10) === this.today()).length;
     const modifier = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[dayCount];
     if (!modifier) throw new Error('More than 36 ACH files today; the file ID modifier is exhausted.');
-    const built = buildAchFile(this.cfg.originator, { standardEntryClass: p.sec, entryDescription: p.description, effectiveEntryDate: p.effectiveDate, entries: p.entries }, { createdAt: this.now(), firstTraceSequence: seqStart, fileIdModifier: modifier });
+    const originator = p.originator ?? this.cfg.originator;
+    const built = buildAchFile(originator, { standardEntryClass: p.sec, entryDescription: p.description, effectiveEntryDate: p.effectiveDate, entries: p.entries }, { createdAt: this.now(), firstTraceSequence: seqStart, fileIdModifier: modifier });
     const entries: AchFileEntry[] = built.entries.map((b, i) => ({ ref: b.ref, traceNumber: b.traceNumber, kind: b.kind, amountCents: b.amountCents, ...(p.entries[i].legId ? { legId: p.entries[i].legId } : {}), ...(p.entries[i].bankAccountId ? { bankAccountId: p.entries[i].bankAccountId } : {}) }));
     const at = this.now().toISOString();
     const file: AchFile = {
@@ -120,7 +137,10 @@ export class AchService {
       companyId: p.companyId,
       ...(p.runId ? { runId: p.runId } : {}),
       kind: p.kind,
-      fileName: `TOTALI_${p.kind.toUpperCase()}_${p.effectiveDate.replace(/-/g, '')}_${String(fileNo).padStart(5, '0')}.ach`,
+      fileName: p.fileNameTemplate
+        ? fillTemplate(p.fileNameTemplate, { date: this.now().toISOString().slice(0, 10).replace(/-/g, ''), time: this.now().toISOString().slice(11, 16).replace(':', ''), seq: String(fileNo).padStart(5, '0'), routing: originator.odfiRoutingNumber, companyId: originator.companyId })
+        : `TOTALI_${p.kind.toUpperCase()}_${p.effectiveDate.replace(/-/g, '')}_${String(fileNo).padStart(5, '0')}.ach`,
+      rail: p.rail ?? 'totali',
       contentEncrypted: encryptField(built.content),
       effectiveDate: p.effectiveDate,
       entries,
@@ -142,6 +162,7 @@ export class AchService {
   async submitFile(fileId: string): Promise<AchFile> {
     const file = this.store.achFiles.require(fileId, 'ACH file');
     if (file.status !== 'created') return file;
+    if (file.rail === 'employer') return this.deliverFile(fileId);
     const result = await this.submitter.submit({ fileId: file.id, fileName: file.fileName, content: decryptField(file.contentEncrypted), kind: file.kind, effectiveDate: file.effectiveDate, entryCount: file.totals.entryCount, totalCents: file.totals.debitCents + file.totals.creditCents });
     return this.store.tx(() => {
       const fresh = this.store.achFiles.require(fileId, 'ACH file');
@@ -178,6 +199,12 @@ export class AchService {
         const a = this.store.bankAccounts.get(e.bankAccountId);
         if (a && a.verification.prenoteFileId === file.id) this.store.bankAccounts.put({ ...a, verification: { ...a.verification, prenoteFileId: undefined } }); // eligible for a new prenote
       }
+    }
+    // A credit file nobody will send: if no payment for the run is still alive, the run goes back to approved so a new file can be prepared.
+    if (file.kind === 'credit' && file.runId) {
+      const stillAlive = this.store.legs.where((l) => l.runId === file.runId && l.kind === 'employee_payout' && LIVE.includes(l.status)).length > 0;
+      const run = this.store.payRuns.get(file.runId);
+      if (!stillAlive && run && run.status === 'disbursing') this.store.payRuns.put({ ...run, status: 'approved' });
     }
   }
 
@@ -226,8 +253,14 @@ export class AchService {
     }
   }
 
-  timeline(companyId: string, runId: string): Timeline {
+  timeline(companyId: string, runId: string): Timeline | EmployerTimeline {
     const run = getRun(this.store, companyId, runId);
+    if (this.store.companies.require(companyId, 'Company').payment.mode === 'employer_bank') {
+      const today = this.today();
+      const earliest = addBankingDays(onOrAfterBankingDay(today), this.cfg.creditLeadBankingDays);
+      const target = onOrBeforeBankingDay(run.checkDate);
+      return { mode: 'employer_bank', today, checkDate: run.checkDate, targetCreditDate: target, earliestCreditEffectiveDate: earliest, onTime: earliest <= target, note: "The employer's bank sends the money. This is the earliest the file can take effect if it is released at the bank in time for its cutoff." };
+    }
     return planTimeline(this.today(), run.checkDate, this.cfg);
   }
 
@@ -238,6 +271,7 @@ export class AchService {
    * accepts paying late.
    */
   async fundPayRun(companyId: string, runId: string, opts: { acceptLate?: boolean } = {}): Promise<{ run: PayRun; leg: MoneyLeg; file: Omit<AchFile, 'contentEncrypted'> | null; timeline: Timeline; balanceCheck?: { checked: boolean; note: string } }> {
+    this.requireMode(companyId, 'totali_ach');
     this.requireConfigured();
     const run = getRun(this.store, companyId, runId);
     const company = this.store.companies.require(companyId, 'Company');
@@ -364,6 +398,7 @@ export class AchService {
     effectiveDate: string | null;
     late: boolean;
   }> {
+    this.requireMode(companyId, 'totali_ach');
     this.requireConfigured();
     const run = getRun(this.store, companyId, runId);
     if (run.status !== 'funded' && run.status !== 'disbursing') throw conflict('not_funded', `Employees are paid only from a funded run; this run is ${run.status}.`);
@@ -373,57 +408,7 @@ export class AchService {
     if (this.inflight.has(runId)) throw conflict('disbursement_in_progress', 'A disbursement for this run is already running.');
     this.inflight.add(runId);
     try {
-      const out = this.store.tx(() => {
-        const fresh = getRun(this.store, companyId, runId);
-        const waiting: Array<{ employeeId: string; amountCents: number; reason: string }> = [];
-        const planned: Array<{ leg: MoneyLeg; account: BankAccount; employeeName: string }> = [];
-        const at = this.now().toISOString();
-        const earliest = addBankingDays(onOrAfterBankingDay(this.today()), this.cfg.creditLeadBankingDays);
-        const target = onOrBeforeBankingDay(fresh.checkDate);
-        const effectiveDate = target >= earliest ? target : earliest;
-        const late = effectiveDate > target;
-
-        for (const pc of fresh.paychecks.filter((p) => p.payableCents > 0)) {
-          const employee = this.store.employees.require(pc.employeeId, 'Employee');
-          const mine = this.store.legs.where((l) => l.runId === runId && l.kind === 'employee_payout' && l.employeeId === pc.employeeId);
-          const alreadyHandled = sum(mine.filter((l) => LIVE.includes(l.status)).map((l) => l.amountCents));
-          const remaining = pc.payableCents - alreadyHandled;
-          if (remaining <= 0) continue;
-          const ready = payoutReadiness(this.store, employee);
-          if (!ready.ready) {
-            waiting.push({ employeeId: pc.employeeId, amountCents: remaining, reason: ready.reason ?? 'not ready' });
-            continue;
-          }
-          const accounts: DirectDepositAccount[] = employee.payoutAccounts.map((p) => ({ id: p.bankAccountId, routingNumber: '', accountNumber: '', accountType: 'checking', allocation: p.allocation, priority: p.priority }));
-          for (const alloc of allocateNetPay(remaining, accounts)) {
-            if (alloc.amount <= 0) continue;
-            const account = this.store.bankAccounts.require(alloc.accountId, 'Bank account');
-            const attempt = mine.filter((l) => l.bankAccountId === account.id).length + 1;
-            const leg: MoneyLeg = { id: newId('leg'), companyId, runId, kind: 'employee_payout', employeeId: pc.employeeId, bankAccountId: account.id, amountCents: alloc.amount, attempt, status: 'pending', createdAt: at, updatedAt: at };
-            this.store.legs.put(leg);
-            planned.push({ leg, account, employeeName: pc.name });
-          }
-        }
-
-        let file: AchFile | null = null;
-        if (planned.length > 0) {
-          file = this.createFile({
-            companyId,
-            runId,
-            kind: 'credit',
-            effectiveDate,
-            sec: 'PPD',
-            description: 'PAYROLL',
-            entries: planned.map(({ leg, account, employeeName }) => {
-              const n = numbersFor(account);
-              return { ref: leg.id, legId: leg.id, bankAccountId: account.id, kind: 'credit' as const, accountType: account.accountType, routingNumber: n.routingNumber, accountNumber: n.accountNumber, amountCents: leg.amountCents, individualId: leg.employeeId!, individualName: employeeName };
-            }),
-          });
-          if (late) this.alert(runId, 'paid_late', `Employees are being paid on ${effectiveDate}, after the ${target} target. The ACH timeline did not allow earlier.`);
-        }
-        this.store.payRuns.put({ ...this.store.payRuns.require(runId, 'Pay run'), status: 'disbursing' });
-        return { file, planned, waiting, effectiveDate: file ? effectiveDate : null, late: file ? late : false };
-      });
+      const out = this.store.tx(() => this.buildCredits(companyId, runId, { rail: 'totali', description: 'PAYROLL' }));
       if (out.file) await this.submitFile(out.file.id);
       this.advance();
       const status = this.store.payRuns.require(runId, 'Pay run').status;
@@ -440,11 +425,194 @@ export class AchService {
     }
   }
 
+  // ------------------------------------------------------------------ shared credit planning
+
+  private requireMode(companyId: string, mode: 'employer_bank' | 'totali_ach'): Company {
+    const company = this.store.companies.require(companyId, 'Company');
+    if (company.payment.mode !== mode) {
+      throw conflict('wrong_payment_mode', mode === 'totali_ach'
+        ? "This company's payments are sent by the employer's own bank, not by Totali. Use prepare-payment to build the file for them to release."
+        : "This company is set up for Totali to send payments through its own bank. Use fund and disburse.");
+    }
+    return company;
+  }
+
+  /**
+   * Plan and build the credits for a run: one leg per employee account, never
+   * more than each employee's approved net pay, nobody paid twice, employees
+   * who are not set up listed as waiting. Call inside store.tx().
+   */
+  private buildCredits(companyId: string, runId: string, o: { rail: 'totali' | 'employer'; description: string; originator?: Originator; fileNameTemplate?: string; effectiveDate?: string }) {
+    const fresh = getRun(this.store, companyId, runId);
+    const waiting: Array<{ employeeId: string; amountCents: number; reason: string }> = [];
+    const planned: Array<{ leg: MoneyLeg; account: BankAccount; employeeName: string }> = [];
+    const at = this.now().toISOString();
+    const earliest = addBankingDays(onOrAfterBankingDay(this.today()), this.cfg.creditLeadBankingDays);
+    const target = onOrBeforeBankingDay(fresh.checkDate);
+    const effectiveDate = o.effectiveDate ?? (target >= earliest ? target : earliest);
+    const late = effectiveDate > target;
+
+    for (const pc of fresh.paychecks.filter((x) => x.payableCents > 0)) {
+      const employee = this.store.employees.require(pc.employeeId, 'Employee');
+      const mine = this.store.legs.where((l) => l.runId === runId && l.kind === 'employee_payout' && l.employeeId === pc.employeeId);
+      const alreadyHandled = sum(mine.filter((l) => LIVE.includes(l.status)).map((l) => l.amountCents));
+      const remaining = pc.payableCents - alreadyHandled;
+      if (remaining <= 0) continue;
+      const ready = payoutReadiness(this.store, employee);
+      if (!ready.ready) {
+        waiting.push({ employeeId: pc.employeeId, amountCents: remaining, reason: ready.reason ?? 'not ready' });
+        continue;
+      }
+      const accounts: DirectDepositAccount[] = employee.payoutAccounts.map((x) => ({ id: x.bankAccountId, routingNumber: '', accountNumber: '', accountType: 'checking', allocation: x.allocation, priority: x.priority }));
+      for (const alloc of allocateNetPay(remaining, accounts)) {
+        if (alloc.amount <= 0) continue;
+        const account = this.store.bankAccounts.require(alloc.accountId, 'Bank account');
+        const attempt = mine.filter((l) => l.bankAccountId === account.id).length + 1;
+        const leg: MoneyLeg = { id: newId('leg'), companyId, runId, kind: 'employee_payout', rail: o.rail, employeeId: pc.employeeId, bankAccountId: account.id, amountCents: alloc.amount, attempt, status: 'pending', createdAt: at, updatedAt: at };
+        this.store.legs.put(leg);
+        planned.push({ leg, account, employeeName: pc.name });
+      }
+    }
+
+    let file: AchFile | null = null;
+    if (planned.length > 0) {
+      file = this.createFile({
+        companyId,
+        runId,
+        kind: 'credit',
+        effectiveDate,
+        sec: 'PPD',
+        description: o.description,
+        ...(o.originator ? { originator: o.originator } : {}),
+        rail: o.rail,
+        ...(o.fileNameTemplate ? { fileNameTemplate: o.fileNameTemplate } : {}),
+        entries: planned.map(({ leg, account, employeeName }) => {
+          const n = numbersFor(account);
+          return { ref: leg.id, legId: leg.id, bankAccountId: account.id, kind: 'credit' as const, accountType: account.accountType, routingNumber: n.routingNumber, accountNumber: n.accountNumber, amountCents: leg.amountCents, individualId: leg.employeeId!, individualName: employeeName };
+        }),
+      });
+      if (late) this.alert(runId, 'paid_late', `Employees are being paid on ${effectiveDate}, after the ${target} target. The ACH timeline did not allow earlier.`);
+    }
+    this.store.payRuns.put({ ...this.store.payRuns.require(runId, 'Pay run'), status: 'disbursing' });
+    return { file, planned, waiting, effectiveDate: file ? effectiveDate : null, late: file ? late : false, target };
+  }
+
+  // ------------------------------------------------------------------ employer-bank mode
+
+  private requireEmployerBank(company: Company): EmployerBankSetup {
+    const eb = company.payment.employerBank;
+    if (!eb) throw conflict('payment_setup_incomplete', "Set up the employer's bank first (PUT /payment-setup): its routing number, name, and the ACH ids it assigned.");
+    return eb;
+  }
+
+  private employerOriginator(company: Company, eb: EmployerBankSetup): Originator {
+    return { odfiRoutingNumber: eb.odfiRoutingNumber, odfiName: eb.odfiName, immediateOrigin: eb.immediateOrigin, companyName: company.legalName, companyId: eb.companyId };
+  }
+
+  /**
+   * Employer-bank mode: write the payment file the employer's own bank will
+   * send. Totali debits no one and holds no money. The file carries the
+   * employer bank's details in its header, pays net pay only (the employer pays
+   * taxes at their own bank), and waits to be released by the employer at their
+   * bank. If the bank takes SFTP and it is set up, the file is delivered there.
+   */
+  async preparePayment(companyId: string, runId: string, opts: { effectiveDate?: string; acceptLate?: boolean } = {}) {
+    const company = this.requireMode(companyId, 'employer_bank');
+    const eb = this.requireEmployerBank(company);
+    const run = getRun(this.store, companyId, runId);
+    if (run.status !== 'approved' && run.status !== 'disbursing') throw conflict('not_preparable', `Payment is prepared for an approved run; this run is ${run.status}.`);
+    if (this.inflight.has(runId)) throw conflict('preparation_in_progress', 'A payment file for this run is already being prepared.');
+
+    const today = this.today();
+    const earliest = addBankingDays(onOrAfterBankingDay(today), this.cfg.creditLeadBankingDays);
+    const target = onOrBeforeBankingDay(run.checkDate);
+    if (opts.effectiveDate !== undefined) {
+      if (!isBankingDay(opts.effectiveDate) || opts.effectiveDate < today) throw badRequest('effectiveDate must be a banking day that is not in the past');
+    }
+    const effective = opts.effectiveDate ?? (target >= earliest ? target : earliest);
+    if (effective > target && !opts.acceptLate) {
+      throw conflict('check_date_unreachable', `Employees cannot be paid by ${target}: the earliest the file can take effect is ${earliest}. Prepare with acceptLate: true to proceed, or use a later check date.`, { target, earliest });
+    }
+    this.inflight.add(runId);
+    try {
+      const out = this.store.tx(() => this.buildCredits(companyId, runId, { rail: 'employer', description: 'PAYROLL', originator: this.employerOriginator(company, eb), fileNameTemplate: eb.fileNameTemplate, effectiveDate: effective }));
+      if (out.file) await this.deliverFile(out.file.id);
+      const file = out.file ? this.store.achFiles.get(out.file.id)! : null;
+      const run2 = this.store.payRuns.require(runId, 'Pay run');
+      return {
+        status: run2.status,
+        file: file ? this.fileMeta(file.id) : null,
+        paying: out.planned.map(({ leg }) => ({ employeeId: leg.employeeId!, bankAccountId: leg.bankAccountId, amountCents: leg.amountCents })),
+        waitingForBankAccount: out.waiting,
+        effectiveDate: out.effectiveDate,
+        late: out.late,
+        needsInYourAccountCents: sum(out.planned.map(({ leg }) => leg.amountCents)),
+        youPayYourselfCents: { employeeTaxesWithheld: run2.totals.employeeTaxCents, employerTaxes: run2.totals.employerTaxCents, deductionsHeld: run2.totals.deductionsCents },
+        next: file ? (file.delivery?.status === 'sent' ? "The file was delivered to your bank's SFTP server. Approve it in your bank's portal, then confirm here that you released it." : 'Download the file, import it in your bank\'s ACH portal and approve it there, then confirm here that you released it.') : 'Nothing to send: everyone owed is either paid or not set up yet.',
+      };
+    } finally {
+      this.inflight.delete(runId);
+    }
+  }
+
+  /** Deliver an employer-bank file to the bank's SFTP server, if one is set up. Delivery is not approval: the file waits for the employer to release it. */
+  async deliverFile(fileId: string, opts: { force?: boolean } = {}): Promise<AchFile> {
+    const file = this.store.achFiles.require(fileId, 'ACH file');
+    if (file.rail !== 'employer') return file;
+    if (file.status !== 'created') return file;
+    const company = this.store.companies.require(file.companyId, 'Company');
+    const sftp = company.payment.employerBank?.sftp;
+    const at = this.now().toISOString();
+    if (!sftp) {
+      if (file.delivery?.channel === 'download') return file; // already marked ready; nothing to rewrite
+      return this.store.tx(() => this.store.achFiles.put({ ...file, delivery: { channel: 'download', status: 'none' }, message: 'Ready to download. Import it in your bank\'s ACH portal and release it there.', updatedAt: at }));
+    }
+    // After a failed delivery wait before trying again, so a wrong key or host cannot hammer the bank's server (or lock the employer out).
+    if (!opts.force && file.delivery?.status === 'failed' && file.delivery.at && this.now().getTime() - Date.parse(file.delivery.at) < SFTP_RETRY_MINUTES * 60_000) return file;
+    try {
+      const { remotePath } = await this.sftp.deliver({ host: sftp.host, port: sftp.port, username: sftp.username, remoteDir: sftp.remoteDir, knownHostsLine: sftp.knownHostsLine, privateKey: decryptField(sftp.privateKeyEncrypted) }, file.fileName, decryptField(file.contentEncrypted));
+      return this.store.tx(() => this.store.achFiles.put({ ...this.store.achFiles.require(fileId, 'ACH file'), status: 'queued', submitter: 'sftp', delivery: { channel: 'sftp', status: 'sent', at, remotePath }, message: "Delivered to the bank's SFTP server. It is not sent until the employer releases it at the bank.", updatedAt: at }));
+    } catch (e) {
+      return this.store.tx(() => this.store.achFiles.put({ ...this.store.achFiles.require(fileId, 'ACH file'), delivery: { channel: 'sftp', status: 'failed', at, message: (e as Error).message }, message: `SFTP delivery failed: ${(e as Error).message}. The file can be downloaded instead.`, updatedAt: at }));
+    }
+  }
+
+  /** The employer says they released this file at their bank. From here the payments take effect on the file's date. */
+  markReleased(companyId: string, fileId: string, by: string): AchFile {
+    if (!by.trim()) throw badRequest('releasedBy is required: the name of the person who approved it at the bank');
+    return this.store.tx(() => {
+      const file = this.store.achFiles.require(fileId, 'ACH file');
+      if (file.companyId !== companyId || file.rail !== 'employer') throw badRequest('That is not one of this company\'s own payment files');
+      if (file.status === 'accepted') return file;
+      if (file.status === 'rejected') throw conflict('file_cancelled', 'That file was cancelled. Prepare a new one.');
+      const at = this.now().toISOString();
+      const next = this.store.achFiles.put({ ...file, status: 'accepted', releasedAt: at, releasedBy: by.trim(), message: `The employer reported releasing this file at their bank (${by.trim()}).`, updatedAt: at });
+      this.acceptLegs(file);
+      return next;
+    });
+  }
+
+  /** The employer will not release this file (or cancelled it at the bank). Only before release. */
+  cancelFile(companyId: string, fileId: string): AchFile {
+    return this.store.tx(() => {
+      const file = this.store.achFiles.require(fileId, 'ACH file');
+      if (file.companyId !== companyId || file.rail !== 'employer') throw badRequest('That is not one of this company\'s own payment files');
+      if (file.status === 'rejected') return file;
+      if (file.status === 'accepted') throw conflict('already_released', 'That file was already released at the bank. If a payment is wrong, ask the bank to recall it; anything that fails will come back as a return.');
+      const next = this.store.achFiles.put({ ...file, status: 'rejected', message: 'Cancelled by the employer before release.', updatedAt: this.now().toISOString() });
+      this.rejectLegs(file, 'Cancelled by the employer before release.');
+      return next;
+    });
+  }
+
   // ------------------------------------------------------------------ prenotes
 
   /** Send a zero-dollar prenote for every employee account that is waiting to be verified. */
   async submitPrenotes(companyId: string): Promise<{ file: Omit<AchFile, 'contentEncrypted'> | null; accounts: string[] }> {
-    this.requireConfigured();
+    const company = this.store.companies.require(companyId, 'Company');
+    const employerRail = company.payment.mode === 'employer_bank';
+    const eb = employerRail ? this.requireEmployerBank(company) : undefined;
+    if (!employerRail) this.requireConfigured();
     const created = this.store.tx(() => {
       const pending = this.store.bankAccounts.where((a) => a.companyId === companyId && a.ownerKind === 'employee' && a.status === 'pending' && a.verification.method === 'prenote' && a.verification.status === 'pending' && !a.verification.prenoteFileId);
       if (pending.length === 0) return null;
@@ -455,6 +623,7 @@ export class AchService {
         effectiveDate,
         sec: 'PPD',
         description: 'PRENOTE',
+        ...(eb ? { originator: this.employerOriginator(company, eb), rail: 'employer' as const, fileNameTemplate: eb.fileNameTemplate } : {}),
         entries: pending.map((a) => {
           const n = numbersFor(a);
           const e = this.store.employees.require(a.ownerId, 'Employee');
@@ -485,7 +654,7 @@ export class AchService {
           const at = this.now().toISOString();
           this.store.legs.put({ ...leg, status: 'settled', settledAt: at, updatedAt: at });
           const employee = this.store.employees.get(leg.employeeId!);
-          postEntry(this.store, { companyId: leg.companyId, runId: leg.runId, legId: leg.id, memo: `Net pay sent to ${employee ? `${employee.firstName} ${employee.lastName}` : leg.employeeId}`, lines: [{ account: 'employee_net_pay', debitCents: leg.amountCents }, { account: 'bank_cash', creditCents: leg.amountCents }] });
+          if (leg.rail !== 'employer') postEntry(this.store, { companyId: leg.companyId, runId: leg.runId, legId: leg.id, memo: `Net pay sent to ${employee ? `${employee.firstName} ${employee.lastName}` : leg.employeeId}`, lines: [{ account: 'employee_net_pay', debitCents: leg.amountCents }, { account: 'bank_cash', creditCents: leg.amountCents }] });
         } else if (this.cfg.trustSettlementDate) {
           this.settleFunding(leg, 'effective date passed with no return');
         }
@@ -505,8 +674,9 @@ export class AchService {
 
   // ------------------------------------------------------------------ returns
 
-  private findEntry(trace: string): { file: AchFile; entry: AchFileEntry } | undefined {
+  private findEntry(trace: string, companyId?: string): { file: AchFile; entry: AchFileEntry } | undefined {
     for (const file of this.store.achFiles.all()) {
+      if (companyId && file.companyId !== companyId) continue;
       const entry = file.entries.find((e) => e.traceNumber === trace);
       if (entry) return { file, entry };
     }
@@ -519,7 +689,7 @@ export class AchService {
    * an unauthorized-debit return also revokes the employer's authorization.
    * Admin / bank-adapter only.
    */
-  ingestReturnFile(text: string): { applied: Array<{ trace: string; code: string; what: string }>; alreadyApplied: string[]; unmatched: string[]; changeNotices: Array<{ trace: string; changeCode: string; bankAccountId?: string }> } {
+  ingestReturnFile(text: string, opts: { companyId?: string } = {}): { applied: Array<{ trace: string; code: string; what: string }>; alreadyApplied: string[]; unmatched: string[]; changeNotices: Array<{ trace: string; changeCode: string; bankAccountId?: string }> } {
     const parsed = parseReturnFile(text);
     if (parsed.errors.length > 0) throw conflict('bad_return_file', `The return file is malformed: ${parsed.errors.join('; ')}`);
     const applied: Array<{ trace: string; code: string; what: string }> = [];
@@ -529,7 +699,7 @@ export class AchService {
 
     this.store.tx(() => {
       for (const r of parsed.returns) {
-        const hit = this.findEntry(r.originalTrace);
+        const hit = this.findEntry(r.originalTrace, opts.companyId);
         if (!hit) {
           unmatched.push(r.originalTrace);
           continue;
@@ -553,7 +723,7 @@ export class AchService {
         }
       }
       for (const c of parsed.changes) {
-        const hit = this.findEntry(c.originalTrace);
+        const hit = this.findEntry(c.originalTrace, opts.companyId);
         const accountId = hit?.entry.bankAccountId ?? (hit?.entry.legId ? this.store.legs.get(hit.entry.legId)?.bankAccountId : undefined);
         if (accountId) {
           const a = this.store.bankAccounts.get(accountId);
@@ -599,7 +769,7 @@ export class AchService {
     const info = RETURN_CODES[code] ?? { meaning: 'Unrecognised return reason', action: 'needs_review' as const };
     const wasSettled = leg.status === 'settled';
     this.store.legs.put({ ...leg, status: 'returned', returnCode: code, failureMessage: `${code}: ${info.meaning}`, updatedAt: this.now().toISOString() });
-    if (wasSettled) postEntry(this.store, { companyId: leg.companyId, runId: leg.runId, legId: leg.id, memo: `Net pay returned (${code})`, lines: [{ account: 'bank_cash', debitCents: leg.amountCents }, { account: 'employee_net_pay', creditCents: leg.amountCents }] });
+    if (wasSettled && leg.rail !== 'employer') postEntry(this.store, { companyId: leg.companyId, runId: leg.runId, legId: leg.id, memo: `Net pay returned (${code})`, lines: [{ account: 'bank_cash', debitCents: leg.amountCents }, { account: 'employee_net_pay', creditCents: leg.amountCents }] });
     if (info.action === 'bad_account' || info.action === 'unauthorized' || info.action === 'needs_review') {
       const a = this.store.bankAccounts.get(leg.bankAccountId);
       if (a && a.status === 'active') this.store.bankAccounts.put({ ...a, status: 'disabled', disabledReason: `Payment returned ${code}: ${info.meaning}` });

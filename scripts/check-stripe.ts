@@ -48,13 +48,13 @@ else {
   note('Stripe returns tokenized account numbers only. Full numbers for ACH outside Stripe need Stripe\'s approval; until then the account holder types the number and Totali checks its last four digits.');
 }
 
-console.log('\nACH origination (from your bank)');
+console.log('\nTotali-sent payments (only needed for companies in totali_ach mode; employer-bank mode uses each employer\'s own bank)');
 const odfi = process.env.TOTALI_ODFI_ROUTING ?? '';
-if (!odfi) bad("TOTALI_ODFI_ROUTING is not set: the routing number of the bank that receives Totali's ACH files.");
+if (!odfi) note("TOTALI_ODFI_ROUTING is not set: fine unless you use Totali-sent mode (the routing number of the bank that receives Totali's ACH files).");
 else if (!validateRoutingNumber(odfi)) bad('TOTALI_ODFI_ROUTING fails the routing-number checksum.');
 else ok('TOTALI_ODFI_ROUTING looks valid');
 for (const [name, what] of [['TOTALI_ODFI_NAME', 'the name of that bank'], ['TOTALI_ORIGIN_ID', 'the immediate-origin id the bank assigns (file header)'], ['TOTALI_ORIGINATOR_COMPANY_ID', 'the 10-character company id the bank assigns (batch header)']] as const) {
-  if (!process.env[name]) bad(`${name} is not set: ${what}.`);
+  if (!process.env[name]) note(`${name} is not set (${what}); only needed for Totali-sent mode.`);
   else ok(`${name} is set`);
 }
 const mode = process.env.TOTALI_ACH_MODE ?? 'outbox';

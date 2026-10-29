@@ -23,6 +23,7 @@ import { isIsoDate } from '../lib/dates.ts';
 import { newId } from '../lib/ids.ts';
 import { RateLimiter } from './ratelimit.ts';
 import { rotateDataKey } from '../domain/rotation.ts';
+import { paymentSetupView, setPaymentSetup } from '../domain/payment.ts';
 
 const MAX_BODY = 1_000_000;
 /** Failed authentications allowed per client address per minute before everything from it is refused. */
@@ -114,6 +115,10 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('GET', C, 'company', (c) => companyView(store.companies.require(c.params.cid, 'Company'))),
     route('PATCH', C, 'company', (c) => companyView(updateCompany(store, c.params.cid, c.json()))),
 
+    // ---- how payments are sent
+    route('GET', `${C}/payment-setup`, 'company', (c) => paymentSetupView(store.companies.require(c.params.cid, 'Company'))),
+    route('PUT', `${C}/payment-setup`, 'company', (c) => paymentSetupView(setPaymentSetup(store, c.params.cid, c.json(), c.principal?.kind === 'admin' ? 'admin' : 'company'))),
+
     // ---- employees
     route('POST', `${C}/employees`, 'company', (c) => employeeView(addEmployee(store, c.params.cid, c.json())), 201),
     route('GET', `${C}/employees`, 'company', (c) => ({ employees: store.employees.where((e) => e.companyId === c.params.cid).map(employeeView) })),
@@ -143,6 +148,10 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('POST', `${C}/pay-runs/:rid/approve`, 'company', (c) => approvePayRun(store, c.params.cid, c.params.rid, c.json())),
     route('POST', `${C}/pay-runs/:rid/void`, 'company', (c) => voidPayRun(store, c.params.cid, c.params.rid)),
     route('GET', `${C}/pay-runs/:rid/timeline`, 'company', (c) => ach.timeline(c.params.cid, c.params.rid)),
+    route('POST', `${C}/pay-runs/:rid/prepare-payment`, 'company', (c) => {
+      const o = c.json();
+      return ach.preparePayment(c.params.cid, c.params.rid, { ...(o.effectiveDate !== undefined ? { effectiveDate: v.date(o, 'effectiveDate') } : {}), acceptLate: o.acceptLate === true });
+    }),
     route('POST', `${C}/pay-runs/:rid/fund`, 'company', (c) => ach.fundPayRun(c.params.cid, c.params.rid, { acceptLate: c.json().acceptLate === true })),
     route('POST', `${C}/pay-runs/:rid/disburse`, 'company', (c) => ach.disbursePayRun(c.params.cid, c.params.rid)),
     route('GET', `${C}/pay-runs/:rid/legs`, 'company', (c) => (getRun(store, c.params.cid, c.params.rid), { legs: store.legs.where((l) => l.runId === c.params.rid) })),
@@ -185,6 +194,14 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     }, 201),
 
     // ---- ACH files (read-only for companies; the bank's word is recorded under /v1/ops)
+    route('POST', `${C}/ach/files/:fid/deliver`, 'company', async (c) => {
+      const f = store.achFiles.require(c.params.fid, 'ACH file');
+      if (f.companyId !== c.params.cid) throw notFound('ACH file');
+      return fileMeta(await ach.deliverFile(c.params.fid, { force: true }));
+    }),
+    route('POST', `${C}/ach/files/:fid/released`, 'company', (c) => fileMeta(ach.markReleased(c.params.cid, c.params.fid, v.str(c.json(), 'releasedBy', { max: 120 })))),
+    route('POST', `${C}/ach/files/:fid/cancel`, 'company', (c) => fileMeta(ach.cancelFile(c.params.cid, c.params.fid))),
+    route('POST', `${C}/ach/returns`, 'company', (c) => ach.ingestReturnFile(c.raw, { companyId: c.params.cid })),
     route('POST', `${C}/ach/prenotes`, 'company', (c) => ach.submitPrenotes(c.params.cid)),
     route('GET', `${C}/ach/files`, 'company', (c) => ({ files: store.achFiles.where((f) => f.companyId === c.params.cid).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(fileMeta) })),
     route('GET', `${C}/ach/files/:fid`, 'company', (c) => {

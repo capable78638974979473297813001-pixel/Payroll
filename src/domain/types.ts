@@ -27,7 +27,14 @@ export interface Company {
     federalSchedule?: 'monthly' | 'semiweekly';
     lookback941LiabilityDollars?: number;
   };
-  /** Where the employer's payroll money is debited from, and the authorisation to do it. */
+  /**
+   * Who sends the money.
+   *   employer_bank: the employer's own bank does. Totali writes the payment file; the employer releases it at their bank
+   *                  (and Totali can deliver it there by SFTP). Totali never debits anyone or holds money.
+   *   totali_ach:    Totali originates through its own sponsoring bank. Requires that arrangement and admin set-up.
+   */
+  payment: PaymentSetup;
+  /** Where the employer's payroll money is debited from, and the authorisation to do it. Used only in totali_ach mode. */
   funding: {
     bankAccountId?: string;
     debitAuthorization?: DebitAuthorization;
@@ -35,6 +42,34 @@ export interface Company {
   /** The Stripe customer that owns this company's bank links. Stripe is used only to connect to banks. */
   stripeCustomerId?: string;
   createdAt: string;
+}
+
+export interface EmployerBankSetup {
+  /** Routing number of the employer's bank: the bank that receives the file. */
+  odfiRoutingNumber: string;
+  odfiName: string;
+  /** The immediate-origin id the employer's bank assigned (file header). Often the employer's tax id or the bank's own id. */
+  immediateOrigin: string;
+  /** The 10-character company id the bank assigned (batch header). */
+  companyId: string;
+  /** How files are named for the bank. Tokens: {date} {time} {seq} {routing} {companyId}. */
+  fileNameTemplate: string;
+  /** Automatic delivery to the bank's SFTP server, when the bank offers it. Delivery is not approval: the employer still releases the file at the bank. */
+  sftp?: {
+    host: string;
+    port: number;
+    username: string;
+    remoteDir: string;
+    /** The bank's SFTP host key, one known_hosts line. The connection is refused if the server does not present it. */
+    knownHostsLine: string;
+    /** Encrypted at rest; never returned. */
+    privateKeyEncrypted: string;
+  };
+}
+
+export interface PaymentSetup {
+  mode: 'employer_bank' | 'totali_ach';
+  employerBank?: EmployerBankSetup;
 }
 
 /** The employer's written authorisation for Totali to debit their account (NACHA requires one for every debit). */
@@ -134,9 +169,16 @@ export interface AchFile {
   totals: { entryCount: number; debitCents: Cents; creditCents: Cents };
   /** created: built, not yet handed over. queued: handed over (e.g. written to the outbox), waiting for the bank to acknowledge. accepted: the bank has it. rejected: the bank refused it. */
   status: 'created' | 'queued' | 'accepted' | 'rejected';
+  /** Who sends it: Totali through its own bank, or the employer through theirs. */
+  rail: 'totali' | 'employer';
   submitter?: string;
   reference?: string;
   message?: string;
+  /** Employer-bank mode: how the file reached the bank. */
+  delivery?: { channel: 'download' | 'sftp'; status: 'none' | 'sent' | 'failed'; at?: string; remotePath?: string; message?: string };
+  /** Employer-bank mode: the employer said they released it at their bank. */
+  releasedAt?: string;
+  releasedBy?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -322,6 +364,8 @@ export interface MoneyLeg {
   companyId: string;
   runId: string;
   kind: 'funding' | 'employee_payout';
+  /** Which rail carried it. Employer-bank legs never touch Totali's ledger: Totali holds none of that money. */
+  rail?: 'totali' | 'employer';
   employeeId?: string;
   bankAccountId: string;
   amountCents: Cents;

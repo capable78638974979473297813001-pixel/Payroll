@@ -78,6 +78,6 @@ export function ready(store: Store, employeeId: string, accountNumber = '0001234
 export function fundingReady(store: Store, companyId: string): BankAccount {
   const acct = bankAccount(store, { companyId, ownerKind: 'company', ownerId: companyId, routingNumber: ROUTING_2, accountNumber: '000987654321' });
   const c = store.companies.require(companyId, 'Company');
-  store.tx(() => store.companies.put({ ...c, funding: { bankAccountId: acct.id, debitAuthorization: { bankAccountId: acct.id, acceptedAt: '2026-01-02T00:00:00Z', acceptedBy: 'Owner Person', textVersion: 'draft-1' } } }));
+  store.tx(() => store.companies.put({ ...c, payment: { mode: 'totali_ach' }, funding: { bankAccountId: acct.id, debitAuthorization: { bankAccountId: acct.id, acceptedAt: '2026-01-02T00:00:00Z', acceptedBy: 'Owner Person', textVersion: 'draft-1' } } }));
   return acct;
 }

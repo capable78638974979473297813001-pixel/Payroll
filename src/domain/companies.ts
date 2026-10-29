@@ -7,6 +7,7 @@ import { hasStateRuleset } from '../../engine/src/registry.ts';
 import type { Store } from '../store/store.ts';
 import type { Company, PayFrequency } from './types.ts';
 import { mintApiKey } from './auth.ts';
+import { paymentSetupView } from './payment.ts';
 
 const FREQUENCIES: readonly PayFrequency[] = ['weekly', 'biweekly', 'semimonthly', 'monthly'];
 
@@ -97,6 +98,7 @@ export function createCompany(store: Store, body: unknown): { company: Company; 
     employerContext: employerContext(o.employerContext),
     ...(o.typicalDailyEmployees !== undefined ? { typicalDailyEmployees: v.int(o, 'typicalDailyEmployees', 0, 100_000) } : {}),
     taxAccounts: taxAccounts(o.taxAccounts),
+    payment: { mode: o.paymentMode === undefined ? 'employer_bank' : v.oneOf(o, 'paymentMode', ['employer_bank', 'totali_ach'] as const) },
     funding: {},
     createdAt: new Date().toISOString(),
   };
@@ -156,6 +158,7 @@ export function companyView(company: Company) {
   const profile = getNiche(company.industry, company.niche);
   return {
     ...company,
+    payment: paymentSetupView(company),
     niche: { id: profile.id, label: profile.label, tagline: profile.tagline, features: profile.features, reports: profile.reports },
     checklist: checklistFor(profile, company.homeState),
   };

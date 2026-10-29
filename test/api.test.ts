@@ -86,7 +86,7 @@ test('the industry picker is public: restaurant is available with nine niches, o
 });
 
 test('creating a company needs the admin token and returns a one-time company key', async () => {
-  const body = { legalName: 'Corner Table LLC', ein: '12-3456789', industry: 'restaurant', niche: 'full_service', homeState: 'TX', typicalDailyEmployees: 14 };
+  const body = { legalName: 'Corner Table LLC', ein: '12-3456789', industry: 'restaurant', niche: 'full_service', homeState: 'TX', typicalDailyEmployees: 14, paymentMode: 'totali_ach' };
   assert.equal((await call('POST', '/v1/companies', { body })).status, 401);
   assert.equal((await call('POST', '/v1/companies', { token: 'wrong', body })).status, 401);
   const r = await call('POST', '/v1/companies', { token: ADMIN, body });

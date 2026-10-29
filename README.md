@@ -11,11 +11,11 @@ Four things do the work:
 | Tax math: federal, 50 states + DC, local, minimum wage, tip credit | [`payroll-tax-engine-`](https://github.com/capable78638974979473297813001-pixel/payroll-tax-engine-) | `engine/` (vendored) |
 | Deposits, 941/940/W-2, state reports, and an independent re-check of every run | [`Masterysx-thing-`](https://github.com/capable78638974979473297813001-pixel/Masterysx-thing-) (MasteryTax) | `masterytax/` (vendored) |
 | Connecting to banks: login, ownership, balance | **Stripe Financial Connections.** Stripe moves no money. | `src/money/stripe.ts`, `src/banking/` |
-| Moving money: the debit and the credits | **Totali, by ACH.** It builds the files and tracks every cent. A bank has to receive them. | `src/ach/`, `src/money/ach.ts` |
+| Moving money | **The employer's own bank** (the default): Totali writes the payment file, the employer approves it at their bank, and Totali can deliver it by SFTP where the bank supports it. Or **Totali, by ACH**, through its own sponsoring bank. | `src/ach/`, `src/money/ach.ts` |
 
 Everything else (the niches, tip and wage rules, pay runs, API) is Totali's own, in `src/`.
 
-**Read [docs/GAPS.md](docs/GAPS.md) before putting real money through this.** Nothing here has run against real Stripe or a real bank, and Totali cannot originate ACH without a bank that agrees to take its files.
+**Read [docs/GAPS.md](docs/GAPS.md) before putting real money through this.** Nothing here has run against real Stripe or a real bank. In the default mode the employer's own bank sends the money, so Totali needs no sponsoring bank; sending through Totali's own bank needs one.
 
 ## How a payroll run works
 
@@ -40,7 +40,7 @@ Node 22.18+ and Python 3.10+ (MasteryTax). No packages to install.
 
 ```bash
 cp .env.example .env     # then fill it in; set these in your host's secret store, not in git
-npm test                 # Totali: 184 tests, a few seconds
+npm test                 # Totali: 208 tests, a few seconds
 npm run typecheck        # types for src/, test/, scripts/
 npm run test:vendored    # the vendored engine's own suites (2,107 tests)
 npm run check:stripe     # read-only: what is not ready for bank linking and ACH
@@ -49,7 +49,27 @@ npm start
 
 For development, run a simulated bank: `TOTALI_ACH_MODE=sandbox` (refused when `NODE_ENV=production`).
 
-## The money setup, in order
+## The money setup, in order (employer-bank mode, the default)
+
+```bash
+B=http://localhost:8787; K=totali_sk_...; C=co_...   # the company key is returned once, at signup
+
+# 1. the employer's bank: its routing number and name, and the two ACH ids it assigned (optionally SFTP delivery)
+curl -X PUT $B/v1/companies/$C/payment-setup -H "authorization: Bearer $K" -d '{"mode":"employer_bank","employerBank":{
+  "odfiRoutingNumber":"021000021","odfiName":"Main Street Bank","immediateOrigin":"123456789","companyId":"1123456789"}}'
+
+# 2. employees link a bank through Stripe (or are entered by hand and verified by a prenote), then split their pay
+curl -X POST $B/v1/companies/$C/bank-links -H "authorization: Bearer $K" -d '{"owner":"employee","employeeId":"emp_..."}'
+curl -X PUT  $B/v1/companies/$C/employees/emp_.../payout-accounts -H "authorization: Bearer $K" \
+     -d '{"accounts":[{"bankAccountId":"bank_...","allocation":{"kind":"remainder"}}]}'
+
+# 3. each payroll: draft, approve, prepare the file, download it (or let SFTP deliver it), release it AT THE BANK, then confirm
+curl -X POST $B/v1/companies/$C/pay-runs/run_.../prepare-payment -H "authorization: Bearer $K" -d '{}'
+curl         $B/v1/companies/$C/ach/files/ach_.../content -H "authorization: Bearer $K" -o payroll.ach
+curl -X POST $B/v1/companies/$C/ach/files/ach_.../released -H "authorization: Bearer $K" -d '{"releasedBy":"Owner Name"}'
+```
+
+## The money setup for Totali-sent mode
 
 ```bash
 B=http://localhost:8787; K=totali_sk_...; C=co_...   # the company key is returned once, at signup
@@ -87,6 +107,9 @@ Under `/v1/companies/:cid`:
 | `GET`, `POST /employees` · `GET`, `PATCH /employees/:eid` · `POST …/terminate` | people. SSNs are accepted, encrypted, never returned |
 | `PUT /employees/:eid/payout-accounts` | how net pay is split across the employee's own accounts (one is the remainder) |
 | `POST /employees/:eid/ytd-import` | opening balances for someone paid elsewhere earlier this year |
+| `PUT`, `GET /payment-setup` | how payments are sent: the employer's bank details, SFTP settings (the private key is never returned) |
+| `POST …/pay-runs/:rid/prepare-payment` | employer-bank mode: build the payment file for the employer to release at their bank |
+| `POST /ach/files/:fid/released`, `…/cancel`, `…/deliver` · `POST /ach/returns` | employer-bank mode: confirm release, withdraw before release, retry SFTP delivery, upload the bank's return file |
 | `POST /bank-links`, `POST /bank-links/complete` | link a bank through Stripe; supply the account and routing number |
 | `POST /bank-accounts/manual` · `GET /bank-accounts` · `POST …/:bid/refresh`, `…/disable` | manual employee accounts (verified by prenote); list; re-check ownership |
 | `PUT /funding/account` · `GET`, `POST /funding/authorization` | the employer's debit account and authorization |
@@ -110,7 +133,7 @@ src/industries/   the catalog and the restaurant niches (roles, tip policy, sour
 src/restaurant/   overtime, wages, tip credit, tip distribution, tip reporting, reports
 src/payroll/      pay run (draft, approve, void) and pay stubs
 src/banking/      bank links through Stripe, verification, the employer's debit authorization
-src/ach/          NACHA files (build and parse), return codes, submitter interface, simulated bank
+src/ach/          NACHA files (build and parse), return codes, SFTP delivery, submitter interface, simulated bank
 src/money/        the ACH state machine, the ledger, the Stripe client (bank linking only)
 src/tax/          MasteryTax adapter, the 941/W-2 tip split
 src/domain/       companies, employees, shifts, auth, key rotation

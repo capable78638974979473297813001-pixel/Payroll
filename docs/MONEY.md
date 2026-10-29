@@ -1,14 +1,37 @@
 # How money moves
 
-Totali makes the payments itself, by ACH. Stripe does one thing: it connects Totali to people's banks.
+There are two ways a payroll's money can move, chosen per company (`PUT /payment-setup`). Stripe is used in both for one thing only: connecting to people's banks.
 
-| | Does |
-| --- | --- |
-| **Stripe Financial Connections** | Lets an employer or employee log in to their bank. Tells Totali the account's last four digits, its owners' names and its balance. **Moves no money.** |
-| **Totali** | Holds the account numbers (encrypted), writes the ACH files, tracks every payment to the cent in a ledger, and applies the rules below. |
-| **Your bank (an ODFI)** | The only party that can put entries on the ACH network. Totali builds the files; a bank has to receive them. |
+| | **Employer-bank mode** (the default) | **Totali-sent mode** |
+| --- | --- | --- |
+| Who sends the money | The employer's own bank | Totali, through its own sponsoring bank |
+| What Totali does | Writes the payment file with the employer's bank's details. Never touches the money. | Debits the employer, holds the funds, pays employees, tracks everything in a ledger |
+| Needs | The employer's bank to offer business ACH. Nothing from Totali's side. | A sponsoring bank for Totali, registered as a third-party sender |
+| Who approves | The employer, at their own bank, every time | The employer, once, with a debit authorization |
+| Taxes | The employer pays them from their own account | Totali holds the money; paying the agencies is not built |
+| Who can switch a company to it | Anyone | Totali staff only |
 
-That last row is the one thing code cannot replace. The Federal Reserve ACH network is open only to banks, so "Totali makes the money move" means Totali originates ACH through a bank that has agreed to take its files. You need that bank relationship before any real money moves. Totali builds everything up to the handoff, and you implement one small interface for how the files reach your bank (see "Handing files to the bank").
+## Employer-bank mode
+
+```
+Totali ──► payment file (credits only, the employer's bank's ids in the header)
+            ├─ download ──► the employer imports it in their bank's ACH service
+            └─ SFTP ──────► delivered to the bank's server (where the bank supports it)
+                              │
+              the employer approves it at THEIR bank  (Totali never releases a payment)
+                              │
+       the employer tells Totali "released" ──► payments take effect on the file's date ──► run complete
+```
+
+- **Setup:** the employer's bank's routing number and name, the immediate-origin id and 10-character company id the bank assigned, optionally a file-name rule and SFTP details. See [BANK-FILE-DELIVERY.md](BANK-FILE-DELIVERY.md) for which banks do this, and what to ask them.
+- **`POST /pay-runs/:id/prepare-payment`** builds the file for approved runs. It pays net pay only and says how much the employer needs in their account, and what they pay themselves (employee taxes withheld, employer taxes, deductions held).
+- **No debit, no hold, no ledger.** The money never passes through Totali, so there is nothing to book. A return changes the run and raises an alert, nothing more.
+- **Release and cancel** are the employer's calls: `POST /ach/files/:id/released` (with who approved it) and `…/cancel` (before release). Cancelling returns the run to approved so a new file can be made.
+- **Returns:** the employer uploads the bank's return file (`POST /ach/returns`). It can only affect that company's own payments. The effect is the same as in Totali-sent mode: the leg is returned, a bad account is disabled, the employee's net pay is owed again, and the next prepare sends only what is outstanding.
+- **Prenotes** for employee accounts entered by hand go in the same kind of file and are released the same way.
+- **Never pays twice:** the same planner as Totali-sent mode decides what is still owed, so a second prepare covers only employees who were not paid.
+
+The rest of this document describes the parts both modes share and Totali-sent mode in full.
 
 ## What Stripe does and does not give us
 
@@ -25,7 +48,7 @@ If Stripe approves you for full numbers, `BankService.completeLink` in `src/bank
 
 Stripe live mode also needs a completed Financial Connections registration in the Dashboard before balances and ownership are returned.
 
-## The flow
+## Totali-sent mode: the flow
 
 ```
 Mon  employer approves the run ──fund──► debit file (one CCD entry for everything the run needs)

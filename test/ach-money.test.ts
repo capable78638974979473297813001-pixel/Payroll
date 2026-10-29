@@ -29,7 +29,7 @@ async function setup(opts: { cfg?: Partial<AchConfig>; start?: string; employees
   const banks = new BankService(store, stripe, { now: () => clock.now });
   const ach = new AchService(store, banks, bank, { ...CFG, ...opts.cfg }, { now: () => clock.now });
   const { company } = newCompany(store);
-  fundingReady(store, company.id);
+  fundingReady(store, company.id); // also puts the company in totali_ach mode
   const a = hire(store, company.id, { firstName: 'Ana', lastName: 'Ruiz', payType: { kind: 'hourly', rateCents: 1500 }, roleKey: 'line_cook', tipCreditNoticeDate: undefined });
   const b = hire(store, company.id, { firstName: 'Ben', lastName: 'Okafor', payType: { kind: 'hourly', rateCents: 1800 }, roleKey: 'line_cook', tipCreditNoticeDate: undefined });
   const accts: Record<string, string> = {};

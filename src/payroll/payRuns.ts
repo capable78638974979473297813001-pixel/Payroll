@@ -413,8 +413,8 @@ export function voidPayRun(store: Store, companyId: string, runId: string): PayR
   if (run.status !== 'draft' && run.status !== 'approved') {
     throw conflict('money_in_motion', `This run is ${run.status}; money has started moving, so it cannot be voided. Reverse payments through Stripe instead.`);
   }
-  if (store.legs.where((l) => l.runId === run.id).length > 0) {
-    throw conflict('money_in_motion', 'Funding has been started for this run, so it cannot be voided.');
+  if (store.legs.where((l) => l.runId === run.id && l.status !== 'failed').length > 0) {
+    throw conflict('money_in_motion', 'Payment has been started for this run, so it cannot be voided. Cancel the payment file first if it has not been released.');
   }
   return store.tx(() => {
     if (run.status === 'approved') {
