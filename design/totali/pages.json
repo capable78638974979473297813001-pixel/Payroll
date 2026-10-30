@@ -1,0 +1,352 @@
+[
+ {
+  "id": "landing",
+  "title": "Landing",
+  "group": "1 \u00b7 Get started",
+  "file": "pages/landing.html",
+  "desktop": "out/landing.png",
+  "mobile": "out/landing-mobile.png",
+  "description": "v3 landing page, now linked to sign up and log in.",
+  "n": 1
+ },
+ {
+  "id": "signup",
+  "title": "Create account",
+  "group": "1 \u00b7 Get started",
+  "file": "pages/signup.html",
+  "desktop": "out/signup.png",
+  "mobile": "out/signup-mobile.png",
+  "description": "Account creation: name, business, email, password.",
+  "n": 2
+ },
+ {
+  "id": "verify-email",
+  "title": "Verify email",
+  "group": "1 \u00b7 Get started",
+  "file": "pages/verify-email.html",
+  "desktop": "out/verify-email.png",
+  "mobile": "out/verify-email-mobile.png",
+  "description": "Six-digit email verification.",
+  "n": 3
+ },
+ {
+  "id": "login",
+  "title": "Log in",
+  "group": "1 \u00b7 Get started",
+  "file": "pages/login.html",
+  "desktop": "out/login.png",
+  "mobile": "out/login-mobile.png",
+  "description": "Log in with email, stays signed in until sign out.",
+  "n": 4
+ },
+ {
+  "id": "industry",
+  "title": "Pick your industry",
+  "group": "1 \u00b7 Get started",
+  "file": "pages/industry.html",
+  "desktop": "out/industry.png",
+  "mobile": "out/industry-mobile.png",
+  "description": "Choose a broad industry; each one starts from a base dashboard.",
+  "n": 5
+ },
+ {
+  "id": "build-rest-1",
+  "title": "Builder 1 \u00b7 Restaurants, empty base",
+  "group": "2 \u00b7 Build your dashboard",
+  "file": "pages/build-rest-1.html",
+  "desktop": "out/build-rest-1.png",
+  "mobile": "out/build-rest-1-mobile.png",
+  "description": "Restaurants: base dashboard before any answer. State question open.",
+  "n": 6
+ },
+ {
+  "id": "build-rest-2",
+  "title": "Builder 2 \u00b7 Michigan added",
+  "group": "2 \u00b7 Build your dashboard",
+  "file": "pages/build-rest-2.html",
+  "desktop": "out/build-rest-2.png",
+  "mobile": "out/build-rest-2-mobile.png",
+  "description": "Choosing Michigan adds the Michigan card and the MI-W4 form.",
+  "n": 7
+ },
+ {
+  "id": "build-rest-3",
+  "title": "Builder 3 \u00b7 Detroit city tax added",
+  "group": "2 \u00b7 Build your dashboard",
+  "file": "pages/build-rest-3.html",
+  "desktop": "out/build-rest-3.png",
+  "mobile": "out/build-rest-3-mobile.png",
+  "description": "Adding Detroit adds Detroit city income tax and a Locations card.",
+  "n": 8
+ },
+ {
+  "id": "build-rest-4",
+  "title": "Builder 4 \u00b7 Tips and tip credit added",
+  "group": "2 \u00b7 Build your dashboard",
+  "file": "pages/build-rest-4.html",
+  "desktop": "out/build-rest-4.png",
+  "mobile": "out/build-rest-4-mobile.png",
+  "description": "Answering yes to tipped staff adds tip reporting, tip pool, Michigan tip credit reference.",
+  "n": 9
+ },
+ {
+  "id": "build-rest-5",
+  "title": "Builder 5 \u00b7 Contractors added",
+  "group": "2 \u00b7 Build your dashboard",
+  "file": "pages/build-rest-5.html",
+  "desktop": "out/build-rest-5.png",
+  "mobile": "out/build-rest-5-mobile.png",
+  "description": "Contractors answer adds a separate contractors card.",
+  "n": 10
+ },
+ {
+  "id": "build-rest-6",
+  "title": "Builder 6 \u00b7 Review, complete",
+  "group": "2 \u00b7 Build your dashboard",
+  "file": "pages/build-rest-6.html",
+  "desktop": "out/build-rest-6.png",
+  "mobile": "out/build-rest-6-mobile.png",
+  "description": "Final review of answers; dashboard complete.",
+  "n": 11
+ },
+ {
+  "id": "build-hospitality-1",
+  "title": "Builder \u00b7 Hotels base",
+  "group": "2 \u00b7 Build your dashboard",
+  "file": "pages/build-hospitality-1.html",
+  "desktop": "out/build-hospitality-1.png",
+  "mobile": null,
+  "description": "Hotels: empty base dashboard, first question open.",
+  "n": 12
+ },
+ {
+  "id": "build-trades-1",
+  "title": "Builder \u00b7 Trades base",
+  "group": "2 \u00b7 Build your dashboard",
+  "file": "pages/build-trades-1.html",
+  "desktop": "out/build-trades-1.png",
+  "mobile": "out/build-trades-1-mobile.png",
+  "description": "Trades: empty base dashboard, first question open.",
+  "n": 13
+ },
+ {
+  "id": "build-office-1",
+  "title": "Builder \u00b7 Office base",
+  "group": "2 \u00b7 Build your dashboard",
+  "file": "pages/build-office-1.html",
+  "desktop": "out/build-office-1.png",
+  "mobile": null,
+  "description": "Office: empty base dashboard, first question open.",
+  "n": 14
+ },
+ {
+  "id": "build-delivery-1",
+  "title": "Builder \u00b7 Delivery base",
+  "group": "2 \u00b7 Build your dashboard",
+  "file": "pages/build-delivery-1.html",
+  "desktop": "out/build-delivery-1.png",
+  "mobile": null,
+  "description": "Delivery: empty base dashboard, first question open.",
+  "n": 15
+ },
+ {
+  "id": "dash-restaurants",
+  "title": "Dashboard \u00b7 Harbor Street Kitchen",
+  "group": "3 \u00b7 Your dashboard",
+  "file": "pages/dash-restaurants.html",
+  "desktop": "out/dash-restaurants.png",
+  "mobile": "out/dash-restaurants-mobile.png",
+  "description": "Final custom dashboard for Harbor Street Kitchen (Michigan).",
+  "n": 16
+ },
+ {
+  "id": "dash-hospitality",
+  "title": "Dashboard \u00b7 Lakeshore Inn",
+  "group": "3 \u00b7 Your dashboard",
+  "file": "pages/dash-hospitality.html",
+  "desktop": "out/dash-hospitality.png",
+  "mobile": null,
+  "description": "Final custom dashboard for Lakeshore Inn (Ohio).",
+  "n": 17
+ },
+ {
+  "id": "dash-trades",
+  "title": "Dashboard \u00b7 Northgate Electric",
+  "group": "3 \u00b7 Your dashboard",
+  "file": "pages/dash-trades.html",
+  "desktop": "out/dash-trades.png",
+  "mobile": null,
+  "description": "Final custom dashboard for Northgate Electric (Pennsylvania).",
+  "n": 18
+ },
+ {
+  "id": "dash-office",
+  "title": "Dashboard \u00b7 Birch & Lane Studio",
+  "group": "3 \u00b7 Your dashboard",
+  "file": "pages/dash-office.html",
+  "desktop": "out/dash-office.png",
+  "mobile": null,
+  "description": "Final custom dashboard for Birch & Lane Studio (Texas, New York, California).",
+  "n": 19
+ },
+ {
+  "id": "dash-delivery",
+  "title": "Dashboard \u00b7 Switchback Delivery",
+  "group": "3 \u00b7 Your dashboard",
+  "file": "pages/dash-delivery.html",
+  "desktop": "out/dash-delivery.png",
+  "mobile": null,
+  "description": "Final custom dashboard for Switchback Delivery (Colorado).",
+  "n": 20
+ },
+ {
+  "id": "run-payroll",
+  "title": "Run payroll",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/run-payroll.html",
+  "desktop": "out/run-payroll.png",
+  "mobile": "out/run-payroll-mobile.png",
+  "description": "Step 2: hours and tips for the week.",
+  "n": 21
+ },
+ {
+  "id": "pay-run-review",
+  "title": "Pay run review",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/pay-run-review.html",
+  "desktop": "out/pay-run-review.png",
+  "mobile": "out/pay-run-review-mobile.png",
+  "description": "Step 3: every paycheck line by line, with employer cost.",
+  "n": 22
+ },
+ {
+  "id": "pay-stub",
+  "title": "Pay stub",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/pay-stub.html",
+  "desktop": "out/pay-stub.png",
+  "mobile": "out/pay-stub-mobile.png",
+  "description": "Pay stub as a receipt, with how each line was worked out.",
+  "n": 23
+ },
+ {
+  "id": "employees",
+  "title": "Employees",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/employees.html",
+  "desktop": "out/employees.png",
+  "mobile": null,
+  "description": "Employee list with paperwork status and location filters.",
+  "n": 24
+ },
+ {
+  "id": "employee-profile",
+  "title": "Employee profile",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/employee-profile.html",
+  "desktop": "out/employee-profile.png",
+  "mobile": null,
+  "description": "Elena Ruiz: job, tax setup, paperwork, pay history, sick time.",
+  "n": 25
+ },
+ {
+  "id": "onboarding",
+  "title": "Onboarding",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/onboarding.html",
+  "desktop": "out/onboarding.png",
+  "mobile": "out/onboarding-mobile.png",
+  "description": "Employer view: invite a hire, see who has finished their paperwork.",
+  "n": 26
+ },
+ {
+  "id": "onboard-w4",
+  "title": "New hire \u00b7 W-4",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/onboard-w4.html",
+  "desktop": "out/onboard-w4.png",
+  "mobile": "out/onboard-w4-mobile.png",
+  "description": "Employee phone form: federal W-4 and MI-W4.",
+  "n": 27
+ },
+ {
+  "id": "onboard-i9",
+  "title": "New hire \u00b7 I-9",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/onboard-i9.html",
+  "desktop": "out/onboard-i9.png",
+  "mobile": "out/onboard-i9-mobile.png",
+  "description": "Employee phone form: I-9 section 1.",
+  "n": 28
+ },
+ {
+  "id": "onboard-deposit",
+  "title": "New hire \u00b7 Direct deposit",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/onboard-deposit.html",
+  "desktop": "out/onboard-deposit.png",
+  "mobile": "out/onboard-deposit-mobile.png",
+  "description": "Employee phone form: direct deposit details.",
+  "n": 29
+ },
+ {
+  "id": "time-tips",
+  "title": "Time and tips",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/time-tips.html",
+  "desktop": "out/time-tips.png",
+  "mobile": null,
+  "description": "Weekly hours grid and tip pool for restaurants.",
+  "n": 30
+ },
+ {
+  "id": "job-costing",
+  "title": "Job costing",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/job-costing.html",
+  "desktop": "out/job-costing.png",
+  "mobile": null,
+  "description": "Trades: labor against budget by job, and cost-code detail with prevailing wage flag.",
+  "n": 31
+ },
+ {
+  "id": "settings",
+  "title": "Settings",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/settings.html",
+  "desktop": "out/settings.png",
+  "mobile": null,
+  "description": "Settings: your answers (editable), state accounts, roles, notifications, sign out.",
+  "n": 32
+ },
+ {
+  "id": "company-setup",
+  "title": "Company setup (KYB)",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/company-setup.html",
+  "desktop": "out/company-setup.png",
+  "mobile": null,
+  "description": "Business verification: entity details, owners, documents.",
+  "n": 33
+ },
+ {
+  "id": "billing",
+  "title": "Billing",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/billing.html",
+  "desktop": "out/billing.png",
+  "mobile": null,
+  "description": "Billing: per-employee plan (no number), payment method, invoices, legal entity.",
+  "n": 34
+ },
+ {
+  "id": "help",
+  "title": "Help",
+  "group": "4 \u00b7 App pages",
+  "file": "pages/help.html",
+  "desktop": "out/help.png",
+  "mobile": null,
+  "description": "Help center: topics, common questions, message us.",
+  "n": 35
+ }
+]
