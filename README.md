@@ -147,6 +147,7 @@ masterytax/       vendored MasteryTax   (do not edit; see below)
 test/             Totali's tests; fake-stripe.ts is an in-memory Financial Connections
 scripts/          sync-upstream.sh, check-stripe.ts
 docs/
+design/totali/    static HTML mockups of the app screens (open design/totali/index.html; not served by the API)
 ```
 
 ## Vendored code
