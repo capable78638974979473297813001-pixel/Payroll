@@ -1,0 +1,72 @@
+import { build, normalizeAnswers, type IndustryId } from '../builder/catalog.ts';
+import type { Company } from '../domain/types.ts';
+import type { Availability, DashboardConfig, DashboardTab, DashboardWidget } from './schema.ts';
+
+/** What this business has, from the same engine that drew the builder's preview. */
+export function availabilityFor(company: Company, date: string): Availability & { moduleIds: string[]; build: ReturnType<typeof build> } {
+  const industry = (company.setup?.industry ?? company.industry) as IndustryId;
+  const raw = company.setup ? company.setup.answers : { state: company.homeState };
+  const { answers } = normalizeAnswers(industry, raw, date);
+  const b = build(industry, answers, date);
+  const ids = new Set(b.modules.flatMap((m) => [m.id, ...m.items.map((i) => i.id)]));
+  const stateModules = b.modules.filter((m) => m.id.startsWith('state_')).map((m) => m.id.slice(6).toUpperCase());
+  // The home state comes first.
+  const states = [company.homeState, ...stateModules.filter((s) => s !== company.homeState)].filter((s, i, arr) => arr.indexOf(s) === i && stateModules.includes(s));
+  return {
+    has: (id) => (id.endsWith('*') ? [...ids].some((x) => x.startsWith(id.slice(0, -1))) : ids.has(id)),
+    states: states.length ? states : [company.homeState],
+    moduleIds: b.modules.map((m) => m.id),
+    build: b,
+  };
+}
+
+let counter = 0;
+const wid = () => `w_d${(++counter).toString(36).padStart(3, '0')}`;
+const w = (type: string, span: number, settings: DashboardWidget['settings'] = {}): DashboardWidget => ({ id: wid(), type, span, settings });
+
+/**
+ * The starting dashboard for a business, built from what it has. It is a starting point, not a template: every card,
+ * size, tab, color, font and word in it can be changed, and two businesses rarely start the same.
+ */
+export function defaultConfig(company: Company, a: Availability): DashboardConfig {
+  counter = 0;
+  const restaurant = company.industry === 'restaurant';
+  const has = a.has;
+  const tabs: DashboardTab[] = [];
+
+  // The widgets' default settings are filled in by validateConfig, so only deviations are written here.
+  const overview: DashboardWidget[] = [w('welcome', 12), w('setup_progress', 12), w('next_payroll', 4), w('payroll_cost', 4), w('team_summary', 4), w('hours_week', 6)];
+  overview.push(has('tip_reporting') ? w('tips_week', 6) : w('onboarding_progress', 6));
+  overview.push(w('tax_summary', 6));
+  overview.push(has('tip_reporting') ? w('onboarding_progress', 6) : w('compliance', 6));
+  for (const s of a.states) overview.push(w('state_card', 6, { state: s }));
+  if (has('locations')) overview.push(w('locations_card', 6));
+  if (has('contractors')) overview.push(w('contractors_card', 6));
+  tabs.push({ id: 'overview', label: 'Overview', kind: 'page', widgets: overview });
+
+  tabs.push({ id: 'payroll', label: 'Payroll', kind: 'page', widgets: [w('next_payroll', 6), w('payroll_history', 6), w('payroll_cost', 6), w('tax_summary', 6), w('compliance', 12)] });
+
+  const people: DashboardWidget[] = [w('people_table', 12), w('team_summary', 6), w('onboarding_progress', 6)];
+  if (has('locations')) people.push(w('locations_card', 6));
+  if (has('contractors')) people.push(w('contractors_card', 6));
+  tabs.push({ id: 'people', label: 'People', kind: 'page', widgets: people });
+
+  const time: DashboardWidget[] = [w('hours_week', 6), w('overtime_watch', 6)];
+  if (has('tip_reporting')) time.push(w('tips_week', 6));
+  if (has('tip_pool')) time.push(w('tip_pool_card', 6));
+  const group = has('dept_costs') ? 'department' : has('crew_hours') ? 'crew' : has('job_costs') ? 'job' : has('wc_payroll') ? 'wc' : null;
+  if (group) time.push(w('group_cost', 12, { groupBy: group }));
+  tabs.push({ id: 'time', label: restaurant ? 'Time and tips' : 'Time', kind: 'page', widgets: time });
+
+  tabs.push({ id: 'onboarding', label: 'Onboarding', kind: 'page', widgets: [w('onboarding_progress', 6), w('forms_status', 6), w('quick_actions', 12, { actions: ['invite_hire', 'add_person', 'import_hours'] })] });
+  tabs.push({ id: 'help', label: 'Help', kind: 'help', widgets: [] });
+  tabs.push({ id: 'settings', label: 'Settings', kind: 'settings', widgets: [] });
+
+  return {
+    version: 1,
+    brand: { name: company.legalName, tagline: '', mark: 'initial' },
+    theme: { mode: 'light', accent: '#1f3bff', accent2: '#0a0a0a', font: 'sans', headingFont: 'sans', radius: 0, density: 'comfortable', cardStyle: 'ruled', nav: 'top', header: 'plain', numbers: 'bold' },
+    terms: {},
+    tabs,
+  };
+}

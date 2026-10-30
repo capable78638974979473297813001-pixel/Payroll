@@ -279,11 +279,29 @@ export interface Employee {
   payoutAccounts: PayoutAccount[];
   /** The Stripe customer that owns this employee's bank links. */
   stripeCustomerId?: string;
+  /** Where a new hire is with their forms. Absent for people added directly, who count as having nothing recorded. */
+  onboarding?: EmployeeOnboarding;
+  /** The location they work at, by the name given in the builder. */
+  location?: string;
+  /** Free tags that group people: a department, a crew, a workers' comp class. */
+  tags?: { department?: string; crew?: string; wcClass?: string };
   ytd: ExtendedYearToDate;
   ytdYear: number;
   /** Set when opening balances were loaded from a previous provider. */
   ytdImport?: { asOf: string; importedAt: string };
   createdAt: string;
+}
+
+export interface EmployeeOnboarding {
+  invitedAt?: string;
+  inviteEmail?: string;
+  inviteTokenHash?: string;
+  inviteExpiresAt?: string;
+  w4?: { completedAt: string };
+  stateForm?: { id: string; completedAt: string };
+  i9?: { section1At?: string; section2At?: string; section2By?: string };
+  deposit?: { completedAt: string };
+  reminders?: Array<{ at: string }>;
 }
 
 export interface Shift {

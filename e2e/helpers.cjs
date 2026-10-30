@@ -61,4 +61,17 @@ async function signUpAndVerify(page, base, { business = 'Harbor Street Kitchen' 
   return { email, code };
 }
 
-module.exports = { ROOT, startServer, openBrowser, signUpAndVerify };
+const FULL = { state: 'MI', locations: [{ name: 'Detroit', city: 'Detroit', state: 'MI' }, { name: 'Ferndale', city: 'Ferndale', state: 'MI' }], team: '11-25', tips: { on: true, pool: 'hours' }, frequency: { value: 'weekly', weekday: 'friday' }, contractors: { on: true, count: 2 } };
+
+/** Finish the builder through the API, as the screens would, so a test can start from a built company. */
+async function buildCompany(page, base, { industry = 'restaurant', answers = FULL } = {}) {
+  await page.evaluate(async ({ industry, answers }) => {
+    const call = async (method, path, body) => { const r = await fetch(path, { method, headers: { 'content-type': 'application/json', 'x-totali-csrf': '1' }, body: JSON.stringify(body ?? {}) }); if (!r.ok) throw new Error(path + ' ' + r.status + ' ' + (await r.text())); return r.json(); };
+    await call('PUT', '/v1/builder/draft', { industry, answers, step: 'review' });
+    await call('POST', '/v1/builder/finish');
+  }, { industry, answers });
+  await page.goto(`${base}/app`);
+  await page.waitForSelector('[data-testid=grid]');
+}
+
+module.exports = { ROOT, startServer, openBrowser, signUpAndVerify, buildCompany, FULL };

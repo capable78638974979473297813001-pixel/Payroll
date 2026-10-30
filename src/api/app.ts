@@ -35,6 +35,8 @@ import { assertIndustry, build, checkAnswer, INDUSTRY_CARDS, normalizeAnswers, q
 import { createCompanyFromSetup } from '../builder/finish.ts';
 import { stateFacts } from '../builder/facts.ts';
 import { statesWithRuleset } from '../../engine/src/registry.ts';
+import { DashboardService } from '../dashboard/service.ts';
+import { dashboardData } from '../dashboard/data.ts';
 
 const MAX_BODY = 1_000_000;
 /** Failed authentications allowed per client address per minute before everything from it is refused. */
@@ -116,6 +118,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
   const logins = new RateLimiter(3_600_000);
   const log = deps.log ?? (() => {});
   const now = deps.now ?? (() => new Date());
+  const dashboards = new DashboardService(store, now);
   const limiter = new RateLimiter();
   const C = '/v1/companies/:cid';
   const OPS = '/v1/ops';
@@ -226,8 +229,16 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       const { answers } = normalizeAnswers(industry, draft.answers, date);
       const company = createCompanyFromSetup(store, user, industry, answers, date, now());
       accounts.attachCompany(user.id, company.id);
+      dashboards.get(company.id); // the starting dashboard, from what the business said
       return new Reply({ companyId: company.id, user: publicUser(store.users.require(user.id, 'User')) }, {}, 201);
     }),
+
+    // ---- the dashboard: what it shows and how it looks, both the company's to change
+    route('GET', `${C}/dashboard`, 'company', (c) => dashboards.describe(c.params.cid)),
+    route('PUT', `${C}/dashboard`, 'company', (c) => dashboards.save(c.params.cid, c.json().config, c.json().rev)),
+    route('POST', `${C}/dashboard/reset`, 'company', (c) => dashboards.reset(c.params.cid)),
+    route('POST', `${C}/dashboard/revert`, 'company', (c) => dashboards.revert(c.params.cid, c.json().rev)),
+    route('GET', `${C}/dashboard/data`, 'company', (c) => dashboardData(store, store.companies.require(c.params.cid, 'Company'), now().toISOString().slice(0, 10))),
 
     // ---- the picker
     route('GET', '/v1/bank-profiles', 'none', () => ({ banks: listProfiles(), note: 'What each bank has published about accepting ACH files, and where Totali read it. Only facts read from the bank are stated as rules; everything else is a question to ask the bank.' })),
