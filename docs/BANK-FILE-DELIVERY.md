@@ -8,6 +8,25 @@ In employer-bank mode Totali writes the payment file and the employer's own bank
 | 2. SFTP | Totali delivers the file to the bank's server after each run. The employer still approves it at the bank. | The bank enables it for that employer and gives them a host, a login, a key arrangement, a file-name rule and the bank's host key. |
 | 3. Bank API | A named person approves the exact file in Totali, then Totali sends each payment through the bank's API with the employer's own credentials. | A bank with a public API, an adapter for it, and the employer's own onboarding. Built for J.P. Morgan only. |
 
+## Column: one connection that works for every employer's bank
+
+The levels below each need the employer's own bank to enable something. This one does not. With `TOTALI_ACH_MODE=column`, Totali sends through [Column](https://docs.column.com), a bank with a public API, as the originating bank (the `totali_ach` mode). Totali debits the employer's account by ACH and pays employees by ACH. ACH debits and credits work with every U.S. bank, so no employer's bank has to connect to us.
+
+**What it automates, with no staff step**
+- Each payment is sent to Column as its own ACH transfer, with an idempotency key made from the file and the payment. A repeat returns the first result, so a lost answer can be retried and cannot pay twice. A payment Column refuses fails that employee only.
+- Column's status is polled. When the employer's debit settles, the funds are confirmed (this replaces the ops-only "confirm funds received" step), and the hold, pay and settle steps follow.
+- Returns arrive with Column's own return code and are applied the same way a return file would be: net pay owed again, a bad account disabled, an exposure flagged if the employer's debit comes back after employees were paid.
+- The employer's approval is approving the pay run in Totali, which already exists.
+
+**Try it for real, for free:** `COLUMN_API_KEY=test_... COLUMN_BANK_ACCOUNT_ID=bacc_... npm run check:column` makes one $1.00 sandbox credit, reads it back and cancels it. It refuses a live key. Column's sandbox mirrors production on the same host.
+
+**What is not known or not built**
+- **Never run against Column.** The code is written from Column's published API reference. The tests use a fake that follows it.
+- **The debit request** is the same `POST /transfers/ach` with `type: DEBIT`, but the documentation I read describes only credits in its examples. Whether Column needs anything extra for an originated debit is untested.
+- **Status meanings:** Column lists 16 status values without defining them. The groupings in `src/column/submitter.ts` follow their names, and any value Totali does not know raises an alert and is never assumed fine.
+- **Webhooks** are not used (their signing was not in the pages I read), so status is polled: every 15 minutes while in flight, daily after settling until the return window passes.
+- **Approval and compliance are not code.** Column's own onboarding for a platform that originates for others, money-transmission questions (Totali holds the employer's money between the debit and the payout), and Nacha third-party-sender requirements are for Column, the business and a lawyer. Column documents a self-serve pilot for moving a small amount of your own money; anything past that is theirs to approve.
+
 ## The nine large banks
 
 Read 2026-10-29 and 2026-10-30. **"Read"** means I read the bank's own document. **"Summary"** means I only saw a search summary of the bank's page, because the page itself would not load for me.

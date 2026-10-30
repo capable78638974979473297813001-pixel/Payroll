@@ -14,7 +14,8 @@ import { JpMorganAdapter } from '../bankapi/jpmorgan.ts';
 import { endToEndIdFor } from '../bankapi/jpmorgan.ts';
 import { checkFile, errorsOf } from '../banks/checks.ts';
 import type { Finding } from '../banks/types.ts';
-import { buildAchFile, type AchEntry, type Originator } from '../ach/nacha.ts';
+import { buildAchFile, parseAchFile, type AchEntry, type Originator } from '../ach/nacha.ts';
+import type { SubmitEntry, SubmitResult } from '../ach/submitter.ts';
 import { parseReturnFile, RETURN_CODES } from '../ach/returns.ts';
 import type { AchSubmitter } from '../ach/submitter.ts';
 import { fillTemplate, SftpDelivery } from '../ach/sftp.ts';
@@ -97,6 +98,7 @@ export interface EmployerTimeline {
 
 /** Minutes to wait after a failed SFTP delivery before the reconcile loop tries again. */
 const SFTP_RETRY_MINUTES = 15;
+const EXTERNAL_POLL_MINUTES = 15;
 
 const OPEN: ReadonlyArray<MoneyLeg['status']> = ['pending', 'queued', 'submitted'];
 const LIVE: ReadonlyArray<MoneyLeg['status']> = ['pending', 'queued', 'submitted', 'settled'];
@@ -166,19 +168,67 @@ export class AchService {
     return file;
   }
 
-  /** Hand a built file to the bank. Safe to repeat: a file the bank already has is left alone. */
+  /** The payments in a built file, read back from the file itself so a retry sends exactly what the first try did. */
+  private submitEntries(file: AchFile, content: string): { description: string; companyName: string; entries: SubmitEntry[] } {
+    const parsed = parseAchFile(content);
+    if (parsed.errors.length > 0) throw new Error(`File ${file.id} no longer parses: ${parsed.errors.join('; ')}`);
+    const entries: SubmitEntry[] = [];
+    for (const b of parsed.batches) {
+      for (const e of b.entries) {
+        const mine = file.entries.find((x) => x.traceNumber === e.traceNumber);
+        if (!mine) throw new Error(`File ${file.id} has an entry with trace ${e.traceNumber} that Totali has no record of`);
+        entries.push({ ref: mine.ref, traceNumber: e.traceNumber, kind: mine.kind, standardEntryClass: b.standardEntryClass, amountCents: e.amountCents, routingNumber: `${e.rdfi8}${e.checkDigit}`, accountNumber: e.accountNumber, accountType: e.transactionCode[1] === '3' ? 'savings' : 'checking', name: e.individualName, individualId: e.individualId, ...(mine.externalId ? { externalId: mine.externalId } : {}) });
+      }
+    }
+    const first = parsed.batches[0];
+    return { description: first?.entryDescription ?? 'PAYROLL', companyName: first?.companyName ?? '', entries };
+  }
+
+  /** Hand a built file to the bank. Safe to repeat: a file the bank already has is left alone, and for an API bank only the payments it does not yet have are sent. */
   async submitFile(fileId: string): Promise<AchFile> {
     const file = this.store.achFiles.require(fileId, 'ACH file');
-    if (file.status !== 'created') return file;
+    const again = file.status === 'queued' && file.retryable === true;
+    if (file.status !== 'created' && !again) return file;
     if (file.rail === 'employer') return this.deliverFile(fileId);
-    const result = await this.submitter.submit({ fileId: file.id, fileName: file.fileName, content: decryptField(file.contentEncrypted), kind: file.kind, effectiveDate: file.effectiveDate, entryCount: file.totals.entryCount, totalCents: file.totals.debitCents + file.totals.creditCents });
+    const content = decryptField(file.contentEncrypted);
+    const result = await this.submitter.submit({ fileId: file.id, fileName: file.fileName, content, kind: file.kind, effectiveDate: file.effectiveDate, entryCount: file.totals.entryCount, totalCents: file.totals.debitCents + file.totals.creditCents, ...this.submitEntries(file, content) });
     return this.store.tx(() => {
       const fresh = this.store.achFiles.require(fileId, 'ACH file');
+      if (result.entries) return this.applyEntryResults(fresh, result);
       this.store.achFiles.put({ ...fresh, status: result.status === 'rejected' ? 'rejected' : result.status === 'accepted' ? 'accepted' : 'queued', submitter: this.submitter.name, ...(result.reference ? { reference: result.reference } : {}), message: result.message, updatedAt: this.now().toISOString() });
       if (result.status === 'accepted') this.acceptLegs(fresh);
       if (result.status === 'rejected') this.rejectLegs(fresh, result.message);
       return this.store.achFiles.require(fileId, 'ACH file');
     });
+  }
+
+  /** An API bank answered payment by payment: record each, move each payment's leg, and settle the file's own state. Call inside store.tx(). */
+  private applyEntryResults(fresh: AchFile, result: SubmitResult): AchFile {
+    const at = this.now().toISOString();
+    const per = result.entries!;
+    const entries = fresh.entries.map((e) => {
+      const r = per[e.ref];
+      if (!r) return e;
+      return { ...e, ...(r.externalId ? { externalId: r.externalId } : {}), ...(r.externalStatus ? { externalStatus: r.externalStatus } : {}), ...(r.traceNumber ? { bankTraceNumber: r.traceNumber } : {}) };
+    });
+    const next = this.store.achFiles.put({ ...fresh, entries, status: result.status, submitter: this.submitter.name, retryable: result.status === 'queued', message: result.message, updatedAt: at });
+    for (const e of entries) {
+      const r = per[e.ref];
+      if (!r) continue;
+      if (r.state === 'accepted' && !fresh.entries.find((x) => x.ref === e.ref)?.externalId) this.acceptEntry(next, e);
+      if (r.state === 'rejected') this.rejectLegs({ ...next, entries: [e] }, r.message ?? 'The bank rejected this payment.');
+    }
+    return this.store.achFiles.require(fresh.id, 'ACH file');
+  }
+
+  private acceptEntry(file: AchFile, e: AchFileEntry): void {
+    if (e.legId) {
+      const leg = this.store.legs.require(e.legId, 'Leg');
+      if (leg.status === 'queued') this.store.legs.put({ ...leg, status: 'submitted', traceNumber: e.bankTraceNumber ?? e.traceNumber, updatedAt: this.now().toISOString() });
+    } else if (e.bankAccountId && file.kind === 'prenote') {
+      const a = this.store.bankAccounts.get(e.bankAccountId);
+      if (a && a.verification.method === 'prenote' && a.verification.status === 'pending') this.store.bankAccounts.put({ ...a, verification: { ...a.verification, prenoteSettlementDate: file.effectiveDate } });
+    }
   }
 
   private acceptLegs(file: AchFile): void {
@@ -925,12 +975,76 @@ export class AchService {
     });
   }
 
+  // ------------------------------------------------------------------ API banks: asking where payments stand
+
+  /**
+   * For a bank reached by API: ask where each payment stands and apply the answer. Settlement of the employer's
+   * debit confirms the funds (what Totali staff would otherwise record by hand); a return undoes that payment the
+   * same way a return file would; a cancelled payment fails. In-flight payments are asked about every 15 minutes,
+   * settled ones daily until their return window has passed.
+   */
+  async syncExternal(): Promise<{ asked: number; applied: string[]; failed: string[] }> {
+    const out = { asked: 0, applied: [] as string[], failed: [] as string[] };
+    const status = this.submitter.status?.bind(this.submitter);
+    if (!status) return out;
+    const nowMs = this.now().getTime();
+    for (const file of this.store.achFiles.where((f) => f.rail === 'totali' && f.entries.some((e) => !!e.externalId && !e.externalDone))) {
+      for (const e of file.entries) {
+        if (!e.externalId || e.externalDone) continue;
+        const every = e.externalState === 'settled' ? 24 * 60 : EXTERNAL_POLL_MINUTES;
+        if (e.externalPolledAt && nowMs - Date.parse(e.externalPolledAt) < every * 60_000) continue;
+        let st: Awaited<ReturnType<NonNullable<AchSubmitter['status']>>>;
+        try {
+          st = await status(e.externalId);
+          out.asked += 1;
+        } catch (err) {
+          out.failed.push(`${e.ref}: ${(err as Error).message}`);
+          continue;
+        }
+        const confirm = this.store.tx(() => this.applyExternalStatus(file.id, e.ref, st));
+        out.applied.push(`${e.ref}: ${st.detail}`);
+        if (confirm) {
+          // Outside the transaction: refusing (for example, the debit's date has not come) must not undo what was recorded above.
+          try { this.confirmFundsReceived(confirm.runId, { reference: confirm.reference, amountCents: confirm.amountCents }); } catch (err) { out.failed.push(`${e.ref}: ${(err as Error).message}`); }
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Record one payment's status. Returns a funds confirmation to make, when this payment is a settled employer debit. Call inside store.tx(). */
+  private applyExternalStatus(fileId: string, ref: string, st: { state: NonNullable<AchFileEntry['externalState']>; detail: string; returnCode?: string; traceNumber?: string; amountCents?: number }): { runId: string; reference: string; amountCents: number } | undefined {
+    const file = this.store.achFiles.require(fileId, 'ACH file');
+    const entry = file.entries.find((x) => x.ref === ref)!;
+    const at = this.now().toISOString();
+    const changed = entry.externalState !== st.state;
+    const leg = entry.legId ? this.store.legs.get(entry.legId) : undefined;
+    // A payment stays interesting until its return window has passed: 60 days for an employer debit, 10 for a credit.
+    const window = new Date(`${file.effectiveDate}T00:00:00Z`).getTime() + (leg?.kind === 'funding' ? 60 : 10) * 86_400_000;
+    const done = st.state === 'returned' || st.state === 'cancelled' || (st.state === 'settled' && this.now().getTime() > window);
+    const patch: Partial<AchFileEntry> = { externalStatus: st.detail, externalState: st.state, externalPolledAt: at, ...(done ? { externalDone: true } : {}), ...(st.traceNumber ? { bankTraceNumber: st.traceNumber } : {}) };
+    this.store.achFiles.put({ ...file, entries: file.entries.map((x) => (x.ref === ref ? { ...x, ...patch } : x)), updatedAt: at });
+    if (leg && st.traceNumber && leg.traceNumber !== st.traceNumber) this.store.legs.put({ ...leg, traceNumber: st.traceNumber });
+
+    if (st.state === 'returned') {
+      const code = st.returnCode ?? 'R99';
+      this.applyReturn({ ...entry }, code, RETURN_CODES[code]?.meaning ?? 'Returned by the receiving bank');
+    } else if (st.state === 'cancelled') {
+      this.rejectLegs({ ...file, entries: [entry] }, 'The transfer was cancelled at the bank.');
+    } else if ((st.state === 'held' || st.state === 'needs_review') && changed && leg) {
+      this.alert(leg.runId, `bank_transfer_${st.state}`, `The bank has a payment ${st.state === 'held' ? 'on hold' : 'that needs review'} (${st.detail}). Check the bank's dashboard.`);
+    } else if (st.state === 'settled' && leg?.kind === 'funding' && leg.status === 'submitted') {
+      return { runId: leg.runId, reference: entry.externalId!, amountCents: st.amountCents ?? leg.amountCents };
+    }
+    return undefined;
+  }
+
   // ------------------------------------------------------------------ returns
 
   private findEntry(trace: string, companyId?: string): { file: AchFile; entry: AchFileEntry } | undefined {
     for (const file of this.store.achFiles.all()) {
       if (companyId && file.companyId !== companyId) continue;
-      const entry = file.entries.find((e) => e.traceNumber === trace);
+      const entry = file.entries.find((e) => e.traceNumber === trace || e.bankTraceNumber === trace);
       if (entry) return { file, entry };
     }
     return undefined;
@@ -957,23 +1071,9 @@ export class AchService {
           unmatched.push(r.originalTrace);
           continue;
         }
-        const { entry } = hit;
-        if (entry.legId) {
-          const leg = this.store.legs.require(entry.legId, 'Leg');
-          if (leg.status === 'returned') {
-            alreadyApplied.push(r.originalTrace);
-            continue;
-          }
-          applied.push({ trace: r.originalTrace, code: r.reasonCode, what: leg.kind === 'funding' ? this.returnFunding(leg, r.reasonCode) : this.returnPayout(leg, r.reasonCode) });
-        } else if (entry.bankAccountId) {
-          const a = this.store.bankAccounts.require(entry.bankAccountId, 'Bank account');
-          if (a.status === 'disabled') {
-            alreadyApplied.push(r.originalTrace);
-            continue;
-          }
-          this.store.bankAccounts.put({ ...a, status: 'disabled', disabledReason: `Prenote returned ${r.reasonCode}: ${r.meaning}`, verification: { ...a.verification, status: 'failed', reason: `${r.reasonCode}: ${r.meaning}` } });
-          applied.push({ trace: r.originalTrace, code: r.reasonCode, what: 'prenote returned; account disabled' });
-        }
+        const res = this.applyReturn(hit.entry, r.reasonCode, r.meaning);
+        if (res === 'already') alreadyApplied.push(r.originalTrace);
+        else applied.push({ trace: r.originalTrace, code: r.reasonCode, what: res });
       }
       for (const c of parsed.changes) {
         const hit = this.findEntry(c.originalTrace, opts.companyId);
@@ -986,6 +1086,19 @@ export class AchService {
       }
     });
     return { applied, alreadyApplied, unmatched, changeNotices };
+  }
+
+  /** Undo one returned entry, whether it came in a return file or from an API bank. Call inside store.tx(). */
+  private applyReturn(entry: AchFileEntry, code: string, meaning: string): string {
+    if (entry.legId) {
+      const leg = this.store.legs.require(entry.legId, 'Leg');
+      if (leg.status === 'returned') return 'already';
+      return leg.kind === 'funding' ? this.returnFunding(leg, code) : this.returnPayout(leg, code);
+    }
+    const a = this.store.bankAccounts.require(entry.bankAccountId!, 'Bank account');
+    if (a.status === 'disabled') return 'already';
+    this.store.bankAccounts.put({ ...a, status: 'disabled', disabledReason: `Prenote returned ${code}: ${meaning}`, verification: { ...a.verification, status: 'failed', reason: `${code}: ${meaning}` } });
+    return 'prenote returned; account disabled';
   }
 
   /** A returned employer debit. If it had settled, the funding is unwound; if employees were already paid from it, that is an exposure a person must recover. */
@@ -1047,12 +1160,18 @@ export class AchService {
 export async function reconcile(ach: AchService, store: Store, opts: { autoDisburse: boolean; log?: (msg: string) => void }): Promise<void> {
   const log = opts.log ?? (() => {});
   ach.advance();
-  for (const f of store.achFiles.where((x) => x.status === 'created')) {
+  for (const f of store.achFiles.where((x) => x.status === 'created' || (x.status === 'queued' && x.retryable === true))) {
     try {
       await ach.submitFile(f.id);
     } catch (e) {
       log(`reconcile submit ${f.id}: ${(e as Error).message}`);
     }
+  }
+  try {
+    const r = await ach.syncExternal();
+    for (const m of r.failed) log(`reconcile bank status: ${m}`);
+  } catch (e) {
+    log(`reconcile bank status: ${(e as Error).message}`);
   }
   for (const f of ach.apiFilesToCheck()) {
     try {

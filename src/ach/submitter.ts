@@ -14,6 +14,22 @@ import { join } from 'node:path';
  * Totali treats a file as sent on any weaker evidence.
  */
 
+/** One payment inside a file, in the form an API bank needs it (a file bank only needs the file). Read from the built file, so a retry sends exactly what the first try did. */
+export interface SubmitEntry {
+  ref: string;
+  traceNumber: string;
+  kind: 'credit' | 'debit' | 'prenote_credit' | 'prenote_debit';
+  standardEntryClass: string;
+  amountCents: number;
+  routingNumber: string;
+  accountNumber: string;
+  accountType: 'checking' | 'savings';
+  name: string;
+  individualId: string;
+  /** Set when the bank already has this payment: do not send it again. */
+  externalId?: string;
+}
+
 export interface SubmitInput {
   fileId: string;
   fileName: string;
@@ -22,17 +38,43 @@ export interface SubmitInput {
   effectiveDate: string;
   entryCount: number;
   totalCents: number;
+  description: string;
+  companyName: string;
+  entries: SubmitEntry[];
+}
+
+/** What an API bank says about one payment after the file was handed over. */
+export interface EntryResult {
+  /** accepted: the bank has it. rejected: the bank refused this payment. retry: not known to be at the bank; safe to send again. */
+  state: 'accepted' | 'rejected' | 'retry';
+  externalId?: string;
+  traceNumber?: string;
+  externalStatus?: string;
+  message?: string;
 }
 
 export interface SubmitResult {
   status: 'queued' | 'accepted' | 'rejected';
   reference?: string;
   message: string;
+  /** Per-payment results, for banks reached by API. Keyed by entry ref. */
+  entries?: Record<string, EntryResult>;
+}
+
+/** Where one payment stands at an API bank. */
+export interface ExternalStatus {
+  state: 'in_flight' | 'held' | 'settled' | 'returned' | 'cancelled' | 'needs_review';
+  detail: string;
+  returnCode?: string;
+  traceNumber?: string;
+  amountCents?: number;
 }
 
 export interface AchSubmitter {
   readonly name: string;
   submit(f: SubmitInput): Promise<SubmitResult>;
+  /** Banks reached by API can be asked where a payment stands, instead of waiting to be told. */
+  status?(externalId: string): Promise<ExternalStatus>;
 }
 
 /**

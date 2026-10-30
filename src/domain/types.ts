@@ -202,6 +202,15 @@ export interface AchFileEntry {
   amountCents: Cents;
   legId?: string;
   bankAccountId?: string;
+  /** API banks: the bank's own id for this payment, once it has it. A payment with one is never sent again. */
+  externalId?: string;
+  /** The bank's own trace number. The entry's traceNumber stays the one in the built file, which is what links the file to its payments. */
+  bankTraceNumber?: string;
+  externalStatus?: string;
+  externalState?: 'in_flight' | 'held' | 'settled' | 'returned' | 'cancelled' | 'needs_review';
+  externalPolledAt?: string;
+  /** Nothing more to learn about this payment: it is returned, cancelled, or past its return window. */
+  externalDone?: boolean;
 }
 
 /** An ACH file Totali built. The content holds full account numbers, so it is stored encrypted. */
@@ -220,6 +229,8 @@ export interface AchFile {
   /** Who sends it: Totali through its own bank, or the employer through theirs. */
   rail: 'totali' | 'employer';
   submitter?: string;
+  /** An API bank took some payments and not others: Totali will send the rest. */
+  retryable?: boolean;
   reference?: string;
   message?: string;
   /** Employer-bank mode: how the file reached the bank. */

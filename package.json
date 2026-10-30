@@ -12,6 +12,7 @@
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc -p . | grep -E '^(src|test|scripts)/' && exit 1 || exit 0",
     "test:vendored": "cd engine && node --test tests/*.test.ts",
+    "check:column": "node scripts/check-column.ts",
     "check:stripe": "node scripts/check-stripe.ts",
     "sync:upstream": "scripts/sync-upstream.sh"
   },
