@@ -57,6 +57,27 @@ function deductionPlans(raw: unknown): DeductionPlan[] {
   });
 }
 
+/** A location must be one the business named in its setup; a person at a location in another state is taxed there. */
+function locationOf(company: { locations?: Array<{ name: string; state: string }> }, raw: unknown): { name: string; state: string } | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  if (typeof raw !== 'string') throw badRequest('location must be text');
+  const hit = (company.locations ?? []).find((l) => l.name.toLowerCase() === raw.trim().toLowerCase());
+  if (!hit) throw badRequest(`'${raw}' is not one of your locations`, { locations: (company.locations ?? []).map((l) => l.name) });
+  return hit;
+}
+
+function tagsOf(raw: unknown): Employee['tags'] | undefined {
+  if (raw === undefined) return undefined;
+  const o = v.obj(raw, 'tags');
+  const out: NonNullable<Employee['tags']> = {};
+  for (const k of ['department', 'crew', 'wcClass'] as const) {
+    if (o[k] === undefined || o[k] === '') continue;
+    if (typeof o[k] !== 'string' || (o[k] as string).length > 40 || /[<>\u0000-\u001f]/.test(o[k] as string)) throw badRequest(`tags.${k} must be short plain text`);
+    out[k] = (o[k] as string).trim();
+  }
+  return out;
+}
+
 export function addEmployee(store: Store, companyId: string, body: unknown): Employee {
   const o = v.obj(body);
   const company = store.companies.require(companyId, 'Company');
@@ -80,7 +101,9 @@ export function addEmployee(store: Store, companyId: string, body: unknown): Emp
   }
 
   const hireDate = v.date(o, 'hireDate');
-  const workState = stateWithholding(o, 'workState', company.homeState);
+  const loc = locationOf(company, o.location);
+  const workState = stateWithholding(o, 'workState', loc?.state ?? company.homeState);
+  const tags = tagsOf(o.tags);
   const employee: Employee = {
     id: newId('emp'),
     companyId,
@@ -97,6 +120,8 @@ export function addEmployee(store: Store, companyId: string, body: unknown): Emp
     deductionPlans: deductionPlans(o.deductionPlans),
     ...(o.ageAtYearEnd !== undefined ? { ageAtYearEnd: v.int(o, 'ageAtYearEnd', 14, 120) } : {}),
     ...(o.tipCreditNoticeDate !== undefined ? { tipCreditNoticeDate: v.date(o, 'tipCreditNoticeDate') } : {}),
+    ...(loc ? { location: loc.name } : {}),
+    ...(tags && Object.keys(tags).length ? { tags } : {}),
     payoutAccounts: [],
     ytd: freshYearToDate(),
     ytdYear: Number(hireDate.slice(0, 4)),
@@ -128,6 +153,8 @@ export function updateEmployee(store: Store, companyId: string, employeeId: stri
   if (o.firstName !== undefined) e.firstName = v.str(o, 'firstName', { max: 60 });
   if (o.lastName !== undefined) e.lastName = v.str(o, 'lastName', { max: 60 });
   if (o.email !== undefined) e.email = v.str(o, 'email', { max: 200 });
+  if (o.location !== undefined) { const loc = locationOf(company, o.location); if (loc) e.location = loc.name; else delete e.location; }
+  if (o.tags !== undefined) { const t = tagsOf(o.tags); if (t && Object.keys(t).length) e.tags = t; else delete e.tags; }
   if (o.roleKey !== undefined) {
     const roleKey = v.str(o, 'roleKey');
     const role = company.settings.roles.find((r) => r.key === roleKey);

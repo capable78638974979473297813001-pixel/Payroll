@@ -72,14 +72,15 @@
 .dash .ph2 h1 { font-size: 27px; font-weight: 400; line-height: 1.2; letter-spacing: -.012em; color: var(--d-accent); }
 
 /* ---------- the card grid ---------- */
-.dash .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--d-gap); align-items: stretch; }
-.dash .card { grid-column: span var(--span, 4); background: var(--d-card); border: 1px solid var(--d-line); border-radius: var(--d-radius); padding: var(--d-pad); display: flex; flex-direction: column; gap: 12px; min-width: 0; position: relative; box-shadow: none; }
+.dash .grid.cards { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--d-gap); align-items: stretch; }
+.dash .grid.cards > .card { grid-column: span var(--span, 4); display: flex; flex-direction: column; gap: 12px; }
+.dash .card { background: var(--d-card); border: 1px solid var(--d-line); border-radius: var(--d-radius); padding: var(--d-pad); min-width: 0; position: relative; box-shadow: none; }
 .dash[data-cards="flat"] .card { border-color: transparent; }
 .dash[data-cards="outlined"] .card { border: 1px solid var(--d-line); }
 .dash[data-cards="ruled"] .card { border: 0; border-top: 3px solid var(--d-accent); border-radius: min(var(--d-radius), 4px); }
 .dash[data-cards="elevated"] .card { border-color: transparent; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 14px 24px -18px rgba(60,10,30,.35); }
 .dash[data-cards="filled"] .card { border-color: transparent; background: color-mix(in srgb, var(--d-accent) 9%, var(--d-card)); }
-@media (max-width: 900px) { .dash .card { grid-column: span 12; } }
+@media (max-width: 900px) { .dash .grid.cards > .card { grid-column: span 12; } .dash .grid { grid-template-columns: 1fr !important; } }
 .dash .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .dash .card-title { margin: 0; font: 500 16px/1.2 var(--d-font-head); color: var(--d-accent); letter-spacing: -.005em; }
 .dash .big { font-family: var(--d-num-font); font-weight: var(--d-num-weight); font-size: 40px; line-height: 1; letter-spacing: var(--d-num-ls); color: var(--d-ink); font-variant-numeric: tabular-nums; }

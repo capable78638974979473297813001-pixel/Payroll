@@ -19,6 +19,7 @@ import { runMasteryTax, type MasteryCommand } from '../tax/masterytax.ts';
 import { tipSplit } from '../tax/tipSplit.ts';
 import { tipReport } from '../restaurant/reports.ts';
 import { suggestPeriods } from '../payroll/schedule.ts';
+import { profileView, saveProfile, addDocument, removeDocument } from '../domain/profile.ts';
 import { weekSummary, saveWeek } from '../domain/weekEntry.ts';
 import { getIndustry, getNiche, listIndustries } from '../industries/index.ts';
 import { isIsoDate } from '../lib/dates.ts';
@@ -312,6 +313,10 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       for (const d of [from, to]) if (d !== undefined && !isIsoDate(d)) throw badRequest('from and to must be YYYY-MM-DD');
       return { shifts: listShifts(store, c.params.cid, { from, to, employeeId: c.query.get('employeeId') ?? undefined }) };
     }),
+    route('GET', `${C}/profile`, 'company', (c) => profileView(store.companies.require(c.params.cid, 'Company'))),
+    route('PUT', `${C}/profile`, 'company', (c) => saveProfile(store, c.params.cid, c.json())),
+    route('POST', `${C}/profile/documents`, 'company', (c) => addDocument(store, c.params.cid, c.json()), 201),
+    route('DELETE', `${C}/profile/documents/:did`, 'company', (c) => removeDocument(store, c.params.cid, c.params.did)),
     route('GET', `${C}/time/week`, 'company', (c) => {
       const from = c.query.get('start'); const to = c.query.get('end');
       if (!isIsoDate(from) || !isIsoDate(to)) throw badRequest('start and end must be YYYY-MM-DD');

@@ -6,6 +6,16 @@ import type { EmployerContext, FederalW4, StateWithholding, TaxLine } from '../.
 
 export type PayFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
 
+export interface CompanyProfile {
+  dba?: string;
+  entityType?: string;
+  stateFormed?: string;
+  addressParts?: { street: string; city: string; state: string; zip: string };
+  owners: Array<{ id: string; name: string; percent: number; runsBusiness: boolean }>;
+  documents: Array<{ id: string; name: string; type: string; size: number; addedAt: string; contentEncrypted: string }>;
+  submittedAt?: string;
+}
+
 export interface Company {
   id: string;
   legalName: string;
@@ -15,6 +25,8 @@ export interface Company {
   /** The state the establishment is in. Decides whether a tip credit is in effect for pooling rules. */
   homeState: string;
   address?: string;
+  /** Business verification (Company setup): who the business is and who owns it. */
+  profile?: CompanyProfile;
   paySchedule: { frequency: PayFrequency; checkDateLagDays: number; /** The weekday employees are paid, when the business pays weekly or every other week. */ payWeekday?: string };
   /** Where the business operates, from the setup builder. A location in another state is taxed by that state. */
   locations?: Array<{ name: string; city: string; state: string }>;

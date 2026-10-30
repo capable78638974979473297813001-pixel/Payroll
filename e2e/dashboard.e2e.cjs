@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const { startServer, openBrowser, signUpAndVerify, buildCompany } = require('./helpers.cjs');
 
 const cssVar = (page, name) => page.evaluate((n) => document.querySelector('.dash').style.getPropertyValue(n).trim(), name);
-const cards = (page) => page.locator('.grid > .card[data-widget]');
-const typesOnPage = (page) => page.locator('.grid > .card[data-widget]').evaluateAll((els) => els.map((e) => e.dataset.type));
+const cards = (page) => page.locator('.grid.cards > .card[data-widget]');
+const typesOnPage = (page) => page.locator('.grid.cards > .card[data-widget]').evaluateAll((els) => els.map((e) => e.dataset.type));
 
 (async () => {
   const server = await startServer();
@@ -97,7 +97,7 @@ const typesOnPage = (page) => page.locator('.grid > .card[data-widget]').evaluat
 
     // ---- drag and drop (two cards on screen, as a person would have them)
     await page.evaluate(() => window.scrollTo(0, 0));
-    const mods = () => page.locator('.grid > .card[data-widget]').evaluateAll((els) => els.map((e) => e.dataset.module || e.dataset.type));
+    const mods = () => page.locator('.grid.cards > .card[data-widget]').evaluateAll((els) => els.map((e) => e.dataset.module || e.dataset.type));
     const orderBefore = await mods();
     await page.locator('[data-module=pay_run]').scrollIntoViewIfNeeded();
     await page.locator('[data-module=team] .grip').dispatchEvent('mousedown');

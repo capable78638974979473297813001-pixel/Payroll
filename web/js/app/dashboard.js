@@ -61,7 +61,7 @@ export function dashboardTab() {
 
     // ------------------------------------------------------------ the page
     function view(tab, { config, t, data, dash }) {
-      const grid = h('div', { class: 'grid', 'data-testid': 'grid' });
+      const grid = h('div', { class: 'grid cards', 'data-testid': 'grid' });
       for (const w of tab.widgets) grid.append(cardElement(w, { config, t, data, dash, tools: st.editing ? tools(tab, w) : null }));
       if (!tab.widgets.length) grid.append(h('div', { class: 'card', style: { '--span': 12 } }, h('div', { class: 'empty' }, st.editing ? 'This tab is empty. Add a card to start.' : 'This tab is empty.', st.editing ? null : [' ', h('button', { class: 'link as-button', type: 'button', onClick: startEdit }, 'Customize')])));
       if (st.editing) grid.append(h('button', { class: 'card add-slot', type: 'button', style: { '--span': 4, alignItems: 'center', justifyContent: 'center', minHeight: '120px', border: '2px dashed var(--d-line)', background: 'none', cursor: 'pointer', color: 'var(--d-muted)', fontWeight: 700 }, onClick: () => openPanel('add') }, '+ Add a card'));
