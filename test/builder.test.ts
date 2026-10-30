@@ -22,13 +22,15 @@ test('a restaurant starts with 5 modules, 12 items and 3 forms', () => {
   assert.deepEqual(items(r, 'hours_tips'), ['hours_entry', 'tip_entry']);
 });
 
-test('Michigan adds its card with withholding, the MI-W4, unemployment, minimum wage and sick time', () => {
+test('Michigan adds its card with withholding, unemployment, minimum wage and sick time, and the MI-W4 joins the new-hire paperwork', () => {
   const r = build('restaurant', { state: 'MI' }, D);
   assert.deepEqual(counts(r), [6, 17, 4]);
   const mi = r.modules.find((m) => m.id === 'state_mi')!;
   assert.equal(mi.label, 'Michigan');
-  assert.deepEqual(mi.items.map((i) => i.label), ['State income tax withholding', 'MI-W4', 'State unemployment account', 'Minimum wage reference', 'Earned sick time reference']);
-  assert.equal(mi.items.find((i) => i.label === 'MI-W4')!.form, true);
+  assert.deepEqual(mi.items.map((i) => i.label), ['Michigan income tax withholding', 'Unemployment account', 'Minimum wage reference', 'Earned sick time']);
+  assert.deepEqual(items(r, 'new_hire_forms'), ['form_w4', 'form_i9', 'form_direct_deposit', 'state_mi_form']);
+  const form = r.modules.find((m) => m.id === 'new_hire_forms')!.items.find((i) => i.id === 'state_mi_form')!;
+  assert.deepEqual([form.label, form.form, form.note], ['MI-W4', true, 'Michigan withholding form, added for your state']);
 });
 
 test('Detroit adds city income tax inside the Michigan card and a Locations card; Ferndale adds nothing', () => {
@@ -58,14 +60,28 @@ test('tips: yes adds tip reporting, a tip pool, a tip credit reference and tips 
   assert.deepEqual(items(yes, 'hours_tips'), ['hours_entry', 'tip_entry', 'tip_reporting', 'tip_pool']);
   assert.ok(items(yes, 'state_mi').includes('tip_credit_ref'));
   assert.ok(items(yes, 'federal_taxes').includes('tips_taxable'));
-  assert.equal(yes.modules.find((m) => m.id === 'hours_tips')!.items.find((i) => i.id === 'tip_pool')!.label, 'Tip pool split by hours');
+  assert.equal(yes.modules.find((m) => m.id === 'hours_tips')!.items.find((i) => i.id === 'tip_pool')!.note, 'Split by hours worked');
   const byRole = build('restaurant', { ...a, tips: { on: true, pool: 'points' } }, D);
-  assert.equal(byRole.modules.find((m) => m.id === 'hours_tips')!.items.find((i) => i.id === 'tip_pool')!.label, 'Tip pool split by role');
+  assert.equal(byRole.modules.find((m) => m.id === 'hours_tips')!.items.find((i) => i.id === 'tip_pool')!.note, 'Split by role');
   const no = build('restaurant', { ...a, tips: { on: false, pool: 'none' } }, D);
   assert.equal(no.counts.items, 20, 'tip entry is removed and none of the four are added');
   assert.deepEqual(items(no, 'hours_tips'), ['hours_entry']);
   const noPool = build('restaurant', { ...a, tips: { on: true, pool: 'none' } }, D);
   assert.equal(noPool.counts.items, 24, 'tips without a pool: three of the four');
+});
+
+test('every item says what it is and how it sits: a description and a status, and pay schedule moves from to-set to auto', () => {
+  const valid = new Set(['auto', 'manual', 'open', 'setup', 'todo', 'reference', 'added', 'ready', 'toset']);
+  for (const ind of INDUSTRY_IDS) {
+    const r = build(ind, { state: 'MI', team: '11-25', frequency: { value: 'weekly', weekday: 'friday' }, contractors: { on: true }, tips: { on: true, pool: 'hours' }, departments: { on: true, names: ['A'] }, seasonal: { on: true }, service: { on: true }, jobs: { on: true }, crews: { on: true }, wc: { on: true }, multistate: { on: true } } as never, D);
+    for (const m of r.modules) for (const i of m.items) { assert.ok(i.note.length > 0, `${ind} ${i.id} has a description`); assert.ok(valid.has(i.status), `${ind} ${i.id} status ${i.status}`); }
+  }
+  const before = build('restaurant', {}, D).modules[0]!.items[0]!;
+  assert.deepEqual([before.status, before.note, before.chip], ['toset', 'Not set yet. Choose how often you pay', undefined]);
+  const after = build('restaurant', { frequency: { value: 'weekly', weekday: 'friday' } }, D).modules[0]!.items[0]!;
+  assert.deepEqual([after.status, after.note, after.chip], ['auto', 'Weekly, paid on Fridays.', 'Weekly']);
+  const reference = build('restaurant', { state: 'MI' }, D).modules.find((m) => m.id === 'state_mi')!.items.find((i) => i.id === 'state_mi_min_wage')!;
+  assert.equal(reference.status, 'reference', 'a rule Totali shows but does not enforce says so');
 });
 
 test('weekly, paid Fridays fills in the pay schedule', () => {

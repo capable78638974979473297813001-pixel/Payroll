@@ -3,45 +3,46 @@ import { link } from './router.js';
 
 // ---------------------------------------------------------------- icons
 const ICONS = {
-  arrow: [['path', { d: 'M2 8h11M9 3.5 13.5 8 9 12.5', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'square' }]],
-  check: [['path', { d: 'M2.5 8.5 6.5 12.5 13.5 4', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'square' }]],
-  plus: [['path', { d: 'M8 2v12M2 8h12', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }]],
-  minus: [['path', { d: 'M2 8h12', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }]],
-  x: [['path', { d: 'M3 3l10 10M13 3 3 13', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }]],
-  up: [['path', { d: 'M3 10l5-5 5 5', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }]],
-  down: [['path', { d: 'M3 6l5 5 5-5', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }]],
-  left: [['path', { d: 'M10 3 5 8l5 5', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }]],
-  right: [['path', { d: 'M6 3l5 5-5 5', fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }]],
-  grip: [['circle', { cx: 5, cy: 4, r: 1.3 }], ['circle', { cx: 11, cy: 4, r: 1.3 }], ['circle', { cx: 5, cy: 8, r: 1.3 }], ['circle', { cx: 11, cy: 8, r: 1.3 }], ['circle', { cx: 5, cy: 12, r: 1.3 }], ['circle', { cx: 11, cy: 12, r: 1.3 }]],
-  lock: [['rect', { x: 3, y: 7, width: 10, height: 7, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 }], ['path', { d: 'M5 7V5a3 3 0 0 1 6 0v2', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 }]],
-  warn: [['path', { d: 'M8 2 15 14H1z', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 }], ['path', { d: 'M8 6.5v3.5M8 11.8v.4', stroke: 'currentColor', 'stroke-width': 1.8 }]],
+  arrow: [['path', { d: 'M2 8h11M9 3.5 13.5 8 9 12.5', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
+  check: [['path', { d: 'M3 8.5 6.5 12 13 4.5', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.9, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
+  plus: [['path', { d: 'M8 2.5v11M2.5 8h11', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round' }]],
+  gear: [['circle', { cx: 8, cy: 8, r: 2.2, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }], ['path', { d: 'M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linecap': 'round' }]],
+  x: [['path', { d: 'M3.5 3.5l9 9M12.5 3.5l-9 9', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round' }]],
+  up: [['path', { d: 'M3 10l5-5 5 5', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
+  down: [['path', { d: 'M3 6l5 5 5-5', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
+  left: [['path', { d: 'M10 3 5 8l5 5', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
+  right: [['path', { d: 'M6 3l5 5-5 5', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]],
+  grip: [['circle', { cx: 5, cy: 4, r: 1.2 }], ['circle', { cx: 11, cy: 4, r: 1.2 }], ['circle', { cx: 5, cy: 8, r: 1.2 }], ['circle', { cx: 11, cy: 8, r: 1.2 }], ['circle', { cx: 5, cy: 12, r: 1.2 }], ['circle', { cx: 11, cy: 12, r: 1.2 }]],
 };
 
 export function icon(name, size = 16) {
-  return h('svg', { viewBox: '0 0 16 16', width: size, height: size, 'aria-hidden': 'true', fill: 'currentColor' }, ...(ICONS[name] || []).map(([t, p]) => h(t, p)));
+  return h('svg', { viewBox: '0 0 16 16', width: size, height: size, 'aria-hidden': 'true', fill: 'currentColor', class: 'ico' }, ...(ICONS[name] || []).map(([t, p]) => h(t, p)));
 }
 
 // ---------------------------------------------------------------- logo
-export function Logo({ scheme = 'default', href = '/' } = {}) {
-  const ink = scheme === 'default' ? '#0A0A0A' : '#FFFFFF';
-  const accent = scheme === 'default' ? '#1F3BFF' : scheme === 'reversed' ? '#8C9BFF' : '#FFFFFF';
-  const mark = h('svg', { viewBox: '0 0 160 160', role: 'img', 'aria-hidden': 'true' },
-    h('rect', { x: 16, y: 24, width: 128, height: 24, fill: ink }),
-    h('rect', { x: 16, y: 56, width: 80, height: 24, fill: ink }),
-    h('rect', { x: 16, y: 88, width: 104, height: 16, fill: ink }),
-    h('rect', { x: 64, y: 112, width: 80, height: 24, fill: accent }));
-  return link(href, { class: `logo ${scheme === 'default' ? '' : scheme}`, 'aria-label': 'Totali' }, mark, h('span', { class: 'logo-word' }, 'Totali', h('i', {}, '.')));
+const SQUIGGLE = () => h('svg', { viewBox: '0 0 120 10', preserveAspectRatio: 'none', 'aria-hidden': 'true' }, h('path', { d: 'M2 6 C 22 1, 40 9, 62 5 S 100 2, 118 6', fill: 'none', stroke: '#F0613A', 'stroke-width': 2.6, 'stroke-linecap': 'round' }));
+export function Logo({ small = false, href = '/' } = {}) {
+  return link(href, { class: `logo ${small ? 'sm' : ''}`, 'aria-label': 'Totali' }, 'totali', SQUIGGLE());
+}
+
+/** Hand-lettered margin note, with an optional arrow. */
+export function Hand(text, { style = {}, arrow = null } = {}) {
+  return h('div', { class: 'hand', style }, text, arrow ? h('svg', { viewBox: '0 0 110 60', width: 110, height: 60, 'aria-hidden': 'true', style: arrow.style || {} }, h('path', { d: arrow.d || 'M6 8 C 30 2, 70 14, 100 46', fill: 'none', stroke: '#0E5A66', 'stroke-width': 2.4, 'stroke-linecap': 'round' }), h('path', { d: 'M86 52 L104 54 L100 36', fill: 'none', stroke: '#0E5A66', 'stroke-width': 2.4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) : null);
 }
 
 // ---------------------------------------------------------------- button
-export function Button({ variant = 'primary', size = 'lg', arrow = false, full = false, loading = false, disabled = false, href, onClick, type = 'button', ...rest } = {}, ...label) {
-  const cls = `btn btn-${variant} ${size === 'lg' ? '' : `btn-${size}`} ${full ? 'btn-full' : ''}`.replace(/\s+/g, ' ').trim();
-  const kids = [...label, loading ? h('span', { class: 'spinner', 'aria-hidden': 'true' }) : arrow ? icon('arrow') : null];
+export function Button({ variant = 'primary', size = 'md', full = false, loading = false, disabled = false, href, onClick, type = 'button', ...rest } = {}, ...label) {
+  const cls = ['btn', variant === 'ghost' || variant === 'secondary' ? 'ghost' : '', variant === 'teal' ? 'teal' : '', size === 'sm' ? 'sm' : '', size === 'lg' ? 'lg' : '', full ? 'full' : ''].filter(Boolean).join(' ');
+  const kids = [...label, loading ? h('span', { class: 'spinner', 'aria-hidden': 'true' }) : null];
   if (href && !disabled) return link(href, { class: cls, ...rest }, ...kids);
   return h('button', { class: cls, type, disabled: disabled || loading, 'aria-busy': loading ? 'true' : undefined, onClick, ...rest }, ...kids);
 }
 
-/** Set a button's loading state from outside while a request runs. */
+/** A text link styled like the design's "link". */
+export function TextLink(label, { href, onClick, ...rest } = {}) {
+  return href ? link(href, { class: 'link', ...rest }, label) : h('button', { class: 'link as-button', type: 'button', onClick, ...rest }, label);
+}
+
 export function setLoading(btn, on, label) {
   btn.disabled = on;
   btn.setAttribute('aria-busy', on ? 'true' : 'false');
@@ -53,35 +54,29 @@ export function setLoading(btn, on, label) {
 
 // ---------------------------------------------------------------- fields
 let fieldSeq = 0;
-export function Field({ label, name, type = 'text', value = '', placeholder = '', hint, autocomplete, required = false, optional = false, inputmode, maxlength, onInput, rightSlot, disabled = false, autofocus = false, select, options, rows }) {
+export function Field({ label, name, type = 'text', value = '', placeholder = '', hint, autocomplete, optional = false, inputmode, maxlength, onInput, rightSlot, disabled = false, autofocus = false, select, options, rows, min, max }) {
   const id = `f${++fieldSeq}`;
   const errId = `${id}-err`;
   let input;
-  if (select) {
-    input = h('select', { class: 'input', id, name, disabled }, ...options.map((o) => h('option', { value: o.value, selected: o.value === value }, o.label)));
-  } else if (rows) {
-    input = h('textarea', { class: 'input', id, name, rows, placeholder, maxlength, disabled }, value);
-  } else {
-    input = h('input', { class: `input ${rightSlot ? 'has-slot' : ''}`, id, name, type, value, placeholder, autocomplete, inputmode, maxlength, disabled, 'data-autofocus': autofocus ? '' : undefined, required: required || undefined });
-  }
-  const errorEl = h('div', { class: 'field-error', id: errId, role: 'alert', hidden: true });
-  const wrap = h('div', { class: 'input-wrap' }, input);
-  let slotBtn = null;
+  if (select) input = h('select', { class: 'in', id, name, disabled }, ...options.map((o) => h('option', { value: o.value, selected: o.value === value }, o.label)));
+  else if (rows) input = h('textarea', { class: 'in', id, name, rows, placeholder, maxlength, disabled }, value);
+  else input = h('input', { class: 'in', id, name, type, value, placeholder, autocomplete, inputmode, maxlength, disabled, min, max, 'data-autofocus': autofocus ? '' : undefined });
+  const errorEl = h('div', { class: 'ferr', id: errId, role: 'alert', hidden: true });
+  const wrap = h('div', { class: 'inwrap' }, input);
   if (rightSlot === 'Show') {
-    slotBtn = h('button', { class: 'field-slot', type: 'button', 'aria-label': 'Show password', 'aria-pressed': 'false', onClick: () => {
+    const btn = h('button', { class: 'slot', type: 'button', 'aria-label': 'Show password', 'aria-pressed': 'false', onClick: () => {
       const show = input.type === 'password';
       input.type = show ? 'text' : 'password';
-      slotBtn.textContent = show ? 'Hide' : 'Show';
-      slotBtn.setAttribute('aria-pressed', String(show));
-      slotBtn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      btn.textContent = show ? 'Hide' : 'Show';
+      btn.setAttribute('aria-pressed', String(show));
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
     } }, 'Show');
-    wrap.append(slotBtn);
+    wrap.append(btn);
+    input.classList.add('has-slot');
   }
-  const el = h('label', { class: 'field', for: id },
-    label ? h('span', { class: 'field-label' }, label, optional ? h('span', { class: 'req' }, ' (optional)') : null) : null,
-    wrap,
-    hint ? h('div', { class: 'field-hint' }, hint) : null,
-    errorEl);
+  const el = h('div', { class: 'fld' },
+    label ? h('label', { class: 'lab', for: id }, label, optional ? h('small', {}, '(optional)') : null) : null,
+    wrap, hint ? h('div', { class: 'help' }, hint) : null, errorEl);
   if (onInput) input.addEventListener('input', () => onInput(input.value, input));
   input.addEventListener('input', () => setError(null));
   function setError(msg) {
@@ -96,20 +91,35 @@ export function Field({ label, name, type = 'text', value = '', placeholder = ''
 
 export function Checkbox({ label, name, checked = false, onChange }) {
   const input = h('input', { type: 'checkbox', name, checked, onChange: (e) => onChange && onChange(e.target.checked) });
-  return { el: h('label', { class: 'check' }, input, h('span', {}, label)), input, get checked() { return input.checked; } };
+  return { el: h('label', { class: 'ck2' }, input, h('span', { class: 'cb', 'aria-hidden': 'true' }), h('span', { class: 'fine' }, label)), input, get checked() { return input.checked; } };
 }
 
-export function PasswordRule(label, met) {
-  return h('div', { class: `pw-rule ${met ? 'met' : ''}` }, met ? icon('check', 12) : h('span', { class: 'box' }), label);
+/** Password strength bar: four segments. */
+export function PwBar(score) {
+  return h('div', { class: 'pwbar', role: 'img', 'aria-label': `Password strength ${score} of 4` }, ...[1, 2, 3, 4].map((i) => h('span', { class: i <= score ? 'on' : '' })));
+}
+export function pwScore(pw) {
+  if (pw.length < 10) return pw.length ? 1 : 0;
+  let s = 2;
+  if (pw.length >= 14) s += 1;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw) && /\d|\W/.test(pw)) s += 1;
+  if (pw.includes(' ') && pw.length >= 14) s = 4;
+  return Math.min(4, s);
 }
 
-// ---------------------------------------------------------------- tags, alerts
-export function Tag(text, { color = 'ink', solid = false } = {}) {
-  return h('span', { class: `tag tag-${color} ${solid ? 'solid' : ''}` }, solid ? h('span', {}, text) : text);
+// ---------------------------------------------------------------- chips and notices
+/** A chip. `kind` is ok, warn, new, berry or line. */
+export function Chip(text, kind = '') {
+  return h('span', { class: `chip ${kind}` }, text);
+}
+const STATUS = { auto: ['Auto', 'ok'], manual: ['Manual', 'line'], open: ['Open', 'line'], setup: ['Set up', 'ok'], todo: ['To do', 'warn'], toset: ['To set', 'warn'], reference: ['Reference', 'line'], added: ['Added', 'ok'], ready: ['Ready', 'ok'] };
+export function StatusChip(item) {
+  const [label, kind] = STATUS[item.status] || [item.status, ''];
+  return Chip(item.chip || label, kind);
 }
 
 export function Alert(kind, message, detail) {
-  return h('div', { class: `alert ${kind}`, role: kind === 'error' ? 'alert' : 'status' }, h('div', { class: 'alert-body' }, message, detail ? h('small', {}, detail) : null));
+  return h('div', { class: `alert ${kind === 'error' ? 'err' : kind === 'success' ? 'good' : kind === 'info' ? 'teal' : ''}`, role: kind === 'error' ? 'alert' : 'status' }, h('span', { class: 'dot' }), h('div', {}, h('b', {}, message), detail ? h('div', { class: 'cap' }, detail) : null));
 }
 
 let toastHost;
@@ -121,33 +131,26 @@ export function toast(kind, message, ms = 5000) {
   return el;
 }
 
-// ---------------------------------------------------------------- progress steps
-export function ProgressSteps(steps, current) {
-  return h('div', { class: 'steps', role: 'list', 'aria-label': 'Progress' }, ...steps.map((label, i) => {
-    const state = i < current ? 'done' : i === current ? 'current' : 'todo';
-    return h('div', { class: `step ${state}`, role: 'listitem', 'aria-current': state === 'current' ? 'step' : undefined },
-      h('div', { class: 'bar' }),
-      h('div', { class: 'lab' }, state === 'done' ? icon('check', 12) : h('span', { class: 'idx' }, String(i + 1).padStart(2, '0')), h('span', {}, label)));
-  }));
+// ---------------------------------------------------------------- the three signup steps
+export function Steps3(current) {
+  const names = ['Account', 'Verify', 'Your business'];
+  const kids = [];
+  names.forEach((n, i) => {
+    kids.push(h('span', { class: i < current ? 'done' : i === current ? 'on' : '', 'aria-current': i === current ? 'step' : undefined }, n));
+    if (i < names.length - 1) kids.push(h('i'));
+  });
+  return h('div', { class: 'steps3', role: 'list', 'aria-label': 'Progress' }, ...kids);
 }
 
 // ---------------------------------------------------------------- code boxes
 export function CodeBoxes({ length = 6, onChange, onComplete } = {}) {
   const boxes = [];
-  const root = h('div', { class: 'code-boxes', role: 'group', 'aria-label': 'Verification code' });
+  const root = h('div', { class: 'codes', role: 'group', 'aria-label': 'Verification code' });
   const value = () => boxes.map((b) => b.value).join('');
-  const sync = () => {
-    boxes.forEach((b) => b.classList.toggle('filled', b.value !== ''));
-    onChange && onChange(value());
-    if (value().length === length && onComplete) onComplete(value());
-  };
+  const sync = () => { onChange && onChange(value()); if (value().length === length && onComplete) onComplete(value()); };
   for (let i = 0; i < length; i++) {
-    const b = h('input', { class: 'code-box', inputmode: 'numeric', autocomplete: i === 0 ? 'one-time-code' : 'off', maxlength: 1, 'aria-label': `Digit ${i + 1} of ${length}`, 'data-autofocus': i === 0 ? '' : undefined });
-    b.addEventListener('input', () => {
-      b.value = b.value.replace(/\D/g, '').slice(-1);
-      if (b.value && boxes[i + 1]) boxes[i + 1].focus();
-      sync();
-    });
+    const b = h('input', { class: 'cb-in', inputmode: 'numeric', autocomplete: i === 0 ? 'one-time-code' : 'off', maxlength: 1, 'aria-label': `Digit ${i + 1} of ${length}`, 'data-autofocus': i === 0 ? '' : undefined });
+    b.addEventListener('input', () => { b.value = b.value.replace(/\D/g, '').slice(-1); if (b.value && boxes[i + 1]) boxes[i + 1].focus(); sync(); });
     b.addEventListener('keydown', (e) => {
       if (e.key === 'Backspace' && !b.value && boxes[i - 1]) { boxes[i - 1].value = ''; boxes[i - 1].focus(); sync(); e.preventDefault(); }
       if (e.key === 'ArrowLeft' && boxes[i - 1]) boxes[i - 1].focus();
@@ -162,11 +165,10 @@ export function CodeBoxes({ length = 6, onChange, onComplete } = {}) {
       sync();
     });
     boxes.push(b);
-    if (i === 3 - 1 && length === 6) { root.append(b, h('span', { class: 'code-dash', 'aria-hidden': 'true' })); } else root.append(b);
+    root.append(b);
   }
   return {
-    el: root,
-    value,
+    el: root, value,
     setError(on) { root.classList.toggle('error', !!on); },
     clear() { boxes.forEach((b) => (b.value = '')); sync(); boxes[0].focus(); },
     focus() { boxes[0].focus(); },
@@ -177,7 +179,7 @@ export function CodeBoxes({ length = 6, onChange, onComplete } = {}) {
 export function modal({ title, body, actions, onClose, dismissible = true }) {
   const previous = document.activeElement;
   const overlay = h('div', { class: 'modal-overlay', onClick: (e) => { if (dismissible && e.target === overlay) close(); } });
-  const box = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title }, h('div', { class: 'modal-head' }, h('h2', { class: 't-title' }, title), dismissible ? h('button', { class: 'icon-btn', 'aria-label': 'Close', onClick: () => close() }, icon('x')) : null), h('div', { class: 'modal-body' }, body), actions ? h('div', { class: 'modal-actions' }, ...actions) : null);
+  const box = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title }, h('div', { class: 'modal-head' }, h('h2', { class: 'st2' }, title), dismissible ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onClick: () => close() }, icon('x')) : null), h('div', { class: 'modal-body' }, body), actions ? h('div', { class: 'modal-actions' }, ...actions) : null);
   overlay.append(box);
   function key(e) {
     if (e.key === 'Escape' && dismissible) close();
@@ -189,19 +191,13 @@ export function modal({ title, body, actions, onClose, dismissible = true }) {
       else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
     }
   }
-  function close() {
-    document.removeEventListener('keydown', key);
-    overlay.remove();
-    if (previous && previous.focus) previous.focus();
-    onClose && onClose();
-  }
+  function close() { document.removeEventListener('keydown', key); overlay.remove(); if (previous && previous.focus) previous.focus(); onClose && onClose(); }
   document.addEventListener('keydown', key);
   document.body.append(overlay);
   (box.querySelector('[data-autofocus]') || box.querySelector('input, button, select, textarea') || box).focus();
   return { close, el: box };
 }
 
-/** Run an async action behind a button: disables it, shows a spinner, and shows the error on failure. */
 export async function withButton(btn, fn, onError) {
   setLoading(btn, true);
   try { return await fn(); } catch (e) { (onError || ((err) => toast('error', err.message)))(e); } finally { setLoading(btn, false); }

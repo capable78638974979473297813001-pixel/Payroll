@@ -4,7 +4,7 @@ import { newSecret, safeEqual, sha256 } from '../lib/crypto.ts';
 import { ApiError, badRequest, conflict, unauthorized } from '../lib/errors.ts';
 import type { Store } from '../store/store.ts';
 import type { Mailer } from '../mail/mailer.ts';
-import { verificationEmail } from '../mail/mailer.ts';
+import { resetEmail, verificationEmail } from '../mail/mailer.ts';
 import { hashPassword, passwordProblem, verifyPassword } from './password.ts';
 import type { EmailCode, Session, SetupDraft, User } from './types.ts';
 
@@ -158,6 +158,57 @@ export class AccountService {
       for (const c of this.store.emailCodes.where((x) => x.userId === userId)) this.store.emailCodes.delete(c.id);
     });
     return this.sendCode(userId);
+  }
+
+  // ------------------------------------------------------------------ forgotten passwords
+
+  /**
+   * Send a reset code if the address has an account. The answer is the same either way, so this cannot be used to
+   * find out who has an account. Rate limited per account like the verification code.
+   */
+  async requestReset(rawEmail: unknown): Promise<void> {
+    const email = normalizeEmail(rawEmail);
+    const user = this.findByEmail(email);
+    if (!user || !user.emailVerifiedAt) return;
+    const nowMs = this.now().getTime();
+    const recent = this.store.emailCodes.where((c) => c.userId === user.id && c.purpose === 'reset_password').sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+    if (recent[0] && Date.parse(recent[0].sentAt) + RESEND_SECONDS * 1000 > nowMs) return;
+    if (recent.filter((c) => Date.parse(c.sentAt) > nowMs - 3_600_000).length >= SENDS_PER_HOUR) return;
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const salt = randomBytes(12).toString('hex');
+    const expiresAt = new Date(nowMs + CODE_MINUTES * 60_000).toISOString();
+    this.store.tx(() => {
+      for (const c of recent) if (!c.usedAt) this.store.emailCodes.put({ ...c, usedAt: this.iso(), attemptsLeft: 0 });
+      this.store.emailCodes.put({ id: newId('code'), userId: user.id, purpose: 'reset_password', email: user.email, salt, hash: sha256(`${salt}:${user.id}:${code}`), expiresAt, attemptsLeft: CODE_TRIES, sentAt: this.iso() });
+    });
+    const result = await this.mailer.send(resetEmail({ to: user.email, firstName: user.firstName, code, expiresAt, now: this.now() }));
+    if (!result.sent) this.log(`reset email for ${user.id} not sent: ${result.reason ?? 'unknown'}`);
+  }
+
+  /** Choose a new password with the emailed code. Every signed-in browser is signed out, since the old password may be known to someone else. */
+  async resetPassword(rawEmail: unknown, rawCode: unknown, password: unknown): Promise<void> {
+    const email = normalizeEmail(rawEmail);
+    const problem = passwordProblem(password, email);
+    if (problem) throw badRequest(problem, { field: 'password' });
+    const code = typeof rawCode === 'string' ? rawCode.replace(/\s+/g, '') : '';
+    if (!/^\d{6}$/.test(code)) throw badRequest('Enter the 6-digit code.', { field: 'code' });
+    const user = this.findByEmail(email);
+    const live = user && this.store.emailCodes.where((c) => c.userId === user.id && c.purpose === 'reset_password' && !c.usedAt).sort((a, b) => b.sentAt.localeCompare(a.sentAt))[0];
+    const invalid = new ApiError(400, 'code_invalid', 'That code isn’t valid. Ask for a new one.', { attemptsLeft: 0 });
+    if (!user || !live) throw invalid;
+    if (Date.parse(live.expiresAt) <= this.now().getTime()) throw new ApiError(400, 'code_expired', 'That code has expired. Ask for a new one.', { attemptsLeft: 0 });
+    if (!safeEqual(sha256(`${live.salt}:${user.id}:${code}`), live.hash)) {
+      const left = Math.max(0, live.attemptsLeft - 1);
+      this.store.tx(() => this.store.emailCodes.put({ ...live, attemptsLeft: left, ...(left === 0 ? { usedAt: this.iso() } : {}) }));
+      throw new ApiError(400, 'code_wrong', left > 0 ? `That code didn’t match. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'That code didn’t match and has been cancelled. Ask for a new one.', { attemptsLeft: left });
+    }
+    const passwordHash = await hashPassword(password as string);
+    this.store.tx(() => {
+      this.store.emailCodes.put({ ...live, usedAt: this.iso() });
+      this.store.users.put({ ...user, passwordHash });
+      for (const s of this.store.sessions.where((x) => x.userId === user.id)) this.store.sessions.delete(s.id);
+    });
+    this.failures.delete(email);
   }
 
   // ------------------------------------------------------------------ login and sessions

@@ -35,9 +35,14 @@ test('the design\'s restaurant gets cards for what it said: tips, a tip pool, Mi
   const c = svc.get(svc['store'].companies.all()[0]!.id).config;
   assert.deepEqual(c.tabs.map((t) => t.label), ['Overview', 'Payroll', 'People', 'Time and tips', 'Onboarding', 'Help', 'Settings']);
   const o = types(c);
-  for (const t of ['welcome', 'next_payroll', 'payroll_cost', 'team_summary', 'hours_week', 'tips_week', 'tax_summary', 'state_card', 'locations_card', 'contractors_card']) assert.ok(o.includes(t), t);
+  assert.deepEqual(o.slice(0, 2), ['built_from', 'setup_progress']);
+  // The overview is the sections the setup built, eight of them for the design's restaurant, the pay run wide.
+  const mods = c.tabs.find((t) => t.id === 'overview')!.widgets.filter((w) => w.type === 'module');
+  assert.deepEqual(mods.map((w) => w.settings.module), ['pay_run', 'team', 'hours_tips', 'federal_taxes', 'new_hire_forms', 'state_mi', 'locations', 'contractors']);
+  assert.deepEqual(mods.map((w) => w.span), [8, 4, 4, 4, 4, 4, 4, 4]);
+  for (const t of ['tips_week', 'tip_pool_card']) assert.ok(types(c, 'time').includes(t), t);
+  for (const t of ['locations_card', 'contractors_card']) assert.ok(types(c, 'people').includes(t), t);
   assert.ok(types(c, 'time').includes('tip_pool_card'));
-  assert.equal(c.tabs.find((t) => t.id === 'overview')!.widgets.find((w) => w.type === 'state_card')!.settings.state, 'MI');
 });
 
 test('a business with no tips and one location gets none of those cards', () => {
@@ -45,6 +50,8 @@ test('a business with no tips and one location gets none of those cards', () => 
   const c = svc.get(company.id).config;
   const all = c.tabs.flatMap((t) => t.widgets.map((w) => w.type));
   for (const t of ['tips_week', 'tip_pool_card', 'locations_card', 'contractors_card']) assert.ok(!all.includes(t), t);
+  const mods = c.tabs.find((t) => t.id === 'overview')!.widgets.filter((w) => w.type === 'module').map((w) => w.settings.module);
+  for (const m of ['locations', 'contractors']) assert.ok(!mods.includes(m as string), m);
   assert.equal(c.tabs.find((t) => t.id === 'time')!.label, 'Time and tips');
 });
 
@@ -61,7 +68,8 @@ test('two different businesses do not start with the same dashboard', () => {
   const b = business('hotel_lodging', { state: 'OH', locations: [{ name: 'Inn', city: 'Columbus', state: 'OH' }], team: '26-50', frequency: { value: 'biweekly', weekday: 'thursday' }, departments: { on: true, names: [] }, seasonal: { on: true }, service: { on: true } });
   const ca = a.get(a['store'].companies.all()[0]!.id).config;
   const cb = b.svc.get(b.company.id).config;
-  assert.notDeepEqual(types(ca), types(cb));
+  const sig = (c: DashboardConfig) => c.tabs.find((t) => t.id === 'overview')!.widgets.map((w) => `${w.type}:${w.settings.module ?? ''}`);
+  assert.notDeepEqual(sig(ca), sig(cb));
 });
 
 test('every starting dashboard is valid and every card in it is available to the business', () => {

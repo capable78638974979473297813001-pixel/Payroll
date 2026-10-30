@@ -51,12 +51,12 @@ async function signUpAndVerify(page, base, { business = 'Harbor Street Kitchen' 
   await page.fill('input[name=email]', email);
   await page.fill('input[name=password]', 'a-good-password');
   await page.check('input[name=terms]');
-  await page.click('button[type=submit]');
+  await page.click('form button[type=submit]');
   await page.waitForURL('**/signup/verify');
   const code = (await page.locator('[data-testid=dev-code]').textContent()).match(/\d{6}/)[0];
-  await page.locator('.code-box').first().click();
+  await page.locator('.cb-in').first().click();
   await page.keyboard.type(code);
-  await page.click('button[type=submit]');
+  await page.click('form button[type=submit]');
   await page.waitForURL('**/setup/industry');
   return { email, code };
 }

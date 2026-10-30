@@ -2,7 +2,7 @@ import { h } from '../dom.js';
 import { api } from '../api.js';
 import { navigate } from '../router.js';
 import { Button, Field, icon, modal, setLoading, toast } from '../ui.js';
-import { appPage, cardElement } from './shell.js';
+import { appPage, cardElement, subline } from './shell.js';
 import { app, base, loadApp } from './state.js';
 import { SWATCHES, LOOKS, accentOnCard } from '../theme.js';
 
@@ -14,7 +14,7 @@ const RESERVED = new Set(['contractors', 'login', 'signup', 'setup', 'join', 'ap
 
 export function helpPage() {
   return async (ctx) => appPage(ctx, { active: 'help', title: 'Help', render: ({ t }) => h('div', { class: 'stack', style: { '--gap': '20px', maxWidth: '720px' } },
-    h('div', { class: 'dash-title' }, h('h1', {}, 'Help')),
+    h('div', { class: 'ph2' }, h('div', {}, h('h1', { class: 'pt' }, 'Help'), h('p', {}, 'Answers, and a person to ask.'))),
     h('section', { class: 'card', style: { '--span': 12 } }, h('h3', { class: 'card-title' }, 'Getting started'), h('ul', { class: 'row-list' },
       h('li', {}, h('span', {}, `Add your ${t('people').toLowerCase()} and invite them to fill in their forms.`)),
       h('li', {}, h('span', {}, 'Enter hours and tips, then run payroll. Totali calculates every paycheck and tax.')),
@@ -63,9 +63,14 @@ export function dashboardTab() {
     function view(tab, { config, t, data, dash }) {
       const grid = h('div', { class: 'grid', 'data-testid': 'grid' });
       for (const w of tab.widgets) grid.append(cardElement(w, { config, t, data, dash, tools: st.editing ? tools(tab, w) : null }));
-      if (!tab.widgets.length) grid.append(h('div', { class: 'card', style: { '--span': 12 } }, h('div', { class: 'empty' }, st.editing ? 'This tab is empty. Add a card to start.' : 'This tab is empty.', st.editing ? null : [' ', h('button', { class: 'btn btn-text btn-sm', type: 'button', onClick: startEdit }, 'Customize')])));
+      if (!tab.widgets.length) grid.append(h('div', { class: 'card', style: { '--span': 12 } }, h('div', { class: 'empty' }, st.editing ? 'This tab is empty. Add a card to start.' : 'This tab is empty.', st.editing ? null : [' ', h('button', { class: 'link as-button', type: 'button', onClick: startEdit }, 'Customize')])));
       if (st.editing) grid.append(h('button', { class: 'card add-slot', type: 'button', style: { '--span': 4, alignItems: 'center', justifyContent: 'center', minHeight: '120px', border: '2px dashed var(--d-line)', background: 'none', cursor: 'pointer', color: 'var(--d-muted)', fontWeight: 700 }, onClick: () => openPanel('add') }, '+ Add a card'));
-      return h('div', {}, h('div', { class: 'dash-title' }, h('h1', {}, tab.label), st.editing ? null : Button({ variant: 'secondary', size: 'md', type: 'button', onClick: startEdit, 'data-testid': 'customize' }, icon('plus'), 'Customize')), grid);
+      const first = tab.id === config.tabs.find((x) => x.kind === 'page').id;
+      return h('div', {}, h('div', { class: 'ph2' }, h('div', {}, h('h1', { class: 'pt' }, first ? config.brand.name : tab.label), first ? h('p', {}, subline(data)) : null),
+        h('div', { class: 'acts' },
+          first ? Button({ variant: 'ghost', size: 'sm', href: '/app/people/new' }, 'Add employee') : null,
+          first ? Button({ size: 'sm', href: '/app/payroll/run' }, t('payroll') === 'Payroll' ? 'Run payroll' : `Run ${t('payroll').toLowerCase()}`) : null,
+          st.editing ? null : Button({ variant: 'ghost', size: 'sm', type: 'button', onClick: startEdit, 'data-testid': 'customize' }, 'Customize'))), grid);
     }
 
     // ------------------------------------------------------------ edit mode
@@ -85,7 +90,7 @@ export function dashboardTab() {
       const reset = Button({ variant: 'secondary', size: 'sm', type: 'button', onClick: confirmReset }, 'Start over');
       const undo = app.dash.revisions.length ? Button({ variant: 'secondary', size: 'sm', type: 'button', onClick: confirmUndo }, 'Undo last save') : null;
       return h('div', { class: 'editbar', role: 'toolbar', 'aria-label': 'Customize your dashboard' },
-        h('span', { class: 'label-mono' }, 'Customizing your dashboard'),
+        h('span', { class: 'eb-label' }, 'Customizing your dashboard'),
         Button({ variant: 'secondary', size: 'sm', type: 'button', onClick: () => openPanel('add'), 'data-testid': 'open-add' }, 'Add a card'),
         Button({ variant: 'secondary', size: 'sm', type: 'button', onClick: () => openPanel('theme'), 'data-testid': 'open-theme' }, 'Look'),
         Button({ variant: 'secondary', size: 'sm', type: 'button', onClick: () => openPanel('words'), 'data-testid': 'open-words' }, 'Words'),
@@ -131,15 +136,15 @@ export function dashboardTab() {
       const values = { ...w.settings };
       const fields = d.settings.map((s) => {
         if (s.type === 'toggle') return h('label', { class: 'check' }, h('input', { type: 'checkbox', name: s.key, checked: !!values[s.key], onChange: (e) => { values[s.key] = e.target.checked; } }), h('span', {}, s.label));
-        if (w.type === 'state_card' && s.key === 'state') return h('div', {}, h('span', { class: 'field-lab' }, s.label), h('select', { class: 'input', name: s.key, onChange: (e) => { values.state = e.target.value; } }, ...app.dash.states.map((c) => h('option', { value: c, selected: c === values.state }, c))));
-        if (s.type === 'select') return h('div', {}, h('span', { class: 'field-lab' }, s.label), h('select', { class: 'input', name: s.key, onChange: (e) => { values[s.key] = e.target.value; } }, ...s.options.map((o) => h('option', { value: o.value, selected: o.value === values[s.key] }, o.label))));
+        if (w.type === 'state_card' && s.key === 'state') return h('div', {}, h('span', { class: 'field-lab' }, s.label), h('select', { class: 'in', name: s.key, onChange: (e) => { values.state = e.target.value; } }, ...app.dash.states.map((c) => h('option', { value: c, selected: c === values.state }, c))));
+        if (s.type === 'select') return h('div', {}, h('span', { class: 'field-lab' }, s.label), h('select', { class: 'in', name: s.key, onChange: (e) => { values[s.key] = e.target.value; } }, ...s.options.map((o) => h('option', { value: o.value, selected: o.value === values[s.key] }, o.label))));
         if (s.type === 'multi') return h('div', {}, h('span', { class: 'field-lab' }, s.label), h('div', { class: 'stack', style: { '--gap': '8px' } }, ...s.options.map((o) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: (values[s.key] || []).includes(o.value), onChange: (e) => { const set = new Set(values[s.key] || []); e.target.checked ? set.add(o.value) : set.delete(o.value); values[s.key] = [...set]; } }), h('span', {}, o.label)))));
-        if (s.type === 'number') return h('div', {}, h('span', { class: 'field-lab' }, s.label), h('input', { class: 'input', name: s.key, type: 'number', min: s.min, max: s.max, value: String(values[s.key]), onInput: (e) => { values[s.key] = Math.floor(Number(e.target.value)); } }));
-        return h('div', {}, h('span', { class: 'field-lab' }, s.label), (s.maxLength || 0) > 100 ? h('textarea', { class: 'input', name: s.key, rows: 5, maxlength: s.maxLength, onInput: (e) => { values[s.key] = e.target.value; } }, values[s.key] || '') : h('input', { class: 'input', name: s.key, type: 'text', maxlength: s.maxLength, value: values[s.key] || '', onInput: (e) => { values[s.key] = e.target.value; } }));
+        if (s.type === 'number') return h('div', {}, h('span', { class: 'field-lab' }, s.label), h('input', { class: 'in', name: s.key, type: 'number', min: s.min, max: s.max, value: String(values[s.key]), onInput: (e) => { values[s.key] = Math.floor(Number(e.target.value)); } }));
+        return h('div', {}, h('span', { class: 'field-lab' }, s.label), (s.maxLength || 0) > 100 ? h('textarea', { class: 'in', name: s.key, rows: 5, maxlength: s.maxLength, onInput: (e) => { values[s.key] = e.target.value; } }, values[s.key] || '') : h('input', { class: 'in', name: s.key, type: 'text', maxlength: s.maxLength, value: values[s.key] || '', onInput: (e) => { values[s.key] = e.target.value; } }));
       });
       const pages = st.draft.tabs.filter((x) => x.kind === 'page');
       let target = tab.id;
-      const mv = pages.length > 1 ? h('div', {}, h('span', { class: 'field-lab' }, 'Show on tab'), h('select', { class: 'input', onChange: (e) => { target = e.target.value; } }, ...pages.map((p) => h('option', { value: p.id, selected: p.id === tab.id }, p.label)))) : null;
+      const mv = pages.length > 1 ? h('div', {}, h('span', { class: 'field-lab' }, 'Show on tab'), h('select', { class: 'in', onChange: (e) => { target = e.target.value; } }, ...pages.map((p) => h('option', { value: p.id, selected: p.id === tab.id }, p.label)))) : null;
       const apply = Button({ variant: 'primary', 'data-testid': 'card-done' }, 'Done');
       const m = modal({ title: d.label, body: h('div', { class: 'dash stack', style: { '--gap': '20px', background: 'transparent' } }, h('p', { class: 'muted', style: { margin: 0 } }, d.description), ...fields, mv), actions: [Button({ variant: 'secondary', onClick: () => m.close() }, 'Cancel'), apply] });
       apply.addEventListener('click', () => {
@@ -186,7 +191,7 @@ export function dashboardTab() {
       document.body.append(drawerEl);
       renderPanel();
     }
-    const optGrid = (options, current, onPick, label) => h('div', { class: 'opt-grid', role: 'group', 'aria-label': label }, ...options.map((o) => h('button', { class: 'opt', type: 'button', 'aria-pressed': String(String(o.value) === String(current)), 'data-value': o.value, onClick: () => { onPick(o.value); renderPanel(); draw(); } }, o.label)));
+    const optGrid = (options, current, onPick, label) => h('div', { class: 'opt-grid', role: 'group', 'aria-label': label }, ...options.map((o) => h('button', { class: 'sel-opt', type: 'button', 'aria-pressed': String(String(o.value) === String(current)), 'data-value': o.value, onClick: () => { onPick(o.value); renderPanel(); draw(); } }, o.label)));
 
     function renderPanel() {
       if (!drawerEl) return;
@@ -212,12 +217,12 @@ export function dashboardTab() {
       const th = st.draft.theme;
       const warnEl = h('div', { class: 'warnline', role: 'status' });
       const warn = () => { const r = accentOnCard(th); warnEl.textContent = key === 'accent' && r < 3 ? `This color is hard to read as numbers on your cards (${r.toFixed(1)} to 1). Pick a darker one, or change the mode.` : ''; };
-      const hexIn = h('input', { class: 'input', type: 'text', value: th[key], maxlength: 7, 'aria-label': `${label} hex`, style: { width: '110px' }, onInput: (e) => { const v = e.target.value.trim(); if (/^#[0-9a-fA-F]{6}$/.test(v)) { th[key] = v.toLowerCase(); draw(); warn(); } } });
+      const hexIn = h('input', { class: 'in', type: 'text', value: th[key], maxlength: 7, 'aria-label': `${label} hex`, style: { width: '110px' }, onInput: (e) => { const v = e.target.value.trim(); if (/^#[0-9a-fA-F]{6}$/.test(v)) { th[key] = v.toLowerCase(); draw(); warn(); } } });
       const pick = h('input', { type: 'color', value: th[key], 'aria-label': `${label} picker`, style: { width: '44px', height: '40px', padding: 0, border: 0, background: 'none' }, onInput: (e) => { th[key] = e.target.value; hexIn.value = e.target.value; draw(); warn(); } });
       warn();
       return h('div', { class: 'stack', style: { '--gap': '8px' } }, h('span', { class: 'field-lab' }, label),
         h('div', { class: 'swatches' }, ...SWATCHES.map((s) => h('button', { class: 'swatch', type: 'button', style: { background: s }, 'aria-label': `${label} ${s}`, 'aria-pressed': String(th[key] === s), 'data-color': s, onClick: () => { th[key] = s; renderPanel(); draw(); } }))),
-        h('div', { class: 'row', style: { gap: '8px' } }, pick, hexIn), warnEl);
+        h('div', { class: 'hrow', style: { gap: '8px' } }, pick, hexIn), warnEl);
     }
 
     function themePanel(c) {
@@ -251,7 +256,7 @@ export function dashboardTab() {
       const list = h('div', { class: 'stack', style: { '--gap': '8px' } });
       const rows = () => list.replaceChildren(...c.tabs.map((tab, i) => {
         const fixed = tab.kind !== 'page';
-        const input = h('input', { class: 'input', value: tab.label, maxlength: 24, 'aria-label': `Name of tab ${i + 1}`, onInput: (e) => { if (e.target.value.trim()) { tab.label = e.target.value.trim(); draw(); } } });
+        const input = h('input', { class: 'in', value: tab.label, maxlength: 24, 'aria-label': `Name of tab ${i + 1}`, onInput: (e) => { if (e.target.value.trim()) { tab.label = e.target.value.trim(); draw(); } } });
         const mv = (d) => { const j = i + d; if (j < 0 || j >= c.tabs.length) return; [c.tabs[i], c.tabs[j]] = [c.tabs[j], c.tabs[i]]; rows(); draw(); };
         return h('div', { class: 'tab-row', 'data-tab-row': tab.id }, input,
           h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Move ${tab.label} up`, disabled: i === 0, onClick: () => mv(-1) }, icon('up')),

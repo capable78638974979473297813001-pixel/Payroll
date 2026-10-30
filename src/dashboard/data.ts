@@ -5,6 +5,7 @@ import type { Store } from '../store/store.ts';
 import type { Company, Employee, PayRun } from '../domain/types.ts';
 import { nextPayday } from '../payroll/schedule.ts';
 import { availabilityFor } from './defaults.ts';
+import { stateFacts } from '../builder/facts.ts';
 
 /** One employee's new-hire forms. A person added directly has nothing recorded, so only what is known counts as done. */
 export function formsOf(e: Employee, wantsStateForm: boolean) {
@@ -21,6 +22,27 @@ const monthsAgo = (iso: string, today: string) => daysBetween(iso, today);
 function totalsOf(run: PayRun | undefined) {
   if (!run) return null;
   return { id: run.id, periodStart: run.periodStart, periodEnd: run.periodEnd, checkDate: run.checkDate, status: run.status, employees: run.paychecks.length, grossCents: run.totals.grossCents, netCents: run.totals.payableCents + run.totals.cashTipsCents, payableCents: run.totals.payableCents, employeeTaxCents: run.totals.employeeTaxCents, employerTaxCents: run.totals.employerTaxCents, deductionsCents: run.totals.deductionsCents, totalCostCents: run.totals.grossCents + run.totals.employerTaxCents };
+}
+
+const TEAM_WORDS: Record<string, string> = { '1-10': '1 to 10 people', '11-25': '11 to 25 people', '26-50': '26 to 50 people', '51-100': '51 to 100 people', '100+': 'More than 100 people' };
+const FREQ_WORDS: Record<string, string> = { weekly: 'Weekly', biweekly: 'Every other week', semimonthly: 'Twice a month', monthly: 'Monthly' };
+const list = (xs: string[]) => (xs.length <= 2 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
+
+/** The setup answers as short phrases, for the "Built from your answers" strip. Only what was actually answered. */
+function answerChips(company: Company, a: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const state = typeof a.state === 'string' ? a.state : company.homeState;
+  try { out.push(stateFacts(state, new Date().toISOString().slice(0, 10)).name); } catch { out.push(state); }
+  const locs = Array.isArray(a.locations) ? (a.locations as Array<{ name?: string }>).map((l) => l.name).filter((x): x is string => !!x) : [];
+  if (locs.length) out.push(list(locs));
+  if (typeof a.team === 'string') out.push(TEAM_WORDS[a.team] ?? a.team);
+  const tips = a.tips as { on?: boolean } | undefined;
+  if (tips?.on) out.push('Tipped staff');
+  const f = a.frequency as { value?: string } | undefined;
+  if (f?.value) out.push(FREQ_WORDS[f.value] ?? f.value);
+  const c = a.contractors as { on?: boolean } | undefined;
+  if (c?.on) out.push('Contractors');
+  return out;
 }
 
 /** Everything the dashboard's cards show, in one read. Empty where there is nothing yet. */
@@ -113,6 +135,16 @@ export function dashboardData(store: Store, company: Company, today: string) {
   // ---- state cards
   const stateCards = a.build.modules.filter((m) => m.id.startsWith('state_')).map((m) => ({ code: m.id.slice(6).toUpperCase(), name: m.label, items: m.items }));
 
+  // ---- what the setup built: its sections, and the answers behind them, in words
+  const answers = company.setup?.answers ?? {};
+  const modules = a.build.modules.map((m) => ({ id: m.id, label: m.label, items: m.items }));
+  const built = {
+    modules,
+    counts: a.build.counts,
+    leftOut: a.build.leftOut,
+    answers: answerChips(company, answers),
+  };
+
   // ---- the niche's reminders for this state
   let checklist: Array<{ id: string; title: string; detail: string; when: string; notModelled: boolean; verified: boolean }> = [];
   try {
@@ -132,6 +164,7 @@ export function dashboardData(store: Store, company: Company, today: string) {
     tipPool,
     onboarding,
     stateCards,
+    built,
     checklist,
     people: active.slice(0, 200).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`, role: roles.get(e.roleKey)?.label ?? e.roleKey, pay: e.payType.kind === 'hourly' ? { kind: 'hourly', cents: e.payType.rateCents } : { kind: 'salary', cents: e.payType.annualCents }, location: e.location ?? null, done: formsOf(e, wantsStateForm).done })),
     contractors: { count: 0, w9: 0, ytdCents: 0 },

@@ -33,6 +33,19 @@ export function link(path, props = {}, ...children) {
   return a;
 }
 
+/** Make every in-app link inside static markup go through the router instead of reloading the page. */
+export function wireLinks(root) {
+  for (const a of root.querySelectorAll('a[href^="/"]')) {
+    if (a.dataset.wired) continue;
+    a.dataset.wired = '1';
+    a.addEventListener('click', (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      navigate(a.getAttribute('href'));
+    });
+  }
+}
+
 export function currentRoute() {
   return { path: location.pathname, query: new URLSearchParams(location.search) };
 }
@@ -57,6 +70,8 @@ export async function render() {
   if (render.token !== token) return; // a newer navigation won
   current = out && out.el ? out : { el: out };
   document.title = (out && out.title) || 'Totali';
+  // The design's marketing page sits on a plain body; every other screen uses the app body.
+  document.body.className = out && out.bodyClass !== undefined ? out.bodyClass : 'tapp';
   rootEl.replaceChildren(current.el);
   window.scrollTo(0, 0);
   const focusTarget = current.el.querySelector('[data-autofocus]');

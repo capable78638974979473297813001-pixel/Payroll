@@ -210,10 +210,22 @@ export function normalizeAnswers(industry: IndustryId, raw: unknown, date: strin
 
 // ---------------------------------------------------------------- the plan
 
+/**
+ * How an item sits in the business: auto (Totali does it), manual (you enter it each time), open (an action you take),
+ * setup (needs a choice from you), todo (needs something from you before it works), reference (a rule shown for
+ * your information, which Totali does not enforce), added (you chose it), ready (waiting for you to use it).
+ */
+export type ItemStatus = 'auto' | 'manual' | 'open' | 'setup' | 'todo' | 'reference' | 'added' | 'ready' | 'toset';
+
 export interface BuiltItem {
   id: string;
   label: string;
   form: boolean;
+  /** The one line under the name. */
+  note: string;
+  status: ItemStatus;
+  /** Text for the chip when it is not the status's own word (Weekly, for a pay schedule that has been set). */
+  chip?: string;
   detail?: string;
   /** The question that put it here. */
   source: string;
@@ -248,14 +260,14 @@ class Plan {
     }
     return m;
   }
-  item(modId: string, it: { id: string; label: string; form?: boolean; detail?: string; live?: boolean }, source: string): void {
+  item(modId: string, it: { id: string; label: string; note?: string; status?: ItemStatus; chip?: string; form?: boolean; detail?: string; live?: boolean }, source: string): void {
     const m = this.mods.get(modId);
     if (!m) return;
     if (it.live === false) {
       this.soon.push({ id: it.id, label: it.label, why: 'Coming soon', soon: true });
       return;
     }
-    if (!m.items.some((x) => x.id === it.id)) m.items.push({ id: it.id, label: it.label, form: !!it.form, ...(it.detail ? { detail: it.detail } : {}), source });
+    if (!m.items.some((x) => x.id === it.id)) m.items.push({ id: it.id, label: it.label, form: !!it.form, note: it.note ?? '', status: it.status ?? 'auto', ...(it.chip ? { chip: it.chip } : {}), ...(it.detail ? { detail: it.detail } : {}), source });
   }
   drop(modId: string, itemId: string): void {
     const m = this.mods.get(modId);
@@ -272,29 +284,34 @@ function frequencyLabel(f: NonNullable<Answers['frequency']>): string {
   return 'Monthly';
 }
 
+const FREQ_CHIP: Record<Frequency, string> = { weekly: 'Weekly', biweekly: 'Every other week', semimonthly: 'Twice a month', monthly: 'Monthly' };
+
 function plan(industry: IndustryId, a: Answers, date: string): Plan {
   const p = new Plan();
   const restaurant = industry === 'restaurant';
+  const teamLabel = a.team ? (TEAM_SIZES.find((t) => t.value === a.team)?.label ?? '').replace(' people', '') : '';
 
   // ---- the base every business starts with
   p.module('pay_run', 'Pay run', 'Schedule, overtime flags and pay stubs.', 'base');
-  p.item('pay_run', { id: 'pay_schedule', label: 'Pay schedule', ...(a.frequency ? { detail: frequencyLabel(a.frequency) } : {}) }, 'base');
-  p.item('pay_run', { id: 'overtime_flags', label: 'Overtime flags' }, 'base');
-  p.item('pay_run', { id: 'pay_stubs', label: 'Pay stubs' }, 'base');
+  p.item('pay_run', a.frequency
+    ? { id: 'pay_schedule', label: 'Pay schedule', note: `${frequencyLabel(a.frequency).replace(', paid ', ', paid on ')}.`, status: 'auto', chip: FREQ_CHIP[a.frequency.value], detail: frequencyLabel(a.frequency) }
+    : { id: 'pay_schedule', label: 'Pay schedule', note: 'Not set yet. Choose how often you pay', status: 'toset' }, 'base');
+  p.item('pay_run', { id: 'overtime_flags', label: 'Overtime flags', note: 'Hours over 40 are marked for review before approval', status: 'auto' }, 'base');
+  p.item('pay_run', { id: 'pay_stubs', label: 'Pay stubs', note: 'One for each employee when you approve', status: 'auto' }, 'base');
   p.module('team', 'Team', 'Everyone you pay.', 'base');
-  p.item('team', { id: 'roster', label: 'Team roster' }, 'base');
+  p.item('team', { id: 'roster', label: 'Employees', note: 'Add people one at a time or send an invite link', status: 'open' }, 'base');
   const hoursId = restaurant ? 'hours_tips' : 'hours';
-  p.module(hoursId, restaurant ? 'Hours and tips' : 'Hours', restaurant ? 'Shift hours and tip entry.' : 'Hours worked, with overtime.', 'base');
-  p.item(hoursId, { id: 'hours_entry', label: 'Hours entry' }, 'base');
-  if (restaurant) p.item(hoursId, { id: 'tip_entry', label: 'Tip entry' }, 'base');
+  p.module(hoursId, restaurant ? 'Time and tips' : 'Hours', restaurant ? 'Shift hours and tip entry.' : 'Hours worked, with overtime.', 'base');
+  p.item(hoursId, { id: 'hours_entry', label: 'Hours', note: 'Enter by week or import a spreadsheet', status: 'manual' }, 'base');
+  if (restaurant) p.item(hoursId, { id: 'tip_entry', label: 'Tip entry', note: 'Card and cash tips for each shift', status: 'manual' }, 'base');
   p.module('federal_taxes', 'Federal taxes', 'Income tax, Social Security and Medicare, FUTA.', 'base');
-  p.item('federal_taxes', { id: 'fed_income_tax', label: 'Income tax withholding' }, 'base');
-  p.item('federal_taxes', { id: 'fica', label: 'Social Security and Medicare' }, 'base');
-  p.item('federal_taxes', { id: 'futa', label: 'FUTA' }, 'base');
-  p.module('new_hire_forms', 'New-hire forms', 'What each new hire fills in on their phone.', 'base');
-  p.item('new_hire_forms', { id: 'form_w4', label: 'W-4', form: true }, 'base');
-  p.item('new_hire_forms', { id: 'form_i9', label: 'I-9', form: true }, 'base');
-  p.item('new_hire_forms', { id: 'form_direct_deposit', label: 'Direct deposit', form: true }, 'base');
+  p.item('federal_taxes', { id: 'fed_income_tax', label: 'Federal income tax', note: 'From each employee’s W-4', status: 'auto' }, 'base');
+  p.item('federal_taxes', { id: 'fica', label: 'Social Security and Medicare', note: 'Employee and employer shares', status: 'auto' }, 'base');
+  p.item('federal_taxes', { id: 'futa', label: 'FUTA', note: 'Employer federal unemployment', status: 'auto' }, 'base');
+  p.module('new_hire_forms', 'New-hire paperwork', 'What each new hire fills in on their phone.', 'base');
+  p.item('new_hire_forms', { id: 'form_w4', label: 'W-4', note: 'Federal withholding form, filled in on the employee’s phone', status: 'auto', form: true }, 'base');
+  p.item('new_hire_forms', { id: 'form_i9', label: 'I-9', note: 'Employee fills in section 1; you complete section 2', status: 'auto', form: true }, 'base');
+  p.item('new_hire_forms', { id: 'form_direct_deposit', label: 'Direct deposit form', note: 'Bank details collected for setup', status: 'auto', form: true }, 'base');
 
   // ---- state cards: the home state, plus any other state a location is in
   const states: string[] = [];
@@ -304,35 +321,39 @@ function plan(industry: IndustryId, a: Answers, date: string): Plan {
     const f = stateFacts(code, date);
     const id = `state_${code.toLowerCase()}`;
     const src = code === a.state ? 'state' : 'locations';
-    p.module(id, f.name, `${f.name} taxes, forms and reference rules.`, src);
-    if (f.incomeTax) p.item(id, { id: `${id}_withholding`, label: 'State income tax withholding' }, src);
-    if (f.form) p.item(id, { id: `${id}_form`, label: f.form.label, form: true, detail: 'Collected from each new hire' }, src);
-    p.item(id, { id: `${id}_unemployment`, label: 'State unemployment account' }, src);
-    p.item(id, { id: `${id}_min_wage`, label: 'Minimum wage reference' }, src);
-    if (f.sickLeaveLaw) p.item(id, { id: `${id}_sick_leave`, label: 'Earned sick time reference' }, src);
+    p.module(id, f.name, `${f.name} taxes and reference rules.`, src);
+    // The state's own form is something a new hire fills in, so it sits with the other forms.
+    if (f.form) p.item('new_hire_forms', { id: `${id}_form`, label: f.form.label, note: `${f.name} withholding form, added for your state`, status: 'auto', form: true }, src);
+    if (f.incomeTax) p.item(id, { id: `${id}_withholding`, label: `${f.name} income tax withholding`, note: f.form ? `Uses each employee’s ${f.form.label}` : 'From each employee’s state certificate', status: 'auto' }, src);
+    p.item(id, { id: `${id}_unemployment`, label: 'Unemployment account', note: code === 'MI' ? 'Add your UIA employer account number' : 'Add your state unemployment account number', status: 'todo' }, src);
+    p.item(id, { id: `${id}_min_wage`, label: 'Minimum wage reference', note: 'Shown beside each hourly rate', status: 'reference' }, src);
+    if (f.sickLeaveLaw) p.item(id, { id: `${id}_sick_leave`, label: 'Earned sick time', note: 'Your state has a sick leave law. Totali shows the rule; it does not track the hours', status: 'reference' }, src);
   }
 
   // ---- locations: a city with its own tax adds it to its state's card; two or more add a Locations card
   const locs = a.locations ?? [];
   for (const l of locs) {
     const lt = localTax(l.state, l.city, date);
-    if (lt) p.item(`state_${l.state.toLowerCase()}`, { id: `city_tax_${slug(lt.city)}`, label: `${lt.city} city income tax` }, 'locations');
+    if (lt) p.item(`state_${l.state.toLowerCase()}`, { id: `city_tax_${slug(lt.city)}`, label: `${lt.city} city income tax`, note: `For staff who work in ${lt.city}, resident and non-resident`, status: 'auto' }, 'locations');
   }
   if (locs.length >= 2) {
     p.module('locations', 'Locations', 'Where your people work.', 'locations');
-    for (const l of locs) p.item('locations', { id: `loc_${slug(l.name)}`, label: l.name, ...(l.city.toLowerCase() !== l.name.toLowerCase() ? { detail: l.city } : {}) }, 'locations');
+    for (const l of locs) {
+      const taxed = !!localTax(l.state, l.city, date);
+      p.item('locations', { id: `loc_${slug(l.name)}`, label: l.name, note: `Work location · ${taxed ? 'city income tax applies' : 'no city tax set up'}`, status: 'added', ...(l.city.toLowerCase() !== l.name.toLowerCase() ? { detail: l.city } : {}) }, 'locations');
+    }
   }
 
   // ---- team size
-  if (a.team && a.team !== '1-10') p.item('team', { id: 'bulk_invite', label: 'Bulk invite by spreadsheet' }, 'team');
+  if (a.team && a.team !== '1-10') p.item('team', { id: 'bulk_invite', label: 'Bulk invite', note: `Upload a spreadsheet for a team of ${teamLabel}`, status: 'added' }, 'team');
 
   // ---- industry rules
   if (restaurant && a.tips) {
     if (a.tips.on) {
-      p.item(hoursId, { id: 'tip_reporting', label: 'Tip reporting' }, 'tips');
-      if (a.tips.pool !== 'none') p.item(hoursId, { id: 'tip_pool', label: a.tips.pool === 'hours' ? 'Tip pool split by hours' : 'Tip pool split by role' }, 'tips');
-      if (a.state) p.item(`state_${a.state.toLowerCase()}`, { id: 'tip_credit_ref', label: 'Tip credit reference' }, 'tips');
-      p.item('federal_taxes', { id: 'tips_taxable', label: 'Tips counted in taxable wages' }, 'tips');
+      p.item(hoursId, { id: 'tip_reporting', label: 'Tip reporting', note: 'Tips show on each stub and count toward taxable pay', status: 'auto' }, 'tips');
+      if (a.tips.pool !== 'none') p.item(hoursId, { id: 'tip_pool', label: 'Tip pool', note: a.tips.pool === 'hours' ? 'Split by hours worked' : 'Split by role', status: 'setup', detail: a.tips.pool === 'hours' ? 'Split by hours' : 'Split by role' }, 'tips');
+      if (a.state) p.item(`state_${a.state.toLowerCase()}`, { id: 'tip_credit_ref', label: 'Tip credit reference', note: 'Shown when you set tipped base rates', status: 'reference' }, 'tips');
+      p.item('federal_taxes', { id: 'tips_taxable', label: 'Tips in taxable wages', note: 'Included when taxes are worked out', status: 'auto' }, 'tips');
     } else {
       p.drop(hoursId, 'tip_entry');
     }
@@ -340,36 +361,36 @@ function plan(industry: IndustryId, a: Answers, date: string): Plan {
   if (industry === 'hotel_lodging') {
     if (a.departments?.on) {
       p.module('departments', 'Departments', 'Tag people to departments.', 'departments');
-      p.item('departments', { id: 'dept_tags', label: 'Department tags', ...(a.departments.names.length ? { detail: a.departments.names.join(', ') } : {}) }, 'departments');
-      p.item('departments', { id: 'dept_costs', label: 'Labor cost by department' }, 'departments');
+      p.item('departments', { id: 'dept_tags', label: 'Department tags', note: a.departments.names.length ? a.departments.names.join(', ') : 'Tag each person to a department', status: 'open', ...(a.departments.names.length ? { detail: a.departments.names.join(', ') } : {}) }, 'departments');
+      p.item('departments', { id: 'dept_costs', label: 'Labor cost by department', note: 'Hours and cost for each department', status: 'auto' }, 'departments');
     }
     if (a.seasonal?.on) {
       p.module('seasonal', 'Seasonal staff', 'Season dates and who is ending.', 'seasonal');
-      p.item('seasonal', { id: 'seasonal_dates', label: 'Season start and end dates' }, 'seasonal');
-      p.item('seasonal', { id: 'seasonal_ending', label: 'Ending soon' }, 'seasonal');
+      p.item('seasonal', { id: 'seasonal_dates', label: 'Season start and end dates', note: 'Set on each seasonal person', status: 'open' }, 'seasonal');
+      p.item('seasonal', { id: 'seasonal_ending', label: 'Ending soon', note: 'Who is about to finish their season', status: 'auto' }, 'seasonal');
     }
     if (a.service?.on) {
-      p.module(hoursId, 'Hours and tips', 'Hours, tips and service charges.', 'service');
-      p.item(hoursId, { id: 'tip_entry', label: 'Tip entry' }, 'service');
-      p.item(hoursId, { id: 'service_charge', label: 'Service charge distribution' }, 'service');
-      p.item('federal_taxes', { id: 'tips_taxable', label: 'Tips counted in taxable wages' }, 'service');
+      p.module(hoursId, 'Time and tips', 'Hours, tips and service charges.', 'service');
+      p.item(hoursId, { id: 'tip_entry', label: 'Tip entry', note: 'Card and cash tips for each shift', status: 'manual' }, 'service');
+      p.item(hoursId, { id: 'service_charge', label: 'Service charge distribution', note: 'A mandatory service charge paid to staff is wages', status: 'setup' }, 'service');
+      p.item('federal_taxes', { id: 'tips_taxable', label: 'Tips in taxable wages', note: 'Included when taxes are worked out', status: 'auto' }, 'service');
     }
   }
   if (industry === 'construction_trades') {
     if (a.jobs?.on) {
       p.module('job_costing', 'Job costing', 'Hours coded to jobs.', 'jobs');
-      p.item('job_costing', { id: 'job_codes', label: 'Job codes on hours' }, 'jobs');
-      p.item('job_costing', { id: 'job_costs', label: 'Cost by job' }, 'jobs');
+      p.item('job_costing', { id: 'job_codes', label: 'Job codes on hours', note: 'Code each shift to a job', status: 'manual' }, 'jobs');
+      p.item('job_costing', { id: 'job_costs', label: 'Cost by job', note: 'Hours and cost for each job', status: 'auto' }, 'jobs');
     }
     if (a.crews?.on) {
       p.module('crews', 'Crews', 'Tag people to crews.', 'crews');
-      p.item('crews', { id: 'crew_tags', label: 'Crew tags' }, 'crews');
-      p.item('crews', { id: 'crew_hours', label: 'Hours by crew' }, 'crews');
+      p.item('crews', { id: 'crew_tags', label: 'Crew tags', note: 'Tag each person to a crew', status: 'open' }, 'crews');
+      p.item('crews', { id: 'crew_hours', label: 'Hours by crew', note: 'Each crew’s hours this week', status: 'auto' }, 'crews');
     }
     if (a.wc?.on) {
       p.module('workers_comp', 'Workers’ comp classes', 'Payroll by class for your insurer.', 'wc');
-      p.item('workers_comp', { id: 'wc_classes', label: 'Class code per person' }, 'wc');
-      p.item('workers_comp', { id: 'wc_payroll', label: 'Payroll by class' }, 'wc');
+      p.item('workers_comp', { id: 'wc_classes', label: 'Class code per person', note: 'Your insurer assigns the classes', status: 'open' }, 'wc');
+      p.item('workers_comp', { id: 'wc_payroll', label: 'Payroll by class', note: 'For your insurer’s audit', status: 'auto' }, 'wc');
     }
   }
   if (industry === 'office_studios') {
@@ -380,8 +401,8 @@ function plan(industry: IndustryId, a: Answers, date: string): Plan {
     }
     if (a.multistate?.on) {
       p.module('multi_state', 'More than one state', 'Each person taxed by their own state.', 'multistate');
-      p.item('multi_state', { id: 'work_state', label: 'Work state per person' }, 'multistate');
-      p.item('multi_state', { id: 'state_totals', label: 'Taxes by state' }, 'multistate');
+      p.item('multi_state', { id: 'work_state', label: 'Work state per person', note: 'Set on each person', status: 'open' }, 'multistate');
+      p.item('multi_state', { id: 'state_totals', label: 'Taxes by state', note: 'Each state’s totals on every run', status: 'auto' }, 'multistate');
     }
   }
   if (industry === 'delivery_couriers') {
@@ -401,9 +422,9 @@ function plan(industry: IndustryId, a: Answers, date: string): Plan {
   if (a.contractors?.on) {
     const label = industry === 'delivery_couriers' ? 'Contractor drivers' : 'Contractors';
     p.module('contractors', label, 'Kept apart from payroll.', 'contractors');
-    p.item('contractors', { id: 'contractor_1099', label: '1099 tracking', ...(a.contractors.count ? { detail: `About ${a.contractors.count}` } : {}) }, 'contractors');
-    p.item('contractors', { id: 'contractor_w9', label: 'W-9 collection' }, 'contractors');
-    p.item('contractors', { id: 'contractor_pay', label: 'Contractor payments' }, 'contractors');
+    p.item('contractors', { id: 'contractor_1099', label: '1099 contractors', note: 'Payments tracked separately from payroll', status: 'auto', ...(a.contractors.count ? { detail: `About ${a.contractors.count}` } : {}) }, 'contractors');
+    p.item('contractors', { id: 'contractor_w9', label: 'W-9 collection', note: 'Request and store forms', status: 'ready' }, 'contractors');
+    p.item('contractors', { id: 'contractor_pay', label: 'Year totals', note: 'For your records and your accountant', status: 'ready' }, 'contractors');
   }
   return p;
 }

@@ -15,15 +15,15 @@ const counter = async (page) => ({
   const shot = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
   try {
     await signUpAndVerify(page, server.base);
-    await page.waitForSelector('.ind-option');
+    await page.waitForSelector('.indgrid .it');
     await shot('industry');
 
     // five industries, each with its three tags
-    assert.equal(await page.locator('.ind-option').count(), 5);
-    assert.deepEqual(await page.locator('.ind-option').first().locator('.tags span').allTextContents(), ['Tips', 'Shift hours', 'Tip pool']);
+    assert.equal(await page.locator('.indgrid .it').count(), 5);
+    assert.deepEqual(await page.locator('.indgrid .it').first().locator('.tags .chip').allTextContents(), ['Tips', 'Shift hours', 'Tip pool']);
     await page.click('[data-industry=restaurant]');
-    assert.match(await page.locator('button:has-text("Continue with")').textContent(), /Continue with Restaurants/);
-    await page.click('button:has-text("Continue with Restaurants")');
+    assert.match(await page.locator('.indfoot .btn').textContent(), /Continue with Restaurants/);
+    await page.click('.indfoot .btn');
     await page.waitForURL('**/setup/builder');
     await page.waitForSelector('[data-testid=counter]');
 
@@ -33,79 +33,80 @@ const counter = async (page) => ({
 
     // Q1 state: typing "Mi" suggests Michigan, Minnesota ...
     await page.fill('[role=combobox]', 'Mi');
-    const suggestions = await page.locator('.combo-list li b').allTextContents();
+    const suggestions = await page.locator('.dd div').allTextContents();
     assert.ok(suggestions.includes('Michigan') && suggestions.includes('Minnesota'), suggestions.join());
-    await page.click('.combo-list li:has-text("Michigan")');
+    await page.click('.dd div:has-text("Michigan")');
     await page.waitForFunction(() => document.querySelector('[data-count=modules]').textContent === '6');
     assert.deepEqual(await counter(page), { modules: 6, items: 17, forms: 4 });
     assert.ok(await page.locator('[data-module=state_mi]').isVisible());
-    assert.equal(await page.locator('[data-module=state_mi] .new-chip').count(), 1, 'the newest card carries the new chip');
+    assert.equal(await page.locator('[data-module=state_mi] header .chip.new').count(), 1, 'the newest card carries the new chip');
     await shot('builder-michigan');
-    await page.click('.q-nav button:has-text("Continue")');
+    await page.click('.qfoot .btn:has-text("Continue")');
 
     // Q2 locations: Detroit and Ferndale
-    await page.fill('.loc-row >> nth=0 >> input >> nth=0', 'Detroit');
-    await page.click('button:has-text("Add a location")');
-    await page.fill('.loc-row >> nth=1 >> input >> nth=0', 'Ferndale');
+    await page.fill('input[aria-label="Add a city"]', 'Detroit');
+    await page.keyboard.press('Enter');
+    await page.fill('input[aria-label="Add a city"]', 'Ferndale');
+    await page.keyboard.press('Enter');
     await page.waitForFunction(() => document.querySelector('[data-count=modules]').textContent === '7');
     assert.deepEqual(await counter(page), { modules: 7, items: 20, forms: 4 });
     assert.ok(await page.locator('[data-module=state_mi] [data-item=city_tax_detroit]').isVisible(), 'Detroit city tax sits inside the Michigan card');
     assert.equal(await page.locator('[data-item*=ferndale]').count(), 1, 'Ferndale only appears in the Locations card');
     assert.ok(await page.locator('[data-module=locations]').isVisible());
     await shot('builder-locations');
-    await page.click('.q-nav button:has-text("Continue")');
+    await page.click('.qfoot .btn:has-text("Continue")');
 
     // Q3 team size
-    await page.click('.choice:has-text("11 to 25")');
+    await page.click('.opt:has-text("11 to 25")');
     await page.waitForFunction(() => document.querySelector('[data-count=items]').textContent === '21');
     assert.ok(await page.locator('[data-item=bulk_invite]').isVisible());
-    await page.click('.q-nav button:has-text("Continue")');
+    await page.click('.qfoot .btn:has-text("Continue")');
 
     // Q4 tips
-    await page.click('.choice:has-text("Yes, they earn tips")');
+    await page.click('.opt[data-value=yes]');
     await page.waitForFunction(() => document.querySelector('[data-count=items]').textContent === '25');
     assert.ok(await page.locator('[data-item=tip_reporting]').isVisible());
     assert.ok(await page.locator('[data-module=state_mi] [data-item=tip_credit_ref]').isVisible());
     assert.ok(await page.locator('[data-module=federal_taxes] [data-item=tips_taxable]').isVisible());
     await shot('builder-tips');
-    await page.click('.q-nav button:has-text("Continue")');
+    await page.click('.qfoot .btn:has-text("Continue")');
 
     // Q5 pay frequency: weekly, Fridays (the default day)
-    await page.click('.choice:has-text("Weekly")');
-    await page.waitForFunction(() => document.querySelector('[data-item=pay_schedule] small')?.textContent === 'Weekly, paid Fridays');
-    await page.click('.q-nav button:has-text("Continue")');
+    await page.click('.opt[data-value=weekly]');
+    await page.waitForFunction(() => document.querySelector('[data-item=pay_schedule] .lt i')?.textContent === 'Weekly, paid on Fridays.');
+    await page.click('.qfoot .btn:has-text("Continue")');
 
     // Q6 contractors: yes, about 2
-    await page.click('.choice:has-text("Yes")');
+    await page.click('.opt[data-value=yes]');
     await page.waitForFunction(() => document.querySelector('[data-count=modules]').textContent === '8');
     assert.deepEqual(await counter(page), { modules: 8, items: 28, forms: 4 });
-    assert.deepEqual(await page.locator('[data-testid=left-out]').count(), 0, 'nothing is left out at the end');
+    assert.equal(await page.locator('[data-testid=left-out]').textContent(), 'Nothing left out.', 'nothing is left out at the end');
     await shot('builder-final');
-    await page.click('.q-nav button:has-text("Review")');
+    await page.click('.qfoot .btn:has-text("Review")');
 
     // review: every answer with an Edit link; one account number still missing
-    await page.waitForSelector('text=Your dashboard is ready.');
+    await page.waitForSelector('h2:has-text("Your dashboard is ready")');
     assert.equal(await page.locator('[data-review=state]').textContent(), 'Michigan');
-    assert.equal(await page.locator('[data-review=locations]').textContent(), 'Detroit and Ferndale');
+    assert.equal(await page.locator('[data-review=locations]').textContent(), 'Detroit, Ferndale');
     assert.equal(await page.locator('[data-review=team]').textContent(), '11 to 25 people');
-    assert.equal(await page.locator('[data-review=tips]').textContent(), 'Yes, pool split by hours');
-    assert.equal(await page.locator('[data-review=frequency]').textContent(), 'Weekly, paid Fridays');
-    assert.equal(await page.locator('[data-review=contractors]').textContent(), 'Yes, about 2');
-    assert.ok(await page.locator('text=One account number is still missing').isVisible());
+    assert.equal(await page.locator('[data-review=tips]').textContent(), 'Yes');
+    assert.equal(await page.locator('[data-review=frequency]').textContent(), 'Weekly');
+    assert.equal(await page.locator('[data-review=contractors]').textContent(), 'Yes');
+    assert.ok(await page.locator('text=One account number still to add').isVisible());
     await shot('review');
 
     // editing an answer changes the dashboard
-    await page.locator('.review-row:has([data-review=contractors]) button:has-text("Edit")').click();
-    await page.click('.choice:has-text("No")');
+    await page.locator('.row:has([data-review=contractors]) .link').click();
+    await page.click('.opt[data-value=no]');
     await page.waitForFunction(() => document.querySelector('[data-count=modules]').textContent === '7');
     assert.deepEqual(await counter(page), { modules: 7, items: 25, forms: 4 });
-    await page.click('.q-nav button:has-text("Review")');
-    await page.locator('.review-row:has([data-review=contractors]) button:has-text("Edit")').click();
-    await page.click('.choice:has-text("Yes")');
+    await page.click('.qfoot .btn:has-text("Review")');
+    await page.locator('.row:has([data-review=contractors]) .link').click();
+    await page.click('.opt[data-value=yes]');
     await page.waitForFunction(() => document.querySelector('[data-count=modules]').textContent === '8');
-    await page.click('.q-nav button:has-text("Review")');
+    await page.click('.qfoot .btn:has-text("Review")');
 
-    await page.click('button:has-text("Build my dashboard")');
+    await page.click('.qfoot .btn:has-text("Build my dashboard")');
     await page.waitForURL('**/app');
     console.log('setup flow: ok');
   } finally {

@@ -129,7 +129,8 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
 
   const publicUserReply = (u: User) => ({ user: publicUser(u) });
   const secureCookies = (req: IncomingMessage) => (config.publicBaseUrl ?? '').startsWith('https://') || (config.trustProxy && req.headers['x-forwarded-proto'] === 'https');
-  const sessionCookie = (req: IncomingMessage, token: string, clear = false) => `${SESSION_COOKIE}=${clear ? '' : token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${clear ? 0 : 365 * 86_400}${secureCookies(req) ? '; Secure' : ''}`;
+  /** A signed-in cookie lasts until sign out. "Keep me signed in" off makes it a browser-session cookie instead. */
+  const sessionCookie = (req: IncomingMessage, token: string, clear = false, remember = true) => `${SESSION_COOKIE}=${clear ? '' : token}; Path=/; HttpOnly; SameSite=Lax${clear ? '; Max-Age=0' : remember ? `; Max-Age=${365 * 86_400}` : ''}${secureCookies(req) ? '; Secure' : ''}`;
   /** A page can only send this header from our own origin, so a request that carries it was not forged from another site. */
   const requireCsrf = (req: IncomingMessage) => {
     if (req.headers['x-totali-csrf'] !== '1') throw forbidden('Missing the same-origin header.');
@@ -172,7 +173,22 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       if (wait) throw new ApiError(429, 'rate_limited', `Too many attempts from here. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
       const o = c.json();
       const r = await accounts.login(o.email, o.password);
-      return new Reply({ user: publicUser(r.user) }, { 'set-cookie': sessionCookie(c.req, r.token) });
+      return new Reply({ user: publicUser(r.user) }, { 'set-cookie': sessionCookie(c.req, r.token, false, o.remember !== false) });
+    }),
+    route('POST', '/v1/auth/forgot', 'none', async (c) => {
+      requireCsrf(c.req);
+      const wait = logins.hit(`forgot:${c.ip}`, 20, now().getTime());
+      if (wait) throw new ApiError(429, 'rate_limited', `Too many requests from here. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
+      await accounts.requestReset(c.json().email);
+      return { ok: true, message: 'If that address has an account, we sent a code.' };
+    }),
+    route('POST', '/v1/auth/reset', 'none', async (c) => {
+      requireCsrf(c.req);
+      const wait = logins.hit(`reset:${c.ip}`, 30, now().getTime());
+      if (wait) throw new ApiError(429, 'rate_limited', `Too many attempts from here. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
+      const o = c.json();
+      await accounts.resetPassword(o.email, o.code, o.password);
+      return { ok: true };
     }),
     route('POST', '/v1/auth/logout', 'none', (c) => {
       requireCsrf(c.req);

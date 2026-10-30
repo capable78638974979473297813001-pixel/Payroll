@@ -152,6 +152,16 @@ export function verificationEmail(a: { to: string; firstName: string; code: stri
   return { to: a.to, subject: 'Your verification code', html, text: `Hi ${a.firstName}, your Totali verification code is ${a.code}. It expires in ${minutes} minute(s). If you didn’t ask for it, ignore this email.` };
 }
 
+export function resetEmail(a: { to: string; firstName: string; code: string; expiresAt: string; now?: Date }): Message {
+  const minutes = Math.max(1, Math.round((new Date(a.expiresAt).getTime() - (a.now ?? new Date()).getTime()) / 60_000));
+  const html = wrap(
+    `Reset your password, ${escapeHtml(a.firstName)}`,
+    `${para(`Use this code to choose a new password. It expires in ${minutes} minute${minutes === 1 ? '' : 's'}.`)}<div style="font-family:'JetBrains Mono',Menlo,Consolas,monospace;font-size:30px;font-weight:700;letter-spacing:.34em;background:#0A0A0A;color:#FFFFFF;text-align:center;padding:18px 8px">${escapeHtml(a.code)}</div>`,
+    'If you didn’t ask to reset your password, ignore this email. Your password has not changed.',
+  );
+  return { to: a.to, subject: 'Your password reset code', html, text: `Hi ${a.firstName}, your Totali password reset code is ${a.code}. It expires in ${minutes} minute(s). If you didn’t ask for it, ignore this email.` };
+}
+
 export function inviteEmail(a: { to: string; firstName: string; businessName: string; link: string; forms: string[] }): Message {
   const forms = a.forms.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
   const html = wrap(

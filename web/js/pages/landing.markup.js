@@ -1,0 +1,186 @@
+// The design's landing page, as shipped markup (design/totali/pages/landing.html). Static and trusted: no user text goes in.
+export default `
+
+<header class="top">
+  <a class="logo" href="#" aria-label="Totali">totali<svg viewBox="0 0 120 10" preserveAspectRatio="none"><path d="M2 6 C 22 1, 40 9, 62 5 S 100 2, 118 6" fill="none" stroke="#F0613A" stroke-width="2.6" stroke-linecap="round"/></svg></a>
+  <nav><a href="#taxes">Taxes</a><a href="#onboarding">Onboarding</a><a href="#roles">Roles</a><a href="#industries">Industries</a><a href="#pricing">Pricing</a></nav>
+  <a class="link" style="margin-right:6px" href="/login">Log in</a><a class="btn sm" href="/signup">Create account</a>
+</header>
+
+<section class="hero">
+  <div class="hero-copy">
+    <h1>Payroll for the <em>whole crew</em>, in one place.</h1>
+    <p>Hours, tips and taxes in one pay run. New hires finish their W-4, I-9 and direct deposit setup on their phone. Built for restaurants first.</p>
+    <form class="join" data-signup><input type="email" placeholder="Work email" aria-label="Work email"><button class="btn" type="submit">Create account</button></form>
+    <small>Taxes are calculated by the Omnia.tax engine.</small>
+    <div class="hand h1n"><span>Missing paperwork gets flagged before payday</span>
+      <svg viewBox="0 0 330 80"><path d="M10 6 C 120 0, 250 24, 318 66" fill="none" stroke="#0E5A66" stroke-width="2.4" stroke-linecap="round"/><path d="M296 66 L319 68 L314 46" fill="none" stroke="#0E5A66" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  </div>
+
+  <div class="comp">
+    <figure class="photo p1"><img src="/assets/img/chef.jpg" alt="Cooks plating dishes at the pass"></figure>
+    <div class="app" role="img" aria-label="Totali pay run screen with sample data">
+      <div class="atop">
+        <span class="org"><span class="orgmark">H</span><b>Harbor Street Kitchen</b></span>
+        <span class="tabs"><a>Overview</a><a class="on">Payroll</a><a>People</a><a>Time &amp; tips</a><a>Onboarding<em>2</em></a></span>
+        <span class="me"><span class="av">SH</span></span>
+      </div>
+      <div class="bar"><div class="ph"><h3>Weekly pay run</h3><p>Oct 19 to Oct 25, 2026 &nbsp;·&nbsp; Pay date Fri, Oct 30 &nbsp;·&nbsp; <span class="draft">Draft</span></p></div><span class="abtn">Review and approve</span></div>
+      <div class="sum">
+        <div><i>Gross pay</i><b>$6,581.50</b></div>
+        <div><i>Employee taxes</i><b>$1,220.88</b></div>
+        <div><i>Net pay</i><b>$5,360.62</b></div>
+        <div><i>Employees</i><b>9</b></div>
+      </div>
+      <div class="note"><span class="dot"></span><span><b>2 items to review.</b> Jordan Pike has no W-4 on file. Marcus Bell has 6 overtime hours.</span></div>
+      <table>
+        <thead><tr><th>Employee</th><th class="c-h">Hours</th><th class="c-t">Tips</th><th>Gross</th><th class="c-x">Taxes</th><th>Net</th></tr></thead>
+        <tbody>
+<tr><td><div class="who"><span class="av">PR</span><span><b>Priya Raman</b><i>Line cook</i></span></div></td><td class="c-h">40</td><td class="c-t"><span class=mut>&ndash;</span></td><td>$860.00</td><td class="c-x">$159.53</td><td><b>$700.47</b></td></tr>
+<tr><td><div class="who"><span class="av">MB</span><span><b>Marcus Bell</b><i>Sous chef</i></span></div></td><td class="c-h">46 <span class="otn">OT 6</span></td><td class="c-t"><span class=mut>&ndash;</span></td><td>$1,274.00</td><td class="c-x">$236.33</td><td><b>$1,037.67</b></td></tr>
+<tr><td><div class="who"><span class="av">ER</span><span><b>Elena Ruiz</b><i>Server</i></span></div></td><td class="c-h">32.5</td><td class="c-t">$412.30</td><td>$916.05</td><td class="c-x">$169.93</td><td><b>$746.12</b></td></tr>
+<tr><td><div class="who"><span class="av">TW</span><span><b>Tom Whitaker</b><i>Server</i></span></div></td><td class="c-h">28</td><td class="c-t">$361.75</td><td>$795.75</td><td class="c-x">$147.62</td><td><b>$648.13</b></td></tr>
+<tr><td><div class="who"><span class="av">DO</span><span><b>Dana Okafor</b><i>Bartender</i></span></div></td><td class="c-h">36</td><td class="c-t">$504.20</td><td>$1,080.20</td><td class="c-x">$200.37</td><td><b>$879.83</b></td></tr>
+<tr><td><div class="who"><span class="av">SI</span><span><b>Sam Ito</b><i>Dishwasher</i></span></div></td><td class="c-h">30</td><td class="c-t"><span class=mut>&ndash;</span></td><td>$495.00</td><td class="c-x">$91.83</td><td><b>$403.17</b></td></tr>
+<tr><td><div class="who"><span class="av">LF</span><span><b>Lucia Ferrante</b><i>Host</i></span></div></td><td class="c-h">22</td><td class="c-t">$96.00</td><td>$448.00</td><td class="c-x">$83.11</td><td><b>$364.89</b></td></tr>
+<tr><td><div class="who"><span class="av">HC</span><span><b>Hana Cole</b><i>Prep cook</i></span></div></td><td class="c-h">38</td><td class="c-t"><span class=mut>&ndash;</span></td><td>$712.50</td><td class="c-x">$132.16</td><td><b>$580.34</b></td></tr>
+<tr><td><div class="who"><span class="av">JP</span><span><b>Jordan Pike</b><i>Server</i></span></div></td><td class="c-h">18</td><td class="c-t">$148.50</td><td>$427.50</td><td class="c-x"><span class="warn">Needs W-4</span></td><td><span class="mut">&ndash;</span></td></tr>
+        </tbody>
+      </table>
+      <div class="foot">Totals exclude 1 employee until their W-4 is on file. &nbsp;Sample data.</div>
+    </div>
+    <svg class="stamp" viewBox="0 0 120 120"><defs><path id="circ" d="M60 60 m-44 0 a44 44 0 1 1 88 0 a44 44 0 1 1 -88 0"/></defs>
+      <circle cx="60" cy="60" r="55" fill="none" stroke="#F0613A" stroke-width="3"/><circle cx="60" cy="60" r="33" fill="none" stroke="#F0613A" stroke-width="1.5"/>
+      <text font-family="Inter" font-weight="600" font-size="11.5" letter-spacing="3.2" fill="#F0613A"><textPath href="#circ">SAMPLE DATA · SAMPLE DATA ·</textPath></text>
+      <text x="60" y="66" text-anchor="middle" font-family="Fraunces" font-style="italic" font-size="19" fill="#F0613A">draft</text></svg>
+  </div>
+</section>
+
+<section class="sec blush" id="taxes">
+  <div class="two">
+    <div class="txt">
+      <h2>Open any line and see how the <em>taxes</em> were worked out.</h2>
+      <p>Each paycheck breaks down into federal, Social Security, Medicare and state, calculated by the Omnia.tax engine. If a number looks off, you can see where it came from before you approve the run.</p>
+    </div>
+    <div class="rwrap">
+      <div class="receipt">
+        <div class="rh"><b>Harbor Street Kitchen</b><span>Pay stub, sample</span></div>
+        <div class="rl"><span>Elena Ruiz, Server</span><span>Oct 19 to 25</span></div>
+        <hr>
+        <div class="rl"><span>Wages 32.5 h x $15.50</span><span>$503.75</span></div>
+        <div class="rl"><span>Tips reported</span><span class="circle">$412.30</span></div>
+        <div class="rl t"><span>Gross pay</span><span>$916.05</span></div>
+        <hr>
+        <div class="rl"><span>Federal income tax</span><span>-$77.86</span></div>
+        <div class="rl"><span>Social Security</span><span>-$56.80</span></div>
+        <div class="rl"><span>Medicare</span><span>-$13.28</span></div>
+        <div class="rl"><span>State income tax</span><span>-$21.99</span></div>
+        <hr>
+        <div class="rl t big"><span>Net pay</span><span>$746.12</span></div>
+        <div class="rf">Illustrative figures. Calculated by the Omnia.tax engine.</div>
+      </div>
+      <div class="hand h2n"><svg viewBox="0 0 90 40"><path d="M86 30 C 62 34, 34 26, 8 12" fill="none" stroke="#0E5A66" stroke-width="2.4" stroke-linecap="round"/><path d="M8 28 L7 11 L24 10" fill="none" stroke="#0E5A66" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>tips are in here too</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="onboarding">
+  <div class="two onb">
+    <div class="ob-vis">
+      <figure class="photo p2"><img src="/assets/img/waiter.jpg" alt="Server carrying a tray of drinks"></figure>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="ph-in">
+          <i>Harbor Street Kitchen</i>
+          <b>Hi Jordan. Two things left.</b>
+          <div class="step done"><span class="ck"></span>Personal details</div>
+          <div class="step done"><span class="ck"></span>Direct deposit</div>
+          <div class="step cur"><span class="ck"></span>Form W-4<em>Start</em></div>
+          <div class="step"><span class="ck"></span>Form I-9, section 1</div>
+          <div class="fakebtn">Continue</div>
+        </div>
+      </div>
+    </div>
+    <div class="txt">
+      <h2>New hires fill in their own <em>paperwork</em>.</h2>
+      <p>Send a link before the first shift. They complete the W-4, I-9 and direct deposit details on their phone, and you see who is still missing something.</p>
+      <div class="hires">
+        <div class="hh"><span>New hires</span><em>Sample data</em></div>
+        <div class="tr"><span class="nm"><b>Jordan Pike</b><i>Server, started Oct 20</i></span><span class="st"><s>W-4</s><s>I-9</s><s class="ok">Deposit</s></span></div>
+        <div class="tr"><span class="nm"><b>Ravi Menon</b><i>Line cook, starts Nov 2</i></span><span class="st"><s>W-4</s><s>I-9</s><s>Deposit</s></span></div>
+        <div class="tr"><span class="nm"><b>Chloe Baptiste</b><i>Host, starts Nov 2</i></span><span class="st"><s class="ok">W-4</s><s class="ok">I-9</s><s class="ok">Deposit</s></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band teal" id="roles">
+  <h2>Three people, three <em>views</em> of the same week.</h2>
+  <div class="rrows">
+    <div class="rr">
+      <div class="rt"><b>Owner</b><p>The whole run and the totals. You approve it.</p></div>
+      <div class="mu mu-o">
+        <div class="mh"><b>Weekly pay run</b><span>Draft</span></div>
+        <div class="big"><i>Net pay</i><b>$5,360.62</b></div>
+        <div class="mf"><span>2 items to review</span><span class="abtn">Review and approve</span></div>
+      </div>
+    </div>
+    <div class="rr">
+      <div class="rt"><b>Manager</b><p>Hours for their own team, confirmed before payroll closes.</p></div>
+      <div class="mu mu-m">
+        <div class="mh"><b>Thursday dinner</b><span>6 on shift</span></div>
+        <div class="ln"><span>Dana Okafor</span><i>5:00 to 11:30</i><u>Confirm</u></div>
+        <div class="ln"><span>Tom Whitaker</span><i>5:00 to 10:00</i><u>Confirm</u></div>
+        <div class="ln"><span>Lucia Ferrante</span><i>5:30 to 9:30</i><u class="done">Confirmed</u></div>
+      </div>
+    </div>
+    <div class="rr">
+      <div class="rt"><b>Employee</b><p>Their own pay stubs and details. Nothing about anyone else.</p></div>
+      <div class="mu mu-e">
+        <div class="mh"><b>Pay stub</b><span>Fri, Oct 30</span></div>
+        <div class="big"><i>Net pay</i><b>$746.12</b></div>
+        <div class="mf"><span>32.5 hours, $412.30 tips</span><u>Update deposit details</u></div>
+      </div>
+    </div>
+  </div>
+  <p class="smalln">Sample data.</p>
+</section>
+
+<section class="sec" id="industries">
+  <div class="two ind">
+    <figure class="photo p3"><img src="/assets/img/pole.jpg" alt="Line crew working on a utility pole"></figure>
+    <div>
+      <h2>Set up for how your team <em>gets paid</em>.</h2>
+      <p class="sub">A restaurant and a roofing crew don't pay people the same way. Each version starts with the pay types that kind of work uses.</p>
+      <dl class="defs">
+        <div><dt>Restaurants</dt><dd>Tips, split shifts, and different rates by role.</dd><span class="hand h3n">we start here</span></div>
+        <div><dt>Hospitality</dt><dd>Seasonal staff and teams across more than one property.</dd></div>
+        <div><dt>Trades and construction</dt><dd>Hours by job site and crew.</dd></div>
+        <div><dt>Office</dt><dd>Salaried and hourly staff, with one approval step.</dd></div>
+        <div><dt>Delivery</dt><dd>Per-delivery pay, mileage and uneven weeks.</dd></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section class="band berry" id="pricing">
+  <div class="pr">
+    <div class="txt">
+      <h2>Simple <em>per-employee</em> pricing.</h2>
+      <p>One price, counted per person on your payroll. We'll share the number before you pay anything.</p>
+    </div>
+    <form class="ticket" data-signup>
+      <div class="tk-top"><b>Start your account</b><span>5 minutes</span></div>
+      <label for="em">Work email</label>
+      <input id="em" type="email" placeholder="you@yourrestaurant.com">
+      <button class="btn" type="submit">Create account</button>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <a class="logo sm" href="/">totali</a>
+  <p>Totali is a product of OMNIA TAX LLC. Sample data on this page is made up. Photos from Unsplash: Madeline Liu, Kate Townsend, Hobi industri.</p>
+</footer>
+
+`;

@@ -49,6 +49,10 @@ export const QUICK_ACTIONS = opts(
 );
 
 export const WIDGETS: WidgetDef[] = [
+  { type: 'module', label: 'Module', description: 'One of the sections your setup built: its live numbers and its checklist.', category: 'Setup', spans: [4, 6, 8, 12], defaultSpan: 4,
+    settings: [{ key: 'module', label: 'Section', type: 'text', maxLength: 40, default: '' }, { key: 'items', label: 'Show the checklist', type: 'toggle', default: true }] },
+  { type: 'built_from', label: 'Built from your answers', description: 'The answers your dashboard was built from, with a way to change them.', category: 'Setup', spans: [6, 8, 12], defaultSpan: 12,
+    settings: [] },
   { type: 'welcome', label: 'Welcome banner', description: 'Your business name, a line of your own, and today\'s date.', category: 'General', spans: [6, 8, 12], defaultSpan: 12,
     settings: [{ key: 'greeting', label: 'Greeting', type: 'text', maxLength: 80, default: '' }, { key: 'showDate', label: 'Show today\'s date', type: 'toggle', default: true }] },
   { type: 'quick_actions', label: 'Quick actions', description: 'Buttons for the things you do most.', category: 'General', spans: SPANS, defaultSpan: 4,
@@ -113,8 +117,9 @@ export const TERMS: Record<string, { label: string; default: string }> = {
 export const FONTS = opts(
   ['sans', 'Clean sans'], ['grotesk', 'Neo-grotesque'], ['humanist', 'Humanist'], ['rounded', 'Rounded'],
   ['serif', 'Classic serif'], ['didone', 'High-contrast serif'], ['slab', 'Slab serif'], ['mono', 'Monospace'],
+  ['fraunces', 'Warm serif'], ['instrument', 'Friendly sans'],
 );
-export const MODES = opts(['light', 'Light'], ['paper', 'Paper'], ['slate', 'Slate'], ['dark', 'Dark']);
+export const MODES = opts(['cream', 'Cream'], ['light', 'Light'], ['paper', 'Paper'], ['slate', 'Slate'], ['dark', 'Dark']);
 export const CARD_STYLES = opts(['flat', 'Flat'], ['outlined', 'Outlined'], ['ruled', 'Ruled'], ['elevated', 'Raised'], ['filled', 'Filled']);
 export const DENSITIES = opts(['compact', 'Compact'], ['comfortable', 'Comfortable'], ['airy', 'Airy']);
 export const NAVS = opts(['top', 'Top bar'], ['side', 'Side rail']);

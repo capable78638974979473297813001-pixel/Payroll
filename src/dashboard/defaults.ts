@@ -34,14 +34,11 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   const has = a.has;
   const tabs: DashboardTab[] = [];
 
-  // The widgets' default settings are filled in by validateConfig, so only deviations are written here.
-  const overview: DashboardWidget[] = [w('welcome', 12), w('setup_progress', 12), w('next_payroll', 4), w('payroll_cost', 4), w('team_summary', 4), w('hours_week', 6)];
-  overview.push(has('tip_reporting') ? w('tips_week', 6) : w('onboarding_progress', 6));
-  overview.push(w('tax_summary', 6));
-  overview.push(has('tip_reporting') ? w('onboarding_progress', 6) : w('compliance', 6));
-  for (const s of a.states) overview.push(w('state_card', 6, { state: s }));
-  if (has('locations')) overview.push(w('locations_card', 6));
-  if (has('contractors')) overview.push(w('contractors_card', 6));
+  // The overview is the sections the setup built (pay run, team, taxes and so on), each with its live numbers and
+  // checklist, in the order and sizes the owner would expect. The owner can move, resize, swap or remove any of them.
+  const overview: DashboardWidget[] = [w('built_from', 12), w('setup_progress', 12)];
+  const a2 = a as Availability & { build?: { modules: Array<{ id: string }> } };
+  for (const m of a2.build?.modules ?? []) overview.push(w('module', m.id === 'pay_run' ? 8 : 4, { module: m.id }));
   tabs.push({ id: 'overview', label: 'Overview', kind: 'page', widgets: overview });
 
   tabs.push({ id: 'payroll', label: 'Payroll', kind: 'page', widgets: [w('next_payroll', 6), w('payroll_history', 6), w('payroll_cost', 6), w('tax_summary', 6), w('compliance', 12)] });
@@ -65,7 +62,7 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   return {
     version: 1,
     brand: { name: company.legalName, tagline: '', mark: 'initial' },
-    theme: { mode: 'light', accent: '#1f3bff', accent2: '#0a0a0a', font: 'sans', headingFont: 'sans', radius: 0, density: 'comfortable', cardStyle: 'ruled', nav: 'top', header: 'plain', numbers: 'bold' },
+    theme: { mode: 'cream', accent: '#8e1f4e', accent2: '#0e5a66', font: 'instrument', headingFont: 'fraunces', radius: 12, density: 'comfortable', cardStyle: 'outlined', nav: 'top', header: 'plain', numbers: 'bold' },
     terms: {},
     tabs,
   };

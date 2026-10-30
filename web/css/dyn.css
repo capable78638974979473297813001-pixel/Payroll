@@ -1,0 +1,93 @@
+/* What the design's static mockups do not have: real form controls, loading states, toasts, modals, the customization
+   tools, and the bridge that turns a company's saved theme into the design's own color variables. */
+:root { --ok2: #0E5A66; --faint: #9A8A91; --font-body: "Instrument Sans", system-ui, sans-serif; --font-head: Fraunces, serif; --font-ui: Inter, sans-serif; }
+body.tapp { font-family: var(--font-body); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--berry); outline-offset: 2px; }
+.ico { flex: none; }
+
+/* buttons: the design's .btn, plus states it never needed to show */
+.btn { font-family: var(--font-body); text-decoration: none; transition: background-color .1s; text-align: center; }
+.btn.full { display: block; width: 100%; }
+.btn.lg { display: block; }
+.btn[disabled], .btn[aria-disabled="true"] { background: #E8D9CC; color: #A89AA0; cursor: not-allowed; }
+.btn.ghost[disabled] { background: transparent; border-color: #E8D9CC; }
+.btn[aria-busy="true"] { cursor: progress; }
+.btn .spinner { display: inline-block; vertical-align: -2px; margin-left: 8px; }
+.spinner { width: 13px; height: 13px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+.link.as-button { background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; }
+.loading-screen { min-height: 100vh; display: grid; place-items: center; }
+.loading-screen .spinner { width: 28px; height: 28px; border-width: 3px; color: var(--berry); }
+
+/* fields: real inputs in the design's .in look */
+.fld { display: block; }
+.fld .lab { display: block; }
+input.in, select.in, textarea.in { appearance: none; -webkit-appearance: none; }
+select.in { padding-right: 36px; background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1.5l5 5 5-5' fill='none' stroke='%239A8A91' stroke-width='1.6' stroke-linecap='round'/></svg>") no-repeat right 12px center / 12px; }
+textarea.in { min-height: 96px; resize: vertical; }
+input.in:focus, select.in:focus, textarea.in:focus { outline: none; border-color: var(--berry); box-shadow: 0 0 0 3px rgba(142,31,78,.12); }
+.fld.has-error .in { border-color: #C0392B; box-shadow: 0 0 0 3px rgba(192,57,43,.12); }
+.ferr { margin-top: 6px; font-size: 13px; color: #B3261E; }
+.inwrap { position: relative; }
+.in.has-slot { padding-right: 64px; }
+.slot { position: absolute; right: 12px; top: 0; height: 100%; background: none; border: 0; font: 500 13px Inter; color: var(--berry); cursor: pointer; }
+.ck2, .f label.ck2 { position: relative; display: flex; gap: 10px; align-items: flex-start; margin: 0; font-size: 14px; color: inherit; cursor: pointer; }
+.ck2 input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.ck2 input:checked + .cb { background: var(--berry); border-color: var(--berry); }
+.ck2 input:checked + .cb::after { content: ""; display: block; width: 8px; height: 4px; margin: 4px 0 0 3px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg); }
+.ck2 input:focus-visible + .cb { outline: 2px solid var(--berry); outline-offset: 2px; }
+.pwbar { margin-bottom: 6px; }
+.alert.err { background: #F6DDE6; border-color: #E5B5C7; color: #5c1030; }
+.alert.good { background: #E6F1F2; border-color: #BBD8DC; color: #0b3d47; }
+.alert .cap { font-weight: 400; }
+
+/* code boxes: six real inputs in the design's .codes look */
+.codes input.cb-in { width: 52px; height: 60px; border: 1px solid #D9C6B6; border-radius: 9px; background: #fff; text-align: center; font: 500 28px "IBM Plex Mono", monospace; color: var(--ink); padding: 0; caret-color: var(--berry); }
+.codes input.cb-in:focus { outline: none; border-color: var(--berry); box-shadow: 0 0 0 3px rgba(142,31,78,.12); }
+.codes.error input.cb-in { border-color: #C0392B; box-shadow: 0 0 0 3px rgba(192,57,43,.12); }
+@media (max-width: 900px) { .codes input.cb-in { width: 42px; height: 52px; } }
+
+/* toasts and modals */
+.toasts { position: fixed; right: 24px; bottom: 24px; display: grid; gap: 8px; z-index: 100; max-width: min(460px, calc(100vw - 48px)); font-family: Inter, sans-serif; }
+.toasts .alert { box-shadow: 0 14px 30px -12px rgba(60,10,30,.35); background: #FFFDF9; border-color: var(--line); color: var(--ink); }
+.toasts .alert.err { background: #F6DDE6; border-color: #E5B5C7; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(59,42,51,.5); display: grid; place-items: center; z-index: 90; padding: 24px; overflow: auto; font-family: Inter, sans-serif; }
+.modal { background: var(--paper, #FFFDF9); width: min(640px, 100%); max-height: calc(100vh - 48px); overflow: auto; border-radius: 14px; box-shadow: 0 40px 60px -30px rgba(60,10,30,.55); }
+.modal-head { display: flex; justify-content: space-between; align-items: center; padding: 22px 26px 0; }
+.modal-body { padding: 14px 26px 22px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; padding: 0 26px 24px; }
+.icon-btn { width: 36px; height: 36px; display: grid; place-items: center; background: none; border: 0; cursor: pointer; color: inherit; border-radius: 8px; }
+.icon-btn:hover { background: rgba(142,31,78,.08); }
+.icon-btn[disabled] { opacity: .35; cursor: default; }
+.stack > * + * { margin-top: var(--gap, 16px); }
+.muted { color: var(--mut); }
+.field-lab { font: 500 12px Inter; letter-spacing: .02em; color: var(--mut); display: block; margin-bottom: 8px; }
+.empty { color: var(--mut); font-size: 14px; padding: 8px 0; }
+.empty .link, .empty a.btn { margin-left: 4px; }
+
+/* choices, the state list, location pills, and the "this adds to your dashboard" box in the builder */
+button.opt { width: 100%; text-align: left; color: inherit; cursor: pointer; }
+button.opt:hover:not(.on) { border-color: #C9B09C; }
+.dd { border: 1px solid #D9C6B6; border-radius: 8px; background: #fff; margin-top: 4px; box-shadow: 0 14px 24px -18px rgba(60,10,30,.4); overflow: hidden; font-size: 14.5px; }
+.dd div { padding: 9px 12px; cursor: pointer; }
+.dd div.on, .dd div:hover { background: #FCEFEA; color: var(--berry); }
+button.pill { cursor: pointer; font-family: inherit; }
+button.pill:hover { border-color: var(--berry); }
+.pill-x { background: none; border: 0; padding: 0; margin-left: 2px; color: var(--berry); cursor: pointer; display: inline-grid; place-items: center; }
+.addrow { display: flex; gap: 8px; }
+.addrow .in { flex: 1; }
+.adds { margin-top: 18px; padding: 12px 14px; background: #FFF1E6; border-radius: 9px; font: 13.5px Inter, sans-serif; }
+.adds b { color: var(--berry); font-weight: 600; }
+.adds ul { list-style: none; margin: 6px 0 0; padding: 0; color: #5a4048; }
+.adds li { padding: 3px 0 3px 16px; position: relative; }
+.adds li::before { content: ""; position: absolute; left: 0; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: var(--tang); }
+.stepper li[data-step] { transition: color .15s; }
+a.it { color: inherit; text-decoration: none; cursor: pointer; }
+.bhead .link { cursor: pointer; }
+
+.modal .dash { min-height: 0; background: transparent; }
+.dash .editbar-spacer { height: 56px; }
+.acts .btn { white-space: nowrap; }

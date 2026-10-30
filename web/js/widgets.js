@@ -1,6 +1,6 @@
 import { h, money, hoursFromMinutes, longDate, shortDate, plural } from './dom.js';
 import { link } from './router.js';
-import { Button } from './ui.js';
+import { Button, Chip, StatusChip } from './ui.js';
 import { session } from './session.js';
 
 const svgNs = 'http://www.w3.org/2000/svg';
@@ -33,7 +33,7 @@ function splitBar(parts) {
 }
 
 const progress = (n, d) => h('div', { class: 'bar-track', role: 'progressbar', 'aria-valuenow': String(n), 'aria-valuemax': String(d) }, h('div', { class: 'bar-seg', style: { width: `${pct(n, d)}%` } }));
-const empty = (text, to, cta) => h('div', { class: 'empty' }, text, to ? [' ', link(to, { class: 'btn btn-text btn-sm' }, cta)] : null);
+const empty = (text, to, cta) => h('div', { class: 'empty' }, text, to ? [' ', link(to, { class: 'link' }, cta)] : null);
 
 const ACTIONS = {
   run_payroll: { label: 'Run payroll', to: '/app/payroll/run', primary: true },
@@ -63,7 +63,77 @@ const statusChip = (s) => { const [l, c] = STATUS[s] || [s, 'muted']; return h('
  * One renderer per card type. Each gets { data, settings, t, config } and returns what goes inside the card, and may
  * set `title` (the small heading) and `className`. A card with nothing to show says so and says what to do.
  */
+// ---------------------------------------------------------------- modules: the sections the setup built
+const initial = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'narrow', timeZone: 'UTC' });
+
+/** The live part of a module, above its checklist. A module with nothing live to show has none. */
+const RICH = {
+  pay_run(data) {
+    const n = data.nextPayday; const l = data.latest;
+    const issues = [];
+    const noW4 = data.onboarding.behind.filter((p) => !p.w4);
+    if (noW4.length) issues.push(`${noW4.slice(0, 2).map((p) => p.name).join(' and ')}${noW4.length > 2 ? ` and ${noW4.length - 2} more` : ''} ${noW4.length === 1 ? 'has' : 'have'} no W-4 on file.`);
+    const ot = data.hours.people.filter((p) => p.minutes > 2400);
+    if (ot.length) issues.push(`${ot[0].name} has ${hoursFromMinutes(ot[0].minutes - 2400)} overtime hours.`);
+    const stat = (label, v) => h('div', {}, h('i', {}, label), h('b', {}, v));
+    return h('div', { class: 'rich' },
+      h('div', { class: 'big2' }, h('div', {}, h('i', {}, `${shortDate(n.period.periodStart)} to ${shortDate(n.period.periodEnd)} · pay date ${longDate(n.period.checkDate)}`), h('span', { class: 'n' }, n.state === 'in_progress' ? 'Pay run in progress' : 'Next pay run')),
+        Button({ href: `/app/payroll/run?start=${n.period.periodStart}`, size: 'sm' }, n.state === 'in_progress' ? 'Continue payroll' : 'Run payroll')),
+      h('div', { class: 'stats' }, stat(l ? 'Gross pay, latest run' : 'Gross pay', l ? money(l.grossCents) : '—'), stat('Employee taxes', l ? money(l.employeeTaxCents) : '—'), stat('Net pay', l ? money(l.netCents) : '—'), stat('Employees', String(l ? l.employees : data.team.active))),
+      issues.length ? h('div', { class: 'alert', style: { marginTop: '12px' } }, h('span', { class: 'dot' }), h('span', {}, h('b', {}, `${plural(issues.length, 'item')} to review. `), issues.join(' '))) : null);
+  },
+  team(data) {
+    const o = data.onboarding; const left = o.total - o.complete;
+    return h('div', { class: 'rich' },
+      h('div', { class: 'big2' }, h('div', {}, h('i', {}, 'On the roster'), h('span', { class: 'n' }, plural(data.team.active, 'employee'))),
+        data.team.byLocation.length > 1 ? h('div', { class: 'minis' }, ...data.team.byLocation.slice(0, 3).map((x) => h('div', {}, h('i', {}, x.label), h('b', {}, String(x.count))))) : null),
+      o.total ? h('div', { class: 'prg', role: 'progressbar', 'aria-valuenow': String(o.complete), 'aria-valuemax': String(o.total) }, h('span', { style: { width: `${pct(o.complete, o.total)}%` } })) : null,
+      h('p', { class: 'cap' }, o.total ? (left === 0 ? 'Everyone has finished their paperwork.' : `${o.complete} of ${o.total} have finished their paperwork. ${left} still to do.`) : 'Nobody here yet. Add people or send an invite link.'));
+  },
+  hours_tips(data) {
+    const days = data.hours.byDay; const max = Math.max(...days.map((d) => d.minutes), 1);
+    const top = days.reduce((b, d, i) => (d.minutes > days[b].minutes ? i : b), 0);
+    const tips = data.tips.chargedCents + data.tips.cashCents;
+    return h('div', { class: 'rich' },
+      h('div', { class: 'bars', role: 'img', 'aria-label': days.map((d) => `${initial(d.date)} ${hoursFromMinutes(d.minutes)} hours`).join(', ') }, ...days.map((d, i) => h('span', { class: i === top && d.minutes > 0 ? 't' : '', style: { height: `${Math.max(4, Math.round((d.minutes / max) * 100))}%` } }))),
+      h('div', { class: 'bl' }, ...days.map((d) => h('span', {}, initial(d.date)))),
+      h('p', { class: 'cap', style: { marginTop: '8px' } }, data.hours.totalMinutes ? `${hoursFromMinutes(data.hours.totalMinutes)} hours this week${tips ? `, ${money(tips)} in tips` : ''}.` : 'No hours entered this week yet.'));
+  },
+  federal_taxes(data) {
+    const lines = data.taxLines.filter((l) => l.payer === 'employee' && /federal|fed/i.test(l.jurisdiction)).slice(0, 3);
+    return lines.length ? h('div', { class: 'rich' }, h('table', {}, h('tbody', {}, ...lines.map((l) => h('tr', {}, h('td', {}, l.name), h('td', {}, money(l.amountCents)))))), h('p', { class: 'cap', style: { paddingBottom: '6px' } }, 'Worked out by the Omnia.tax engine, latest run.')) : h('div', { class: 'rich' }, h('p', { class: 'cap' }, 'Federal taxes show here after your first pay run. The Omnia.tax engine works out every line.'));
+  },
+  locations(data) {
+    const locs = data.company.locations; const counts = new Map(data.team.byLocation.map((x) => [x.label, x.count]));
+    return locs.length ? h('div', { class: 'rich' }, h('table', {}, h('tbody', {}, ...locs.map((l) => h('tr', {}, h('td', {}, l.name, h('i', {}, ` · ${l.city}, ${l.state}`)), h('td', {}, plural(counts.get(l.name) || 0, 'person', 'people'))))))) : null;
+  },
+  contractors(data) {
+    const c = data.contractors;
+    return h('div', { class: 'rich' }, c.count === 0 ? h('p', { class: 'cap' }, 'No contractors yet. They are paid apart from payroll.') : h('div', { class: 'big2' }, h('div', {}, h('i', {}, 'On file'), h('span', { class: 'n' }, plural(c.count, 'contractor'))), h('div', { class: 'cap' }, `${c.w9} of ${c.count} W-9s collected`)), link('/app/contractors', { class: 'link' }, c.count ? 'Open contractors' : 'Add a contractor'));
+  },
+};
+
+/** An item's note, kept live where the data knows better than the setup did. */
+function itemNote(i, data) {
+  if (i.id === 'pay_schedule' && i.status !== 'toset' && data.nextPayday) return `${i.note.replace(/\.$/, '')}. Next pay date ${shortDate(data.nextPayday.period.checkDate)}`;
+  return i.note || i.detail || '';
+}
+
 export const RENDERERS = {
+  module({ data, settings, t }) {
+    const m = data.built.modules.find((x) => x.id === settings.module);
+    if (!m) return { title: 'Section', body: empty('This section is not part of your setup any more. Remove this card, or pick another section.') };
+    const rich = RICH[m.id] ? RICH[m.id](data) : m.id.startsWith('state_') ? null : null;
+    return { className: 'modcard', title: m.id === 'team' ? t('team') : m.label, body: h('div', {}, rich, settings.items === false ? null : h('ul', { class: 'ml' }, ...m.items.map((i) => h('li', { 'data-item': i.id }, h('span', { class: 'lt' }, h('b', {}, i.label), h('i', {}, itemNote(i, data))), StatusChip(i))))) };
+  },
+  built_from({ data }) {
+    const b = data.built;
+    return { className: 'built flat', title: null, body: h('div', { class: 'built-body', style: { display: 'contents' } },
+      h('span', { class: 'cap', style: { whiteSpace: 'nowrap' } }, 'Built from your answers'),
+      h('div', { class: 'chips2' }, ...b.answers.map((a) => Chip(a, 'berry'))),
+      link('/app/settings', { class: 'link' }, 'Edit answers'),
+      h('div', { class: 'hand', style: { flexBasis: '100%', fontSize: '23px' } }, `What you told us is what’s in here. `, h('span', { style: { color: 'var(--mut)', fontSize: '19px' } }, `(${b.counts.modules} modules, ${b.counts.items} items)`))) };
+  },
   welcome({ settings, config }) {
     const name = session.user ? session.user.firstName : '';
     const hr = new Date().getHours();
@@ -71,7 +141,7 @@ export const RENDERERS = {
     return { className: 'welcome', title: config.brand.name, body: h('div', { class: 'stack', style: { '--gap': '6px' } }, h('h2', {}, greet), config.brand.tagline ? h('div', { class: 'sub' }, config.brand.tagline) : null, settings.showDate ? h('div', { class: 'sub' }, new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })) : null) };
   },
   quick_actions({ settings }) {
-    return { title: 'Quick actions', body: h('div', { class: 'stack', style: { '--gap': '8px' } }, ...(settings.actions || []).filter((a) => ACTIONS[a]).map((a) => Button({ variant: ACTIONS[a].primary ? 'primary' : 'secondary', size: 'md', full: true, href: ACTIONS[a].to }, ACTIONS[a].label))) };
+    return { title: 'Quick actions', body: h('div', { class: 'stack', style: { '--gap': '8px' } }, ...(settings.actions || []).filter((a) => ACTIONS[a]).map((a) => Button({ variant: ACTIONS[a].primary ? 'primary' : 'ghost', full: true, href: ACTIONS[a].to }, ACTIONS[a].label))) };
   },
   big_number({ data, settings }) {
     const m = (METRIC[settings.metric] || METRIC.headcount)(data);
@@ -89,7 +159,7 @@ export const RENDERERS = {
       h('div', { class: 'sub' }, settings.emphasis === 'countdown' ? `Pay date ${longDate(n.period.checkDate)}` : when),
       settings.showPeriod ? h('div', { class: 'sub' }, `Period ${shortDate(n.period.periodStart)} to ${shortDate(n.period.periodEnd)}`) : null,
       h('div', { class: 'chip-row' }, stateChip),
-      Button({ variant: 'primary', size: 'md', href: `/app/payroll/run?start=${n.period.periodStart}`, arrow: true }, n.state === 'in_progress' ? 'Continue payroll' : 'Run payroll')) };
+      Button({ href: `/app/payroll/run?start=${n.period.periodStart}` }, n.state === 'in_progress' ? 'Continue payroll' : 'Run payroll')) };
   },
   payroll_history({ data, settings }) {
     const runs = data.runs.slice(0, settings.count || 4);
@@ -129,7 +199,7 @@ export const RENDERERS = {
       g.length ? h('ul', { class: 'row-list' }, ...g.slice(0, 6).map((x) => h('li', {}, h('span', {}, x.label), h('span', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, h('span', { class: 'bar-track', style: { width: '60px' } }, h('span', { class: 'bar-seg', style: { width: `${(x.count / max) * 100}%` } })), h('b', { class: 'amt' }, String(x.count)))))) : empty(data.team.active ? `Nobody is tagged by ${settings.groupBy} yet.` : 'Nobody here yet.', '/app/people/new', 'Add a person')) };
   },
   people_table({ data, settings, t }) {
-    const input = h('input', { class: 'input search', type: 'search', placeholder: `Search ${t('people').toLowerCase()}`, 'aria-label': 'Search people' });
+    const input = h('input', { class: 'in search', type: 'search', placeholder: `Search ${t('people').toLowerCase()}`, 'aria-label': 'Search people' });
     const body = h('tbody', {});
     const draw = () => {
       const q = input.value.trim().toLowerCase();
@@ -160,7 +230,7 @@ export const RENDERERS = {
   },
   contractors_card({ data }) {
     const c = data.contractors;
-    return { title: 'Contractors', body: c.count === 0 ? empty('No contractors yet. They are paid apart from payroll.', '/app/contractors', 'Add a contractor') : h('div', { class: 'stack', style: { '--gap': '10px' } }, h('div', { class: 'big accent' }, String(c.count)), h('div', { class: 'sub' }, `${c.w9} of ${c.count} W-9s collected`), h('div', { class: 'sub' }, `${money(c.ytdCents)} paid this year`), link('/app/contractors', { class: 'btn btn-text btn-sm' }, 'Open contractors')) };
+    return { title: 'Contractors', body: c.count === 0 ? empty('No contractors yet. They are paid apart from payroll.', '/app/contractors', 'Add a contractor') : h('div', { class: 'stack', style: { '--gap': '10px' } }, h('div', { class: 'big accent' }, String(c.count)), h('div', { class: 'sub' }, `${c.w9} of ${c.count} W-9s collected`), h('div', { class: 'sub' }, `${money(c.ytdCents)} paid this year`), link('/app/contractors', { class: 'link' }, 'Open contractors')) };
   },
   hours_week({ data, settings }) {
     const hs = data.hours;
@@ -190,6 +260,6 @@ export const RENDERERS = {
   setup_progress({ data }) {
     const left = data.setup.filter((s) => !s.done);
     if (!left.length) return { title: 'Setup', body: h('div', { class: 'sub' }, 'Everything is set up.') };
-    return { title: `Finish setting up · ${data.setup.length - left.length} of ${data.setup.length}`, body: h('ul', { class: 'row-list' }, ...data.setup.map((s) => h('li', {}, h('span', { style: { display: 'flex', gap: '10px', alignItems: 'center' } }, h('span', { class: `dchip ${s.done ? 'good' : 'warn'}` }, s.done ? 'Done' : 'To do'), s.label), s.done ? null : link(s.to, { class: 'btn btn-text btn-sm' }, 'Go')))) };
+    return { title: `Finish setting up · ${data.setup.length - left.length} of ${data.setup.length}`, body: h('ul', { class: 'row-list' }, ...data.setup.map((s) => h('li', {}, h('span', { style: { display: 'flex', gap: '10px', alignItems: 'center' } }, h('span', { class: `dchip ${s.done ? 'good' : 'warn'}` }, s.done ? 'Done' : 'To do'), s.label), s.done ? null : link(s.to, { class: 'link' }, 'Go')))) };
   },
 };

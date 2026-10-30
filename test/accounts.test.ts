@@ -241,6 +241,57 @@ test('a session left unused for a year ends', async () => {
   assert.equal(s.accounts.resolveSession(token), null);
 });
 
+// ---------------------------------------------------------------- forgotten passwords
+
+test('a reset code is only sent to an address with a verified account, and the answer never says which', async () => {
+  const s = service();
+  await s.accounts.requestReset('nobody@harbor.test');
+  assert.equal(s.mailer.messages.length, 0, 'no account, no email');
+  const { user } = await s.accounts.signup(GOOD);
+  const before = s.mailer.messages.length;
+  await s.accounts.requestReset(GOOD.email);
+  assert.equal(s.mailer.messages.length, before, 'an unverified account gets nothing either');
+  s.accounts.verifyEmail(user.id, s.code());
+  s.advance(61_000);
+  await s.accounts.requestReset(GOOD.email);
+  assert.match(s.mailer.messages.at(-1)!.subject, /password reset code/);
+});
+
+test('the reset code sets a new password, ends every session, and works once', async () => {
+  const s = service();
+  const { user, token } = await s.accounts.signup(GOOD);
+  s.accounts.verifyEmail(user.id, s.code());
+  s.advance(61_000);
+  await s.accounts.requestReset(GOOD.email);
+  const code = s.code();
+  await fails(s.accounts.resetPassword(GOOD.email, code, 'short'), 'invalid_request');
+  await s.accounts.resetPassword(GOOD.email, code, 'a-brand-new-password');
+  assert.equal(s.accounts.resolveSession(token), null, 'the old browser is signed out');
+  await fails(s.accounts.login(GOOD.email, 'a-good-password'), 'unauthorized');
+  await s.accounts.login(GOOD.email, 'a-brand-new-password');
+  await fails(s.accounts.resetPassword(GOOD.email, code, 'yet-another-password'), 'code_invalid');
+});
+
+test('a wrong reset code costs a try, five cancel it, an old one expires, and the verification code is not a reset code', async () => {
+  const s = service();
+  const { user } = await s.accounts.signup(GOOD);
+  const verifyCode = s.code();
+  s.accounts.verifyEmail(user.id, verifyCode);
+  s.advance(61_000);
+  await fails(s.accounts.resetPassword(GOOD.email, verifyCode, 'a-brand-new-password'), 'code_invalid');
+  await s.accounts.requestReset(GOOD.email);
+  const code = s.code();
+  const wrong = code === '000000' ? '111111' : '000000';
+  for (let i = 0; i < 4; i++) await fails(s.accounts.resetPassword(GOOD.email, wrong, 'a-brand-new-password'), 'code_wrong');
+  await fails(s.accounts.resetPassword(GOOD.email, wrong, 'a-brand-new-password'), 'code_wrong');
+  await fails(s.accounts.resetPassword(GOOD.email, code, 'a-brand-new-password'), 'code_invalid');
+  s.advance(61_000);
+  await s.accounts.requestReset(GOOD.email);
+  const second = s.code();
+  s.advance(16 * 60_000);
+  await fails(s.accounts.resetPassword(GOOD.email, second, 'a-brand-new-password'), 'code_expired');
+});
+
 // ---------------------------------------------------------------- Resend
 
 test('Resend gets the message with the headers its edge needs, and the key never reaches the log', async () => {
@@ -424,6 +475,23 @@ test('the whole flow over HTTP: signup, a wrong code, the right code from the em
   assert.equal(inn.status, 200);
   cookie = cookieOf(inn);
   assert.equal((await call('GET', '/v1/auth/me', { cookie })).json.user.emailVerified, true);
+});
+
+test('"keep me signed in" off gives a browser-session cookie; on gives a long one; forgot and reset work over HTTP without revealing accounts', async () => {
+  const email = 'remember@harbor.test';
+  const s = await call('POST', '/v1/auth/signup', { body: { ...GOOD, email } });
+  const code = /\b(\d{6})\b/.exec(outbox.messages.filter((m) => m.to === email).at(-1)!.text)![1]!;
+  await call('POST', '/v1/auth/verify', { cookie: cookieOf(s), body: { code } });
+  assert.match((await call('POST', '/v1/auth/login', { body: { email, password: 'a-good-password' } })).headers.get('set-cookie')!, /Max-Age=31536000/);
+  assert.ok(!/Max-Age/.test((await call('POST', '/v1/auth/login', { body: { email, password: 'a-good-password', remember: false } })).headers.get('set-cookie')!), 'it ends when the browser closes');
+  const a = await call('POST', '/v1/auth/forgot', { body: { email: 'ghost@harbor.test' } });
+  const b = await call('POST', '/v1/auth/forgot', { body: { email } });
+  assert.deepEqual(a.json, b.json, 'the same answer for an account and for no account');
+  assert.equal((await call('POST', '/v1/auth/forgot', { csrf: false, body: { email } })).status, 403);
+  const reset = /\b(\d{6})\b/.exec(outbox.messages.filter((m) => m.to === email && /reset/i.test(m.subject)).at(-1)!.text)![1]!;
+  assert.equal((await call('POST', '/v1/auth/reset', { body: { email, code: reset, password: 'my-new-password-1' } })).status, 200);
+  assert.equal((await call('POST', '/v1/auth/login', { body: { email, password: 'a-good-password' } })).status, 401);
+  assert.equal((await call('POST', '/v1/auth/login', { body: { email, password: 'my-new-password-1' } })).status, 200);
 });
 
 test('the dev outbox is off unless asked for, and the verification code is never in the signup response', async () => {
