@@ -55,6 +55,18 @@ export const profiles: Record<BankProfileId, BankProfile> = {
       pgp: 'unconfirmed',
       payroll: { standardEntryClass: 'PPD' },
     },
+    api: {
+      adapter: 'jpmorgan',
+      release: 'in_totali',
+      notes: [
+        'Totali has an adapter for the Global Payments 2 ACH API, written from the public developer documentation. It has never run against J.P. Morgan.',
+        'The documentation shows no state for "waiting for the client to release" and no cancel call, so a payment sent by API is accepted for execution. The employer approves in Totali, before anything is sent.',
+        'Onboarding, the certificate, the client-testing environment and its base URL come from your J.P. Morgan representative. Production and client testing each need their own client id and certificate.',
+        'The documentation says mTLS with a digital signature may be required depending on the capability, and does not say whether ACH needs it. Totali does neither: ask J.P. Morgan.',
+        'Callbacks need an implementation request with the bank, so Totali checks status by polling.',
+        'Payroll is sent as PPD with the purpose PAYROLL. Same-day payments are limited to $1,000,000 and files may be dated up to 90 days ahead.',
+      ],
+    },
     cutoffsEt: [
       { channel: 'Direct transmission', nextDay: '10:00 p.m.', sameDay: '1:15 p.m.' },
       { channel: 'PaySource / Host-to-Host', nextDay: '11:00 p.m.', sameDay: '11:30 a.m.' },
@@ -63,7 +75,13 @@ export const profiles: Record<BankProfileId, BankProfile> = {
     ],
     guidance: ['Direct transmission and Host-to-Host files can be submitted up to 90 days in advance.', 'J.P. Morgan Access and Connect are fallbacks if direct transmission is unavailable.', 'Prefund clients have different deadlines: ask the bank.'],
     askBank: ['Which protocol and login does direct transmission use for our account (SFTP key, password, AS2)?', 'Do you require PGP encryption of the file?', ...COMMON_ASK],
-    sources: [{ url: 'https://www.jpmorgan.com/commercial-banking/alternate-methods-transacting-business', how: 'read', what: 'Backup transaction types and cutoff deadlines' }],
+    sources: [
+      { url: 'https://www.jpmorgan.com/commercial-banking/alternate-methods-transacting-business', how: 'read', what: 'Backup transaction types and cutoff deadlines' },
+      { url: 'https://developer.payments.jpmorgan.com/docs/treasury/global-payments/capabilities/global-payments-2/ach/how-to/initiate-ach-payment', how: 'read', what: 'Initiate an ACH payment' },
+      { url: 'https://developer.payments.jpmorgan.com/docs/treasury/global-payments/capabilities/global-payments-2/ach/payment-parameters-credit', how: 'read', what: 'ACH credit parameters' },
+      { url: 'https://developer.payments.jpmorgan.com/api/oauth', how: 'read', what: 'OAuth with a signed JWT' },
+      { url: 'https://developer.payments.jpmorgan.com/docs/treasury/global-payments/capabilities/global-payments-2/ach/error-codes', how: 'read', what: 'ACH status and error codes' },
+    ],
     verifiedOn: ON,
   },
 

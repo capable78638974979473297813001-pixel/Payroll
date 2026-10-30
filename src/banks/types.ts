@@ -82,6 +82,8 @@ export interface BankProfile {
     payroll?: { standardEntryClass: 'PPD'; entryDescription?: string };
     notSupported?: string[];
   };
+  /** A bank API Totali has an adapter for. Release is in Totali, because no bank here documents holding an API payment for the client to release. */
+  api?: { adapter: string; release: 'in_totali'; notes: string[] };
   cutoffsEt: Cutoff[];
   /** Plain-language notes shown to the employer. */
   guidance: string[];

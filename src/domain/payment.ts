@@ -1,5 +1,6 @@
 import { badRequest, forbidden } from '../lib/errors.ts';
 import { encryptField } from '../lib/crypto.ts';
+import { createPrivateKey } from 'node:crypto';
 import { validateRoutingNumber } from '../../engine/payroll/directDeposit.ts';
 import { validateSftp, validateTemplate } from '../ach/sftp.ts';
 import * as v from '../lib/validate.ts';
@@ -7,7 +8,17 @@ import { getProfile, PROFILE_IDS } from '../banks/index.ts';
 import { checkSetup, errorsOf } from '../banks/checks.ts';
 import type { Finding } from '../banks/types.ts';
 import type { Store } from '../store/store.ts';
-import type { Company, EmployerBankSetup, PaymentSetup } from './types.ts';
+import { API_AUTHORIZATION_VERSION } from '../bankapi/authorization.ts';
+import type { BankApiSetup, Company, EmployerBankSetup, PaymentSetup } from './types.ts';
+
+/** Totali only calls a bank at the bank's own hosts, so a company key cannot point it, and the account numbers it sends, somewhere else. */
+export function bankApiUrl(value: string, field: string): string {
+  let u: URL;
+  try { u = new URL(value); } catch { throw badRequest(`${field} is not a URL`); }
+  const ok = u.protocol === 'https:' && !u.username && !u.password && !u.port && (u.hostname.endsWith('.jpmorgan.com') || u.hostname.endsWith('.jpmorganchase.com'));
+  if (!ok) throw badRequest(`${field} must be an https address at the bank's own domain (jpmorgan.com)`);
+  return u.toString().replace(/\/$/, '');
+}
 
 export const DEFAULT_FILE_NAME_TEMPLATE = 'TOTALI_{date}_{seq}.ach';
 
@@ -55,6 +66,11 @@ export function setPaymentSetup(store: Store, companyId: string, body: unknown, 
   const leadBankingDays = leadGiven ?? profile?.rules.defaultLeadBankingDays?.days;
 
   const existing = company.payment.employerBank;
+  let api: BankApiSetup | undefined;
+  if (b.api !== undefined && b.api !== null) {
+    if (b.sftp !== undefined && b.sftp !== null) throw badRequest('Choose one: SFTP file delivery or the bank API, not both.');
+    api = parseApiSetup(b.api, existing?.api, bankProfile, companyIdValue);
+  }
   let sftp: EmployerBankSetup['sftp'];
   if (b.sftp === undefined || b.sftp === null) sftp = undefined;
   else {
@@ -89,21 +105,65 @@ export function setPaymentSetup(store: Store, companyId: string, body: unknown, 
     ...(bankProfile ? { bankProfile } : {}),
     ...(limitsTier !== undefined ? { limitsTier } : {}),
     ...(sftp ? { sftp } : {}),
+    ...(api ? { api } : {}),
   };
   return store.tx(() => store.companies.put({ ...company, payment: { mode, employerBank } }));
+}
+
+function parseApiSetup(raw: unknown, existing: BankApiSetup | undefined, bankProfile: string | undefined, companyId: string): BankApiSetup {
+  const a = v.obj(raw, 'employerBank.api');
+  const adapter = v.oneOf(a, 'adapter', ['jpmorgan'] as const);
+  if (bankProfile !== 'jpmorgan_commercial') throw badRequest("employerBank.api: the J.P. Morgan API needs employerBank.bankProfile 'jpmorgan_commercial'");
+  if (companyId.length !== 10) throw badRequest('employerBank.companyId must be exactly 10 characters for the API (the bank requires 10)');
+  const environment = v.oneOf(a, 'environment', ['client_testing', 'production'] as const);
+  const clientId = v.str(a, 'clientId', { max: 200 });
+  const certThumbprint = v.str(a, 'certThumbprint', { max: 200 });
+  const debtorAccountNumber = v.str(a, 'debtorAccountNumber', { max: 17 });
+  if (!/^\d{4,17}$/.test(debtorAccountNumber)) throw badRequest('employerBank.api.debtorAccountNumber is the 4 to 17 digit number of the account the payroll is paid from');
+  const debtorName = v.str(a, 'debtorName', { max: 16 });
+  const maxFileCents = v.cents(a, 'maxFileCents', { min: 1 });
+  const privateKey = a.privateKey === undefined ? undefined : v.str(a, 'privateKey', { max: 20_000 });
+  if (privateKey) {
+    try {
+      const k = createPrivateKey(privateKey);
+      if (k.asymmetricKeyType !== 'rsa' || (k.asymmetricKeyDetails?.modulusLength ?? 0) < 2048) throw new Error('weak');
+    } catch { throw badRequest('employerBank.api.privateKey must be an RSA private key of at least 2048 bits, in PEM form'); }
+  }
+  const keyEncrypted = privateKey ? encryptField(privateKey) : existing?.privateKeyEncrypted;
+  if (!keyEncrypted) throw badRequest('employerBank.api.privateKey is required the first time the API is set up');
+  const auth = v.obj(a.authorization, 'employerBank.api.authorization');
+  if (auth.accepted !== true) throw badRequest('employerBank.api.authorization.accepted must be true: the employer has to accept the written authorization (GET /payment-setup/api-authorization) before Totali may use their bank credentials');
+  const acceptedBy = v.str(auth, 'acceptedBy', { max: 120 });
+  if (a.environment === 'client_testing' && a.baseUrl === undefined) throw badRequest('employerBank.api.baseUrl is required for client_testing: it is given to you by J.P. Morgan');
+  return {
+    adapter,
+    environment,
+    clientId,
+    certThumbprint,
+    privateKeyEncrypted: keyEncrypted,
+    debtorAccountEncrypted: encryptField(debtorAccountNumber),
+    debtorAccountLast4: debtorAccountNumber.slice(-4),
+    debtorName,
+    maxFileCents,
+    ...(a.tokenUrl !== undefined ? { tokenUrl: bankApiUrl(v.str(a, 'tokenUrl', { max: 300 }), 'employerBank.api.tokenUrl') } : {}),
+    ...(a.baseUrl !== undefined ? { baseUrl: bankApiUrl(v.str(a, 'baseUrl', { max: 300 }), 'employerBank.api.baseUrl') } : {}),
+    ...(a.audience !== undefined ? { audience: v.str(a, 'audience', { max: 200 }) } : {}),
+    authorization: { acceptedAt: new Date().toISOString(), acceptedBy, textVersion: API_AUTHORIZATION_VERSION },
+  };
 }
 
 /** What a caller may see: never the private key. */
 export interface PaymentSetupView {
   mode: PaymentSetup['mode'];
-  employerBank?: Omit<EmployerBankSetup, 'sftp'> & { sftp?: { host: string; port: number; username: string; remoteDir: string; knownHostsLine: string; hasPrivateKey: true } };
+  employerBank?: Omit<EmployerBankSetup, 'sftp' | 'api'> & {
+    api?: { adapter: string; environment: string; clientId: string; certThumbprint: string; debtorAccountLast4: string; debtorName: string; maxFileCents: number; baseUrl?: string; tokenUrl?: string; audience?: string; hasPrivateKey: true; authorization: BankApiSetup['authorization'] }; sftp?: { host: string; port: number; username: string; remoteDir: string; knownHostsLine: string; hasPrivateKey: true } };
   bank?: { id: string; name: string; guidance: string[]; askYourBank: string[]; findings: Finding[] };
 }
 
 export function paymentSetupView(company: Company): PaymentSetupView {
   const eb = company.payment.employerBank;
   if (!eb) return { mode: company.payment.mode };
-  const { sftp, ...rest } = eb;
+  const { sftp, api, ...rest } = eb;
   const profile = eb.bankProfile ? getProfile(eb.bankProfile) : undefined;
   const bank = profile
     ? {
@@ -114,5 +174,5 @@ export function paymentSetupView(company: Company): PaymentSetupView {
         findings: checkSetup(profile, { odfiRoutingNumber: eb.odfiRoutingNumber, immediateOrigin: eb.immediateOrigin, ...(eb.leadBankingDays !== undefined ? { leadBankingDays: eb.leadBankingDays } : {}), ...(eb.limitsTier !== undefined ? { limitsTier: eb.limitsTier } : {}), ...(sftp ? { sftp: { host: sftp.host, port: sftp.port } } : {}) }),
       }
     : undefined;
-  return { mode: company.payment.mode, employerBank: { ...rest, ...(sftp ? { sftp: { host: sftp.host, port: sftp.port, username: sftp.username, remoteDir: sftp.remoteDir, knownHostsLine: sftp.knownHostsLine, hasPrivateKey: true } } : {}) }, ...(bank ? { bank } : {}) };
+  return { mode: company.payment.mode, employerBank: { ...rest, ...(api ? { api: { adapter: api.adapter, environment: api.environment, clientId: api.clientId, certThumbprint: api.certThumbprint, debtorAccountLast4: api.debtorAccountLast4, debtorName: api.debtorName, maxFileCents: api.maxFileCents, ...(api.baseUrl ? { baseUrl: api.baseUrl } : {}), ...(api.tokenUrl ? { tokenUrl: api.tokenUrl } : {}), ...(api.audience ? { audience: api.audience } : {}), hasPrivateKey: true as const, authorization: api.authorization } } : {}), ...(sftp ? { sftp: { host: sftp.host, port: sftp.port, username: sftp.username, remoteDir: sftp.remoteDir, knownHostsLine: sftp.knownHostsLine, hasPrivateKey: true } } : {}) }, ...(bank ? { bank } : {}) };
 }

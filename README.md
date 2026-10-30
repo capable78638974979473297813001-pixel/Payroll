@@ -40,7 +40,7 @@ Node 22.18+ and Python 3.10+ (MasteryTax). No packages to install.
 
 ```bash
 cp .env.example .env     # then fill it in; set these in your host's secret store, not in git
-npm test                 # Totali: 229 tests, a few seconds
+npm test                 # Totali: 258 tests, a few seconds
 npm run typecheck        # types for src/, test/, scripts/
 npm run test:vendored    # the vendored engine's own suites (2,107 tests)
 npm run check:stripe     # read-only: what is not ready for bank linking and ACH
@@ -133,6 +133,7 @@ src/industries/   the catalog and the restaurant niches (roles, tip policy, sour
 src/restaurant/   overtime, wages, tip credit, tip distribution, tip reporting, reports
 src/payroll/      pay run (draft, approve, void) and pay stubs
 src/banking/      bank links through Stripe, verification, the employer's debit authorization
+src/bankapi/      bank API adapters (J.P. Morgan) used only after a named person approves the exact file in Totali
 src/banks/        per-bank profiles (what each bank publishes about ACH files) and the checks that apply them
 src/ach/          NACHA files (build and parse), return codes, SFTP delivery, submitter interface, simulated bank
 src/money/        the ACH state machine, the ledger, the Stripe client (bank linking only)

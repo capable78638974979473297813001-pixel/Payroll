@@ -64,6 +64,8 @@ export interface EmployerBankSetup {
   bankProfile?: string;
   /** A limits tier of the bank's service the employer is on (only where the bank publishes limits per service). */
   limitsTier?: string;
+  /** Sending through the bank's API instead of a file. Excludes sftp. Totali still sends nothing until a named person approves the exact file in Totali. */
+  api?: BankApiSetup;
   /** Automatic delivery to the bank's SFTP server, when the bank offers it. Delivery is not approval: the employer still releases the file at the bank. */
   sftp?: {
     host: string;
@@ -75,6 +77,42 @@ export interface EmployerBankSetup {
     /** Encrypted at rest; never returned. */
     privateKeyEncrypted: string;
   };
+}
+
+/** The employer's own credentials for their bank's API. Everything secret is encrypted at rest and never returned. */
+export interface BankApiSetup {
+  adapter: 'jpmorgan';
+  environment: 'client_testing' | 'production';
+  clientId: string;
+  /** Thumbprint of the certificate the employer registered with the bank. */
+  certThumbprint: string;
+  privateKeyEncrypted: string;
+  debtorAccountEncrypted: string;
+  debtorAccountLast4: string;
+  /** The name that appears as the payer, at most 16 characters. */
+  debtorName: string;
+  /** Totali refuses to send a file larger than this. The employer's own ceiling on what these credentials may be used for. */
+  maxFileCents: Cents;
+  tokenUrl?: string;
+  baseUrl?: string;
+  audience?: string;
+  authorization: { acceptedAt: string; acceptedBy: string; textVersion: string };
+}
+
+/** Where each payment in an API-sent file stands. Keyed by leg id. */
+export interface ApiDelivery {
+  adapter: string;
+  approvals: Array<{ at: string; by: string; entryCount: number; creditsCents: Cents }>;
+  entries: Record<string, ApiEntry>;
+}
+export interface ApiEntry {
+  endToEndId: string;
+  /** pending: not sent. sending: the call is in flight or its result was lost (treated as unknown after a restart). sent: the bank took it. rejected: the bank refused it. unknown: it may or may not be at the bank; only a person can settle this. */
+  state: 'pending' | 'sending' | 'sent' | 'rejected' | 'unknown';
+  bank?: 'accepted' | 'processing' | 'held_for_client' | 'completed' | 'rejected' | 'returned';
+  paymentId?: string;
+  message?: string;
+  polledAt?: string;
 }
 
 export interface PaymentSetup {
@@ -185,7 +223,9 @@ export interface AchFile {
   reference?: string;
   message?: string;
   /** Employer-bank mode: how the file reached the bank. */
-  delivery?: { channel: 'download' | 'sftp'; status: 'none' | 'sent' | 'failed'; at?: string; remotePath?: string; message?: string };
+  delivery?: { channel: 'download' | 'sftp' | 'api'; status: 'none' | 'sent' | 'failed'; at?: string; remotePath?: string; message?: string };
+  /** Employer-bank mode: payments sent through the bank's API after approval in Totali. */
+  apiDelivery?: ApiDelivery;
   /** Employer-bank mode: the employer said they released it at their bank. */
   releasedAt?: string;
   releasedBy?: string;

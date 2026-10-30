@@ -25,6 +25,7 @@ import { RateLimiter } from './ratelimit.ts';
 import { rotateDataKey } from '../domain/rotation.ts';
 import { paymentSetupView, setPaymentSetup } from '../domain/payment.ts';
 import { getProfile, listProfiles } from '../banks/index.ts';
+import { API_AUTHORIZATION_VERSION, apiAuthorizationText } from '../bankapi/authorization.ts';
 
 const MAX_BODY = 1_000_000;
 /** Failed authentications allowed per client address per minute before everything from it is refused. */
@@ -120,6 +121,14 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
 
     // ---- how payments are sent
     route('GET', `${C}/payment-setup`, 'company', (c) => paymentSetupView(store.companies.require(c.params.cid, 'Company'))),
+    route('GET', `${C}/payment-setup/api-authorization`, 'company', (c) => {
+      const company = store.companies.require(c.params.cid, 'Company');
+      const q = c.query;
+      const last4 = String(q.get('accountLast4') ?? company.payment.employerBank?.api?.debtorAccountLast4 ?? '').replace(/\D/g, '').slice(-4);
+      const cap = Number(q.get('maxFileCents') ?? company.payment.employerBank?.api?.maxFileCents ?? 0);
+      if (last4.length !== 4 || !Number.isInteger(cap) || cap <= 0) throw badRequest('Pass accountLast4 and maxFileCents to see the authorization for them');
+      return { version: API_AUTHORIZATION_VERSION, text: apiAuthorizationText({ companyName: company.legalName, bankName: getProfile(company.payment.employerBank?.bankProfile ?? 'jpmorgan_commercial').name, accountLast4: last4, maxFileCents: cap }), note: 'Draft wording, not reviewed by a lawyer. Accept it by sending employerBank.api.authorization { accepted: true, acceptedBy } with the setup.' };
+    }),
     route('PUT', `${C}/payment-setup`, 'company', (c) => paymentSetupView(setPaymentSetup(store, c.params.cid, c.json(), c.principal?.kind === 'admin' ? 'admin' : 'company'))),
 
     // ---- employees
@@ -203,6 +212,16 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       return fileMeta(await ach.deliverFile(c.params.fid, { force: true }));
     }),
     route('POST', `${C}/ach/files/:fid/released`, 'company', (c) => fileMeta(ach.markReleased(c.params.cid, c.params.fid, v.str(c.json(), 'releasedBy', { max: 120 })))),
+    route('POST', `${C}/ach/files/:fid/approve-and-send`, 'company', async (c) => {
+      const o = c.json();
+      const conf = v.obj(o.confirm, 'confirm');
+      return ach.approveAndSend(c.params.cid, c.params.fid, { approvedBy: v.str(o, 'approvedBy', { max: 120 }), confirm: { entryCount: v.int(conf, 'entryCount', 0, 100_000), creditsCents: v.cents(conf, 'creditsCents') } });
+    }),
+    route('POST', `${C}/ach/files/:fid/api-status`, 'company', (c) => ach.refreshApiStatus(c.params.cid, c.params.fid, { force: c.json().force === true })),
+    route('POST', `${C}/ach/files/:fid/entries/:lid/resolve`, 'company', (c) => {
+      const o = c.json();
+      return ach.resolveApiEntry(c.params.cid, c.params.fid, c.params.lid, { outcome: v.oneOf(o, 'outcome', ['sent', 'not_sent'] as const), resolvedBy: v.str(o, 'resolvedBy', { max: 120 }), ...(o.paymentId !== undefined ? { paymentId: v.str(o, 'paymentId', { max: 64 }) } : {}) });
+    }),
     route('POST', `${C}/ach/files/:fid/cancel`, 'company', (c) => fileMeta(ach.cancelFile(c.params.cid, c.params.fid))),
     route('POST', `${C}/ach/returns`, 'company', (c) => ach.ingestReturnFile(c.raw, { companyId: c.params.cid })),
     route('POST', `${C}/ach/prenotes`, 'company', (c) => ach.submitPrenotes(c.params.cid)),

@@ -7,8 +7,11 @@ import { allocateNetPay } from '../../engine/payroll/directDeposit.ts';
 import { PRENOTE_WAITING_PERIOD_BUSINESS_DAYS } from '../../engine/payroll/directDepositVerification.ts';
 import type { DirectDepositAccount } from '../../engine/payroll/types.ts';
 import type { Store } from '../store/store.ts';
-import type { AchFile, AchFileEntry, BankAccount, Company, EmployerBankSetup, MoneyLeg, PayRun } from '../domain/types.ts';
+import type { AchFile, AchFileEntry, ApiEntry, BankAccount, Company, EmployerBankSetup, MoneyLeg, PayRun } from '../domain/types.ts';
 import { getProfile } from '../banks/index.ts';
+import { BankApiError, type ApiCredentials, type ApiPaymentState, type BankApiAdapter } from '../bankapi/types.ts';
+import { JpMorganAdapter } from '../bankapi/jpmorgan.ts';
+import { endToEndIdFor } from '../bankapi/jpmorgan.ts';
 import { checkFile, errorsOf } from '../banks/checks.ts';
 import type { Finding } from '../banks/types.ts';
 import { buildAchFile, type AchEntry, type Originator } from '../ach/nacha.ts';
@@ -106,9 +109,11 @@ export class AchService {
   private readonly now: () => Date;
   private readonly inflight = new Set<string>();
   private readonly sftp: SftpDelivery;
+  private readonly bankApis: Record<string, BankApiAdapter>;
 
-  constructor(store: Store, banks: BankService, submitter: AchSubmitter, cfg: AchConfig, opts: { now?: () => Date; sftp?: SftpDelivery } = {}) {
+  constructor(store: Store, banks: BankService, submitter: AchSubmitter, cfg: AchConfig, opts: { now?: () => Date; sftp?: SftpDelivery; bankApis?: Record<string, BankApiAdapter> } = {}) {
     this.sftp = opts.sftp ?? new SftpDelivery();
+    this.bankApis = opts.bankApis ?? { jpmorgan: new JpMorganAdapter(opts.now ? { now: opts.now } : {}) };
     this.store = store;
     this.banks = banks;
     this.submitter = submitter;
@@ -566,7 +571,7 @@ export class AchService {
         needsInYourAccountCents: sum(out.planned.map(({ leg }) => leg.amountCents)),
         controlTotals: file ? { entryCount: file.totals.entryCount, creditsCents: file.totals.creditCents, debitsCents: file.totals.debitCents, note: 'Some banks (Truist, KeyBank) will not release a file until you type in these totals. They are the sum of all credits and, separately, of all debits in the file.' } : null,
         youPayYourselfCents: { employeeTaxesWithheld: run2.totals.employeeTaxCents, employerTaxes: run2.totals.employerTaxCents, deductionsHeld: run2.totals.deductionsCents },
-        next: file ? (file.delivery?.status === 'sent' ? "The file was delivered to your bank's SFTP server. Approve it in your bank's portal, then confirm here that you released it." : 'Download the file, import it in your bank\'s ACH portal and approve it there, then confirm here that you released it.') : 'Nothing to send: everyone owed is either paid or not set up yet.',
+        next: file && eb.api ? `Nothing has been sent to your bank. To send it, a named person approves this exact file in Totali: POST /ach/files/${file.id}/approve-and-send with approvedBy and confirm {entryCount: ${file.totals.entryCount}, creditsCents: ${file.totals.creditCents}}.` : file ? (file.delivery?.status === 'sent' ? "The file was delivered to your bank's SFTP server. Approve it in your bank's portal, then confirm here that you released it." : 'Download the file, import it in your bank\'s ACH portal and approve it there, then confirm here that you released it.') : 'Nothing to send: everyone owed is either paid or not set up yet.',
       };
     } finally {
       this.inflight.delete(runId);
@@ -613,6 +618,201 @@ export class AchService {
     }
   }
 
+  // ------------------------------------------------------------------ bank API (employer-bank mode)
+
+  private apiFor(company: Company, eb: EmployerBankSetup): { creds: ApiCredentials; adapter: BankApiAdapter } {
+    const api = eb.api;
+    if (!api) throw conflict('api_not_set_up', "This company has no bank API set up. Use PUT /payment-setup with employerBank.api, or send the file through your bank's portal.");
+    const adapter = this.bankApis[api.adapter];
+    if (!adapter) throw conflict('api_adapter_missing', `No adapter for '${api.adapter}'.`);
+    return {
+      adapter,
+      creds: {
+        clientId: api.clientId,
+        certThumbprint: api.certThumbprint,
+        privateKeyPem: decryptField(api.privateKeyEncrypted),
+        environment: api.environment,
+        ...(api.tokenUrl ? { tokenUrl: api.tokenUrl } : {}),
+        ...(api.baseUrl ? { baseUrl: api.baseUrl } : {}),
+        ...(api.audience ? { audience: api.audience } : {}),
+        debtor: { name: api.debtorName, accountNumber: decryptField(api.debtorAccountEncrypted), routingNumber: eb.odfiRoutingNumber, companyId: eb.companyId },
+      },
+    };
+  }
+
+  private setEntry(fileId: string, legId: string, patch: Partial<ApiEntry>, fileStatus?: AchFile['status']): AchFile {
+    const f = this.store.achFiles.require(fileId, 'ACH file');
+    const d = f.apiDelivery!;
+    return this.store.achFiles.put({ ...f, ...(fileStatus ? { status: fileStatus } : {}), apiDelivery: { ...d, entries: { ...d.entries, [legId]: { ...d.entries[legId]!, ...patch } } }, updatedAt: this.now().toISOString() });
+  }
+
+  private failApiLeg(file: AchFile, legId: string, message: string): void {
+    this.rejectLegs({ ...file, entries: file.entries.filter((e) => e.legId === legId) }, message);
+  }
+
+  /**
+   * Send an approved payment file through the employer's bank API. This is the
+   * one manual step: a named person approves the exact file (its entry count
+   * and total, typed back) before anything is sent. Nothing calls the bank
+   * before this, and nothing here approves on anyone's behalf.
+   *
+   * Never pays twice: each payment is marked `sending` before the call. If the
+   * answer is lost or unclear it stays `unknown` and is not sent again until a
+   * person settles it (resolveApiEntry). Safe to call again to finish a file
+   * that stopped part way.
+   */
+  async approveAndSend(companyId: string, fileId: string, input: { approvedBy: string; confirm: { entryCount: number; creditsCents: number } }) {
+    const company = this.requireMode(companyId, 'employer_bank');
+    const eb = this.requireEmployerBank(company);
+    const { creds, adapter } = this.apiFor(company, eb);
+    const by = String(input.approvedBy ?? '').trim();
+    if (!by) throw badRequest('approvedBy is required: the name of the person approving this file');
+    const file0 = this.store.achFiles.require(fileId, 'ACH file');
+    if (file0.companyId !== companyId || file0.rail !== 'employer' || file0.kind !== 'credit') throw badRequest("That is not one of this company's own payroll files");
+    if (file0.status === 'rejected') throw conflict('file_cancelled', 'That file was cancelled. Prepare a new one.');
+    if (file0.status === 'accepted' && !file0.apiDelivery) throw conflict('already_released', "That file was released at the bank by hand. Sending it again through the API would pay everyone twice.");
+    if (input.confirm?.entryCount !== file0.totals.entryCount || input.confirm?.creditsCents !== file0.totals.creditCents) {
+      throw badRequest(`The totals do not match this file. It has ${file0.totals.entryCount} entries totalling ${file0.totals.creditCents} cents. Approval means confirming exactly what will be sent.`);
+    }
+    if (file0.totals.creditCents > eb.api!.maxFileCents) throw conflict('over_file_cap', `This file (${file0.totals.creditCents} cents) is over the ${eb.api!.maxFileCents} cent ceiling set for the bank API. Raise it in the payment setup if that is intended.`);
+    const today = this.today();
+    if (file0.effectiveDate < today) throw conflict('file_stale', `This file was dated ${file0.effectiveDate}, which has passed. Cancel it and prepare a new one.`);
+    if (eb.bankProfile) {
+      const errs = errorsOf(this.checkAgainstBank(company, eb, file0));
+      if (errs.length > 0) throw conflict('bank_rule_violation', `This file now breaks ${getProfile(eb.bankProfile).name}'s rules: ${errs.map((e) => e.message).join(' ')}`, { findings: errs });
+    }
+    if (this.inflight.has(fileId)) throw conflict('send_in_progress', 'This file is already being sent.');
+    this.inflight.add(fileId);
+    try {
+      const at0 = this.now().toISOString();
+      this.store.tx(() => {
+        const f = this.store.achFiles.require(fileId, 'ACH file');
+        const entries: Record<string, ApiEntry> = { ...(f.apiDelivery?.entries ?? {}) };
+        for (const e of f.entries) if (e.legId && !entries[e.legId]) entries[e.legId] = { endToEndId: endToEndIdFor(e.legId), state: 'pending' };
+        // A restart can leave a payment 'sending' with no answer: it may be at the bank, so it needs a person.
+        for (const [k, v] of Object.entries(entries)) if (v.state === 'sending') entries[k] = { ...v, state: 'unknown', message: 'Totali stopped before the bank answered. It may have been accepted: check your bank, then resolve it.' };
+        this.store.achFiles.put({ ...f, status: f.status === 'created' ? 'queued' : f.status, submitter: adapter.id, delivery: { channel: 'api', status: 'none', at: at0 }, apiDelivery: { adapter: adapter.id, approvals: [...(f.apiDelivery?.approvals ?? []), { at: at0, by, entryCount: f.totals.entryCount, creditsCents: f.totals.creditCents }], entries }, message: `Approved by ${by}. Sending through the bank's API.`, updatedAt: at0 });
+      });
+
+      let stopped: string | undefined;
+      for (const e of this.store.achFiles.require(fileId, 'ACH file').entries) {
+        if (!e.legId) continue;
+        const cur = this.store.achFiles.require(fileId, 'ACH file').apiDelivery!.entries[e.legId]!;
+        if (cur.state !== 'pending') continue;
+        const leg = this.store.legs.require(e.legId, 'Leg');
+        if (leg.status !== 'queued') continue;
+        const account = this.store.bankAccounts.require(leg.bankAccountId, 'Bank account');
+        const employee = this.store.employees.require(leg.employeeId!, 'Employee');
+        const n = numbersFor(account);
+        this.store.tx(() => this.setEntry(fileId, e.legId!, { state: 'sending' }));
+        let result: Awaited<ReturnType<BankApiAdapter['send']>>;
+        try {
+          result = await adapter.send(creds, { legId: leg.id, amountCents: leg.amountCents, effectiveDate: file0.effectiveDate, recipientName: `${employee.firstName} ${employee.lastName}`, routingNumber: n.routingNumber, accountNumber: n.accountNumber, accountType: account.accountType });
+        } catch (err) {
+          const outcome = err instanceof BankApiError ? err.outcome : 'unknown';
+          const message = err instanceof BankApiError ? err.message : 'Unexpected error while sending; the payment may have been accepted.';
+          if (outcome === 'rejected') {
+            this.store.tx(() => {
+              this.setEntry(fileId, e.legId!, { state: 'rejected', bank: 'rejected', message });
+              this.failApiLeg(this.store.achFiles.require(fileId, 'ACH file'), e.legId!, message);
+              this.alert(leg.runId, 'api_payment_rejected', `The bank rejected the payment to ${employee.firstName} ${employee.lastName}: ${message}`);
+            });
+            continue;
+          }
+          this.store.tx(() => this.setEntry(fileId, e.legId!, outcome === 'not_sent' ? { state: 'pending', message } : { state: 'unknown', message }));
+          stopped = message;
+          break;
+        }
+        // A state that needs action (rejected, returned, held) is applied below, so it is not recorded here first.
+        const plain = result.state === 'accepted' || result.state === 'processing' || result.state === 'completed';
+        this.store.tx(() => {
+          this.setEntry(fileId, e.legId!, { state: 'sent', ...(plain ? { bank: result.state } : {}), paymentId: result.paymentId, message: undefined });
+          const l = this.store.legs.require(e.legId!, 'Leg');
+          if (l.status === 'queued') this.store.legs.put({ ...l, status: 'submitted', updatedAt: this.now().toISOString() });
+          if (!plain) this.applyBankState(fileId, e.legId!, result.state, 'Reported by the bank when it took the payment.');
+        });
+      }
+
+      return this.store.tx(() => {
+        const f = this.store.achFiles.require(fileId, 'ACH file');
+        const states = Object.values(f.apiDelivery!.entries).map((x) => x.state);
+        const count = (k: ApiEntry['state']) => states.filter((x) => x === k).length;
+        const done = states.every((x) => x === 'sent' || x === 'rejected');
+        const at = this.now().toISOString();
+        const status: AchFile['status'] = done ? (count('sent') > 0 ? 'accepted' : 'rejected') : 'queued';
+        const message = done ? `${count('sent')} payment(s) sent through the bank's API${count('rejected') ? `, ${count('rejected')} rejected by the bank` : ''}.` : `Stopped: ${stopped ?? 'payments still waiting'}. ${count('sent')} sent, ${count('pending')} not yet sent, ${count('unknown')} need checking at your bank.`;
+        this.store.achFiles.put({ ...f, status, ...(done && count('sent') > 0 ? { releasedAt: at, releasedBy: by } : {}), delivery: { channel: 'api', status: done ? 'sent' : 'failed', at, ...(done ? {} : { message }) }, message, updatedAt: at });
+        return { file: this.fileMeta(fileId), sent: count('sent'), rejected: count('rejected'), notYetSent: count('pending'), needsChecking: count('unknown'), complete: done, ...(stopped ? { stoppedBecause: stopped } : {}) };
+      });
+    } finally {
+      this.inflight.delete(fileId);
+    }
+  }
+
+  /** What the bank says about a payment, applied. Call inside store.tx(). */
+  private applyBankState(fileId: string, legId: string, state: ApiPaymentState, detail?: string): void {
+    const file = this.store.achFiles.require(fileId, 'ACH file');
+    const before = file.apiDelivery!.entries[legId]!;
+    const leg = this.store.legs.require(legId, 'Leg');
+    this.setEntry(fileId, legId, { bank: state, polledAt: this.now().toISOString() });
+    if (state === before.bank) return;
+    if (state === 'rejected') {
+      this.setEntry(fileId, legId, { state: 'rejected', message: detail });
+      this.failApiLeg(file, legId, detail ?? 'The bank rejected this payment.');
+      this.alert(leg.runId, 'api_payment_rejected', `The bank rejected a payment it had accepted (employee ${leg.employeeId}). ${detail ?? ''}`.trim());
+    } else if (state === 'returned') {
+      if (leg.status !== 'returned') this.returnPayout(leg, 'API');
+    } else if (state === 'held_for_client') {
+      this.alert(leg.runId, 'api_payment_held', `Your bank is holding a payment (employee ${leg.employeeId}) until your company takes an action. Check your bank's portal.`);
+    }
+  }
+
+  /** Ask the bank where each payment from an API-sent file stands. Not more often than every 15 minutes per payment unless forced. */
+  async refreshApiStatus(companyId: string, fileId: string, opts: { force?: boolean } = {}) {
+    const company = this.requireMode(companyId, 'employer_bank');
+    const eb = this.requireEmployerBank(company);
+    const file = this.store.achFiles.require(fileId, 'ACH file');
+    if (file.companyId !== companyId || !file.apiDelivery) throw badRequest('That file was not sent through the bank API');
+    const { creds, adapter } = this.apiFor(company, eb);
+    const nowMs = this.now().getTime();
+    const checked: string[] = [];
+    const failed: Array<{ legId: string; message: string }> = [];
+    for (const [legId, entry] of Object.entries(file.apiDelivery.entries)) {
+      if (entry.state !== 'sent' || !entry.paymentId || entry.bank === 'rejected' || entry.bank === 'returned' || entry.bank === 'completed') continue;
+      if (!opts.force && entry.polledAt && nowMs - Date.parse(entry.polledAt) < SFTP_RETRY_MINUTES * 60_000) continue;
+      try {
+        const r = await adapter.status(creds, entry.paymentId);
+        this.store.tx(() => this.applyBankState(fileId, legId, r.state, r.detail));
+        checked.push(legId);
+      } catch (err) {
+        failed.push({ legId, message: (err as Error).message });
+      }
+    }
+    return { checked: checked.length, failed, entries: this.store.achFiles.require(fileId, 'ACH file').apiDelivery!.entries };
+  }
+
+  /** A person settles a payment whose outcome Totali could not tell, after checking at the bank. */
+  resolveApiEntry(companyId: string, fileId: string, legId: string, input: { outcome: 'sent' | 'not_sent'; resolvedBy: string; paymentId?: string }) {
+    const by = input.resolvedBy.trim();
+    if (!by) throw badRequest('resolvedBy is required: the person who checked at the bank');
+    return this.store.tx(() => {
+      const file = this.store.achFiles.require(fileId, 'ACH file');
+      if (file.companyId !== companyId || !file.apiDelivery) throw badRequest('That file was not sent through the bank API');
+      const entry = file.apiDelivery.entries[legId];
+      if (!entry) throw badRequest('That payment is not in this file');
+      if (entry.state !== 'unknown') throw conflict('not_unknown', `That payment is '${entry.state}'; only a payment whose outcome is unknown needs resolving.`);
+      if (input.outcome === 'sent') {
+        if (!input.paymentId || !/^[A-Za-z0-9-]{8,64}$/.test(input.paymentId)) throw badRequest("paymentId is required to mark it sent: copy it from your bank's portal");
+        this.setEntry(fileId, legId, { state: 'sent', paymentId: input.paymentId, bank: 'accepted', message: `Confirmed at the bank by ${by}.` });
+        const l = this.store.legs.require(legId, 'Leg');
+        if (l.status === 'queued') this.store.legs.put({ ...l, status: 'submitted', updatedAt: this.now().toISOString() });
+      } else {
+        this.setEntry(fileId, legId, { state: 'pending', message: `Confirmed not at the bank by ${by}. Approve again to send it.` });
+      }
+      return this.fileMeta(fileId);
+    });
+  }
+
   /** The employer says they released this file at their bank. From here the payments take effect on the file's date. */
   markReleased(companyId: string, fileId: string, by: string): AchFile {
     if (!by.trim()) throw badRequest('releasedBy is required: the name of the person who approved it at the bank');
@@ -621,6 +821,8 @@ export class AchService {
       if (file.companyId !== companyId || file.rail !== 'employer') throw badRequest('That is not one of this company\'s own payment files');
       if (file.status === 'accepted') return file;
       if (file.status === 'rejected') throw conflict('file_cancelled', 'That file was cancelled. Prepare a new one.');
+      // Payments are already going out through the bank's API: marking the file released as well could lead to it being uploaded at the bank too.
+      if (file.apiDelivery) throw conflict('sent_by_api', 'Payments from this file are being sent through your bank\'s API. Do not also upload the file at your bank.');
       const at = this.now().toISOString();
       const next = this.store.achFiles.put({ ...file, status: 'accepted', releasedAt: at, releasedBy: by.trim(), message: `The employer reported releasing this file at their bank (${by.trim()}).`, updatedAt: at });
       this.acceptLegs(file);
@@ -634,6 +836,7 @@ export class AchService {
       const file = this.store.achFiles.require(fileId, 'ACH file');
       if (file.companyId !== companyId || file.rail !== 'employer') throw badRequest('That is not one of this company\'s own payment files');
       if (file.status === 'rejected') return file;
+      if (file.apiDelivery && Object.values(file.apiDelivery.entries).some((e) => e.state !== 'pending')) throw conflict('already_sent_by_api', 'Some payments from this file were already sent to your bank through its API. Ask the bank to recall them if they are wrong.');
       if (file.status === 'accepted') throw conflict('already_released', 'That file was already released at the bank. If a payment is wrong, ask the bank to recall it; anything that fails will come back as a return.');
       const next = this.store.achFiles.put({ ...file, status: 'rejected', message: 'Cancelled by the employer before release.', updatedAt: this.now().toISOString() });
       this.rejectLegs(file, 'Cancelled by the employer before release.');
@@ -835,6 +1038,13 @@ export async function reconcile(ach: AchService, store: Store, opts: { autoDisbu
       await ach.submitFile(f.id);
     } catch (e) {
       log(`reconcile submit ${f.id}: ${(e as Error).message}`);
+    }
+  }
+  for (const f of store.achFiles.where((x) => !!x.apiDelivery && Object.values(x.apiDelivery.entries).some((e) => e.state === 'sent' && e.bank !== 'completed' && e.bank !== 'rejected' && e.bank !== 'returned'))) {
+    try {
+      await ach.refreshApiStatus(f.companyId, f.id);
+    } catch (e) {
+      log(`reconcile api status ${f.id}: ${(e as Error).message}`);
     }
   }
   if (!opts.autoDisburse) return;

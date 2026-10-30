@@ -1,12 +1,12 @@
 # Getting the payment file to the employer's bank
 
-In employer-bank mode Totali writes the payment file and the employer's own bank sends the money. There are three ways the file reaches the bank. The employer approves it at their bank in every case; Totali never releases a payment.
+In employer-bank mode Totali writes the payment file and the employer's own bank sends the money. There are three ways the payments reach the bank. With levels 1 and 2 the employer approves at their bank. With level 3 the approval is in Totali, before anything is sent. In every case a named person approves and Totali never approves for anyone.
 
 | Level | How | Needs from the bank |
 | --- | --- | --- |
 | 1. Upload | Totali builds the file; the employer downloads it and imports it in their bank's online ACH service, then approves it. | A business ACH service with file import. |
 | 2. SFTP | Totali delivers the file to the bank's server after each run. The employer still approves it at the bank. | The bank enables it for that employer and gives them a host, a login, a key arrangement, a file-name rule and the bank's host key. |
-| 3. Bank API | Totali submits through the bank's API. | A bank that has one, and an adapter for it. Not built. |
+| 3. Bank API | A named person approves the exact file in Totali, then Totali sends each payment through the bank's API with the employer's own credentials. | A bank with a public API, an adapter for it, and the employer's own onboarding. Built for J.P. Morgan only. |
 
 ## The nine large banks
 
@@ -61,6 +61,32 @@ An employer picks a bank with `employerBank.bankProfile` in `PUT /payment-setup`
 Each profile records, for each source, whether the page was read or only seen as a search summary. The four marked summary-only (U.S. Bank, Fifth Third, KeyBank, Banner Bank) should be treated as leads, and the profile's `askBank` list says what to confirm. Facts that were not found are left out of the rules and listed there instead.
 
 What is not built: connecting to a bank's API, PGP, password logins, and any behaviour that depends on a bank rule that has not been read.
+
+## Level 3: sending through a bank API
+
+**What is built:** an adapter for J.P. Morgan's Global Payments 2 ACH API (`src/bankapi/jpmorgan.ts`), written from the public developer documentation and never run against J.P. Morgan. It signs the OAuth assertion with the employer's RSA key, sends one PPD / PAYROLL credit per employee, and reads each payment's status back by polling.
+
+**Why approval happens in Totali.** For this to keep the one manual step, a bank would have to hold an API-sent payment until its owner releases it. J.P. Morgan's documentation shows no such state (its statuses are accepted, processing, rejected, returned and completed, with holds that belong to the bank) and no cancel call. A payment sent by API is therefore accepted for execution. The other banks I looked at (PNC, Wells Fargo, Bank of America) publish nothing readable on this, so I did not write adapters for them. The approval is placed before the call instead:
+
+1. `POST /pay-runs/:id/prepare-payment` builds the file. **It calls the bank not at all.**
+2. A named person approves the exact file: `POST /ach/files/:id/approve-and-send` with `approvedBy` and `confirm {entryCount, creditsCents}` typed back to match the file. Wrong or missing totals send nothing.
+3. Only then does Totali call the bank, one payment at a time.
+
+**Controls around the employer's credentials**
+
+- The employer sets `maxFileCents`, the largest file Totali may send with them, and accepts a written authorization (`GET /payment-setup/api-authorization`) that names the account, the cap and the approval rule. The wording is a draft and has not been reviewed by a lawyer.
+- The private key, account number and client id are encrypted at rest and never returned. Totali only calls the bank's own hosts (`*.jpmorgan.com`), so a company key cannot point it, and the account numbers it sends, somewhere else.
+- A file whose date has passed, or that now breaks the bank's rules, is refused. A file released by hand cannot also be sent by API, and the reverse.
+
+**Never pays twice.** A payment is marked `sending` before the call. If the answer is lost, late or unclear (a timeout, a 5xx, a duplicate warning, an unreadable reply) it becomes `unknown` and is not sent again until a person checks the bank and says whether it is there (`POST /ach/files/:id/entries/:leg/resolve`). Bad credentials, a refused connection and rate limits are `not_sent` and safe to repeat; a rejection by the bank fails that employee only.
+
+**What stays outside Totali's control**
+
+- **Onboarding is the employer's.** Credentials, the certificate, a client-testing environment and its base URL come from the employer's J.P. Morgan representative. Totali cannot get them.
+- **mTLS and digital signatures:** the documentation says they "may be required depending on the capability" and does not say whether ACH needs them. This adapter does neither. If the bank requires them the call will fail, safely, with no payment made.
+- **Callbacks** need an implementation request with the bank and the documentation does not say how they are signed, so status is polled (at most every 15 minutes per payment).
+- **Returns** arrive as a status, without an R-code. Totali treats them as an unrecognised return: the employee's net pay is owed again and their bank account is disabled until someone checks.
+- **Legal:** the employer stays the originator, with their own agreement with the bank, and Totali never holds the money. Whether the bank's terms allow a software provider to use the employer's credentials, and whether Totali needs any registration for this, are for the employer's bank and a lawyer to say. Totali does not claim an answer.
 
 ## How many banks
 
