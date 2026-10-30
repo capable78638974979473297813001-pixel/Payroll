@@ -31,6 +31,10 @@ import { OutboxMailer, type Mailer } from '../mail/mailer.ts';
 import type { User } from '../accounts/types.ts';
 import { SECURITY_HEADERS, serveStatic } from '../web/static.ts';
 import { fileURLToPath } from 'node:url';
+import { assertIndustry, build, checkAnswer, INDUSTRY_CARDS, normalizeAnswers, questionsFor, TEAM_SIZES } from '../builder/catalog.ts';
+import { createCompanyFromSetup } from '../builder/finish.ts';
+import { stateFacts } from '../builder/facts.ts';
+import { statesWithRuleset } from '../../engine/src/registry.ts';
 
 const MAX_BODY = 1_000_000;
 /** Failed authentications allowed per client address per minute before everything from it is refused. */
@@ -147,6 +151,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('GET', '/v1/auth/config', 'none', () => ({
       google: false,
       mail: mailer.kind,
+      devTools: !!config.devTools,
       stripePublishableKey: (process.env.STRIPE_PUBLISHABLE_KEY ?? '').trim() || null,
       termsVersion: '2026-10-terms-v1',
     })),
@@ -179,6 +184,49 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       // Only where the operator asked for it: it shows verification codes.
       if (!config.devTools || !(mailer instanceof OutboxMailer)) throw notFound('Route');
       return { messages: mailer.messages.slice(-20) };
+    }),
+
+    // ---- the setup builder (a signed-in person who has not built their company yet)
+    route('GET', '/v1/builder/industries', 'none', () => {
+      const date = now().toISOString().slice(0, 10);
+      return {
+        industries: INDUSTRY_CARDS.map((c) => ({ ...c, questions: questionsFor(c.id) })),
+        teamSizes: TEAM_SIZES,
+        states: statesWithRuleset(date).map((code) => ({ code, name: stateFacts(code, date).name })).sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    }),
+    route('POST', '/v1/builder/preview', 'user', (c) => {
+      const o = c.json();
+      const industry = assertIndustry(o.industry);
+      const date = now().toISOString().slice(0, 10);
+      const { answers, errors } = normalizeAnswers(industry, o.answers, date);
+      return { ...build(industry, answers, date), answers, errors };
+    }),
+    route('PUT', '/v1/builder/draft', 'user', (c) => {
+      const o = c.json();
+      const industry = assertIndustry(o.industry);
+      const date = now().toISOString().slice(0, 10);
+      if (c.user!.companyId) throw new ApiError(409, 'company_exists', 'Your company is already set up.');
+      const { answers } = normalizeAnswers(industry, o.answers, date);
+      const user = accounts.saveSetup(c.user!.id, { industry, answers: answers as Record<string, unknown>, step: typeof o.step === 'string' ? o.step.slice(0, 40) : 'industry' });
+      return { user: publicUser(user), ...build(industry, answers, date) };
+    }),
+    route('POST', '/v1/builder/check', 'user', (c) => {
+      const o = c.json();
+      const r = checkAnswer(assertIndustry(o.industry), String(o.question ?? ''), o.value, now().toISOString().slice(0, 10));
+      return r.ok ? { ok: true, value: r.value } : { ok: false, error: r.error };
+    }),
+    route('POST', '/v1/builder/finish', 'user', (c) => {
+      const user = c.user!;
+      if (!user.emailVerifiedAt) throw forbidden('Verify your email first.');
+      const draft = user.setup;
+      if (!draft?.industry) throw new ApiError(409, 'setup_incomplete', 'Pick an industry and answer the questions first.');
+      const industry = assertIndustry(draft.industry);
+      const date = now().toISOString().slice(0, 10);
+      const { answers } = normalizeAnswers(industry, draft.answers, date);
+      const company = createCompanyFromSetup(store, user, industry, answers, date, now());
+      accounts.attachCompany(user.id, company.id);
+      return new Reply({ companyId: company.id, user: publicUser(store.users.require(user.id, 'User')) }, {}, 201);
     }),
 
     // ---- the picker

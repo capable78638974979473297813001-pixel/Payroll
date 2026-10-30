@@ -61,7 +61,8 @@ test('state-specific items reach only companies in that state', () => {
   assert.ok(!ids('TX').some((i) => i.startsWith('ca_') || i.startsWith('ny_')));
 });
 
-test('only restaurant is available; the other industries are planned and carry no niches', () => {
-  assert.deepEqual(catalog.filter((i) => i.status === 'available').map((i) => i.id), ['restaurant']);
+test('five industries are available; the rest are planned and carry no niches', () => {
+  assert.deepEqual(catalog.filter((i) => i.status === 'available').map((i) => i.id), ['restaurant', 'hotel_lodging', 'construction_trades', 'office_studios', 'delivery_couriers']);
+  assert.ok(catalog.filter((i) => i.status === 'available').every((i) => i.niches.length >= 1));
   assert.ok(catalog.filter((i) => i.status === 'planned').every((i) => i.niches.length === 0));
 });

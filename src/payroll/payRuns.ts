@@ -379,6 +379,7 @@ export function approvePayRun(store: Store, companyId: string, runId: string, bo
 
   // Re-derive to make sure nothing changed since the draft was read.
   const company = store.companies.require(companyId, 'Company');
+  if (!company.ein) throw conflict('company_not_verified', 'Add your EIN in Company setup before approving payroll. It goes on every pay stub and tax filing.');
   const current = buildPayRun(store, company, { periodStart: run.periodStart, periodEnd: run.periodEnd, checkDate: run.checkDate, adjustments: run.adjustments }, { id: run.id, createdAt: run.createdAt });
   if (JSON.stringify(current.paychecks) !== JSON.stringify(run.paychecks)) {
     throw conflict('run_is_stale', 'Shifts or employee records changed after this draft was calculated. Recalculate it and review the new numbers.');

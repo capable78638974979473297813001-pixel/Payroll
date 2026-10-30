@@ -72,7 +72,7 @@ const state: { cid?: string; key?: string; emp: Record<string, string>; runId?: 
 const K = () => state.key;
 const P = (s = '') => `/v1/companies/${state.cid}${s}`;
 
-test('the industry picker is public: restaurant is available with nine niches, others are planned', async () => {
+test('the industry picker is public: restaurant is available with nine niches, some others are planned', async () => {
   const r = await call('GET', '/v1/industries');
   assert.equal(r.status, 200);
   const rest = r.body.industries.find((i: any) => i.id === 'restaurant');
@@ -305,7 +305,8 @@ test('opening balances for an employee paid elsewhere earlier this year', async 
 });
 
 test('errors never leak internals; unknown routes and bad bodies are handled', async () => {
-  assert.equal((await call('GET', '/nope')).status, 404);
+  assert.equal((await call('GET', '/v1/nope')).status, 404, 'the API answers 404 as JSON');
+  assert.equal((await call('GET', '/nope.json')).status, 404, 'a missing file is a 404');
   assert.equal((await call('DELETE', '/v1/industries')).status, 405);
   const bad = await call('POST', P('/shifts'), { token: K(), raw: '{not json' });
   assert.equal(bad.status, 400);

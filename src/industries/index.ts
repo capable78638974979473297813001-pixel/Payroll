@@ -1,5 +1,6 @@
 import { badRequest, conflict, notFound } from '../lib/errors.ts';
 import { restaurantNiches } from './restaurant.ts';
+import { generalNiches } from './general.ts';
 import type { ChecklistItem, CompanySettings, IndustryDef, NicheProfile } from './types.ts';
 
 export type { ChecklistItem, CompanySettings, IndustryDef, NicheProfile, RoleTemplate, TipOutRule, TipPolicy } from './types.ts';
@@ -7,9 +8,9 @@ export type { ChecklistItem, CompanySettings, IndustryDef, NicheProfile, RoleTem
 const planned = (id: string, label: string, description: string): IndustryDef => ({ id, label, status: 'planned', description, niches: [] });
 
 /**
- * The catalog the signup picker reads. Restaurant is the first industry
- * built end to end. The others are listed so the picker shows the whole
- * product, and they refuse selection until they have a profile.
+ * The catalog the signup picker reads. Restaurant is built end to end. Hotels, trades, offices and couriers run
+ * on the same pay engine with their own starting roles. The rest are listed and refuse selection until they have
+ * a profile.
  */
 export const catalog: IndustryDef[] = [
   {
@@ -19,10 +20,36 @@ export const catalog: IndustryDef[] = [
     description: 'Tips, tip credit, tip pools, service charges, split shifts and delivery. Nine niches from fine dining to food trucks.',
     niches: restaurantNiches,
   },
-  planned('construction_trades', 'Construction and trades', 'Prevailing wage, certified payroll and job costing. The engine for this exists in the Crewtally codebase and is not folded in yet.'),
+  {
+    id: 'hotel_lodging',
+    label: 'Hotels and venues',
+    status: 'available',
+    description: 'Departments, seasonal staff and service charges.',
+    niches: generalNiches.filter((n) => n.industry === 'hotel_lodging'),
+  },
+  {
+    id: 'construction_trades',
+    label: 'Trades and construction',
+    status: 'available',
+    description: 'Job costing, crews and workers’ comp classes. Prevailing wage and certified payroll are not computed.',
+    niches: generalNiches.filter((n) => n.industry === 'construction_trades'),
+  },
+  {
+    id: 'office_studios',
+    label: 'Office and studios',
+    status: 'available',
+    description: 'Salaried and hourly staff, time off and more than one state.',
+    niches: generalNiches.filter((n) => n.industry === 'office_studios'),
+  },
+  {
+    id: 'delivery_couriers',
+    label: 'Delivery and couriers',
+    status: 'available',
+    description: 'Trips, mileage and contractor drivers.',
+    niches: generalNiches.filter((n) => n.industry === 'delivery_couriers'),
+  },
   planned('salon_spa', 'Salon and spa', 'Booth rent, commission tiers and service tips.'),
   planned('retail', 'Retail', 'Commission, predictive scheduling and seasonal hiring.'),
-  planned('hotel_lodging', 'Hotels and lodging', 'Housekeeping piece rates, banquet service charges and tip pools.'),
   planned('childcare', 'Childcare', 'Ratio-aware scheduling and subsidy-aware payroll.'),
 ];
 

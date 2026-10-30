@@ -15,7 +15,11 @@ export interface Company {
   /** The state the establishment is in. Decides whether a tip credit is in effect for pooling rules. */
   homeState: string;
   address?: string;
-  paySchedule: { frequency: PayFrequency; checkDateLagDays: number };
+  paySchedule: { frequency: PayFrequency; checkDateLagDays: number; /** The weekday employees are paid, when the business pays weekly or every other week. */ payWeekday?: string };
+  /** Where the business operates, from the setup builder. A location in another state is taxed by that state. */
+  locations?: Array<{ name: string; city: string; state: string }>;
+  /** The builder's answers, kept so the dashboard and the setup can be re-derived and edited. */
+  setup?: { industry: string; answers: Record<string, unknown>; builtAt: string };
   settings: CompanySettings;
   /** The employer's own SUI rates and similar facts only the employer knows. Passed to the tax engine as-is. */
   employerContext?: EmployerContext;
