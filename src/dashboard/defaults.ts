@@ -43,7 +43,7 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
 
   tabs.push({ id: 'payroll', label: 'Payroll', kind: 'page', widgets: [w('next_payroll', 6), w('payroll_history', 6), w('payroll_cost', 6), w('tax_summary', 6), w('compliance', 12)] });
 
-  const people: DashboardWidget[] = [w('people_table', 12), w('team_summary', 6), w('onboarding_progress', 6)];
+  const people: DashboardWidget[] = [w('people_directory', 12), w('team_summary', 6), w('onboarding_progress', 6)];
   if (has('locations')) people.push(w('locations_card', 6));
   if (has('contractors')) people.push(w('contractors_card', 6));
   tabs.push({ id: 'people', label: 'People', kind: 'page', widgets: people });
@@ -55,7 +55,7 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   if (group) time.push(w('group_cost', 12, { groupBy: group }));
   tabs.push({ id: 'time', label: restaurant ? 'Time and tips' : 'Time', kind: 'page', widgets: time });
 
-  tabs.push({ id: 'onboarding', label: 'Onboarding', kind: 'page', widgets: [w('onboarding_progress', 6), w('forms_status', 6), w('quick_actions', 12, { actions: ['invite_hire', 'add_person', 'import_hours'] })] });
+  tabs.push({ id: 'onboarding', label: 'Onboarding', kind: 'page', widgets: [w('onboarding_board', 8), w('invite_form', 4), w('forms_status', 6), w('onboarding_progress', 6)] });
   tabs.push({ id: 'help', label: 'Help', kind: 'help', widgets: [] });
   tabs.push({ id: 'settings', label: 'Settings', kind: 'settings', widgets: [] });
 

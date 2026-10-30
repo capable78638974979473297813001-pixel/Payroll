@@ -7,6 +7,11 @@ import { industry, builder } from './pages/setup.js';
 import { dashboardTab, helpPage } from './app/dashboard.js';
 import { settingsPage } from './app/settings.js';
 import { runPayrollPage, runPage, stubPage } from './app/payroll.js';
+import { profilePage, peopleCards } from './app/people.js';
+import { RENDERERS } from './widgets.js';
+import { joinPage } from './pages/join.js';
+
+Object.assign(RENDERERS, peopleCards);
 
 const root = document.getElementById('app');
 mount(root, h('div', { class: 'loading-screen' }, h('div', { class: 'spinner', role: 'status', 'aria-label': 'Loading' })));
@@ -20,6 +25,8 @@ route('/setup/industry', industry);
 route('/setup/builder', builder);
 route('/app/help', helpPage());
 route('/app/settings', settingsPage());
+route('/join/:token', joinPage());
+route('/app/people/:id', profilePage());
 route('/app/payroll/run', runPayrollPage());
 route('/app/payroll/runs/:id', runPage());
 route('/app/payroll/runs/:id/stub/:eid', stubPage());

@@ -51,6 +51,12 @@ export const QUICK_ACTIONS = opts(
 export const WIDGETS: WidgetDef[] = [
   { type: 'module', label: 'Module', description: 'One of the sections your setup built: its live numbers and its checklist.', category: 'Setup', spans: [4, 6, 8, 12], defaultSpan: 4,
     settings: [{ key: 'module', label: 'Section', type: 'text', maxLength: 40, default: '' }, { key: 'items', label: 'Show the checklist', type: 'toggle', default: true }] },
+  { type: 'people_directory', label: 'People directory', description: 'Everyone on payroll, with filters, search, pay and paperwork at a glance.', category: 'People', spans: [8, 12], defaultSpan: 12,
+    settings: [{ key: 'rows', label: 'Rows per page', type: 'number', min: 5, max: 100, default: 25 }, { key: 'showPay', label: 'Show pay rates', type: 'toggle', default: true }] },
+  { type: 'onboarding_board', label: 'Who\'s finished', description: 'Every person\'s new-hire forms, with a reminder button for those still to do.', category: 'People', spans: [6, 8, 12], defaultSpan: 8,
+    settings: [] },
+  { type: 'invite_form', label: 'Invite a new hire', description: 'Send a new hire a link to fill in their forms on their phone.', category: 'People', spans: [4, 6, 8], defaultSpan: 4,
+    settings: [] },
   { type: 'built_from', label: 'Built from your answers', description: 'The answers your dashboard was built from, with a way to change them.', category: 'Setup', spans: [6, 8, 12], defaultSpan: 12,
     settings: [] },
   { type: 'welcome', label: 'Welcome banner', description: 'Your business name, a line of your own, and today\'s date.', category: 'General', spans: [6, 8, 12], defaultSpan: 12,

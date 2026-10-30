@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { navigate } from '../router.js';
 import { Button, Field, icon, modal, setLoading, toast } from '../ui.js';
 import { appPage, cardElement, subline } from './shell.js';
+import { importPeopleModal } from './people.js';
 import { app, base, loadApp } from './state.js';
 import { SWATCHES, LOOKS, accentOnCard } from '../theme.js';
 
@@ -68,7 +69,10 @@ export function dashboardTab() {
       const first = tab.id === config.tabs.find((x) => x.kind === 'page').id;
       return h('div', {}, h('div', { class: 'ph2' }, h('div', {}, h('h1', { class: 'pt' }, first ? config.brand.name : tab.label), first ? h('p', {}, subline(data)) : null),
         h('div', { class: 'acts' },
-          first ? Button({ variant: 'ghost', size: 'sm', href: '/app/people/new' }, 'Add employee') : null,
+          first ? Button({ variant: 'ghost', size: 'sm', href: '/app/onboarding' }, 'Add employee') : null,
+          tab.id === 'people' ? Button({ variant: 'ghost', size: 'sm', type: 'button', onClick: importPeopleModal }, 'Import from spreadsheet') : null,
+          tab.id === 'people' ? Button({ size: 'sm', href: '/app/onboarding' }, 'Add employee') : null,
+          tab.id === 'payroll' ? Button({ size: 'sm', href: '/app/payroll/run' }, 'Run payroll') : null,
           first ? Button({ size: 'sm', href: '/app/payroll/run' }, t('payroll') === 'Payroll' ? 'Run payroll' : `Run ${t('payroll').toLowerCase()}`) : null,
           st.editing ? null : Button({ variant: 'ghost', size: 'sm', type: 'button', onClick: startEdit, 'data-testid': 'customize' }, 'Customize'))), grid);
     }

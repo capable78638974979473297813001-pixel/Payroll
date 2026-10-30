@@ -19,6 +19,7 @@ import { runMasteryTax, type MasteryCommand } from '../tax/masterytax.ts';
 import { tipSplit } from '../tax/tipSplit.ts';
 import { tipReport } from '../restaurant/reports.ts';
 import { suggestPeriods } from '../payroll/schedule.ts';
+import { OnboardingService } from '../onboarding/service.ts';
 import { profileView, saveProfile, addDocument, removeDocument } from '../domain/profile.ts';
 import { weekSummary, saveWeek } from '../domain/weekEntry.ts';
 import { getIndustry, getNiche, listIndustries } from '../industries/index.ts';
@@ -131,6 +132,14 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
   };
 
   const publicUserReply = (u: User) => ({ user: publicUser(u) });
+  /** Where links in emails point. Never taken from a request header outside development: a forged Host would write a phishing link into a real email. */
+  const siteBase = (req: IncomingMessage) => {
+    if (config.publicBaseUrl) return config.publicBaseUrl;
+    if (!config.devTools) throw new ApiError(503, 'public_url_not_set', 'PUBLIC_BASE_URL is not set on this server, so links in emails cannot be built.');
+    return `http://${req.headers.host ?? 'localhost'}`;
+  };
+  const onboarding = new OnboardingService(store, mailer, deps.banks, now, deps.log);
+  const joinLimit = (c: { ip: string }) => { const wait = logins.hit(`join:${c.ip}`, 200, now().getTime()); if (wait) throw new ApiError(429, 'rate_limited', 'Too many tries. Wait a few minutes and try again.', { retryAfterSeconds: wait }); };
   const secureCookies = (req: IncomingMessage) => (config.publicBaseUrl ?? '').startsWith('https://') || (config.trustProxy && req.headers['x-forwarded-proto'] === 'https');
   /** A signed-in cookie lasts until sign out. "Keep me signed in" off makes it a browser-session cookie instead. */
   const sessionCookie = (req: IncomingMessage, token: string, clear = false, remember = true) => `${SESSION_COOKIE}=${clear ? '' : token}; Path=/; HttpOnly; SameSite=Lax${clear ? '; Max-Age=0' : remember ? `; Max-Age=${365 * 86_400}` : ''}${secureCookies(req) ? '; Secure' : ''}`;
@@ -313,6 +322,19 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       for (const d of [from, to]) if (d !== undefined && !isIsoDate(d)) throw badRequest('from and to must be YYYY-MM-DD');
       return { shifts: listShifts(store, c.params.cid, { from, to, employeeId: c.query.get('employeeId') ?? undefined }) };
     }),
+    route('GET', `${C}/onboarding`, 'company', (c) => onboarding.overview(c.params.cid)),
+    route('POST', `${C}/onboarding/invite`, 'company', async (c) => onboarding.invite(c.params.cid, siteBase(c.req), c.json()), 201),
+    route('POST', `${C}/onboarding/invite-many`, 'company', async (c) => onboarding.inviteMany(c.params.cid, siteBase(c.req), c.json()), 201),
+    route('POST', `${C}/employees/:eid/remind`, 'company', async (c) => onboarding.remind(c.params.cid, siteBase(c.req), c.params.eid)),
+    route('POST', `${C}/employees/:eid/i9-section2`, 'company', (c) => {
+      const u = c.principal?.kind === 'company' && c.principal.userId ? store.users.get(c.principal.userId) : undefined;
+      const by = u ? `${u.firstName} ${u.lastName}` : 'Owner';
+      return onboarding.i9Section2(c.params.cid, c.params.eid, by, c.json());
+    }),
+    route('GET', '/v1/join/:token', 'none', (c) => { joinLimit(c); return onboarding.status(c.params.token); }),
+    route('POST', '/v1/join/:token/w4', 'none', (c) => { joinLimit(c); return onboarding.submitW4(c.params.token, c.json()); }),
+    route('POST', '/v1/join/:token/i9', 'none', (c) => { joinLimit(c); return onboarding.submitI9(c.params.token, c.json()); }),
+    route('POST', '/v1/join/:token/deposit', 'none', (c) => { joinLimit(c); return onboarding.submitDeposit(c.params.token, c.json()); }),
     route('GET', `${C}/profile`, 'company', (c) => profileView(store.companies.require(c.params.cid, 'Company'))),
     route('PUT', `${C}/profile`, 'company', (c) => saveProfile(store, c.params.cid, c.json())),
     route('POST', `${C}/profile/documents`, 'company', (c) => addDocument(store, c.params.cid, c.json()), 201),

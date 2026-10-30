@@ -40,7 +40,7 @@ const ACTIONS = {
   invite_hire: { label: 'Invite a new hire', to: '/app/onboarding' },
   enter_hours: { label: 'Enter hours and tips', to: '/app/time/hours' },
   import_hours: { label: 'Import a spreadsheet', to: '/app/time/hours?import=1' },
-  add_person: { label: 'Add a person', to: '/app/people/new' },
+  add_person: { label: 'Add a person', to: '/app/onboarding' },
   pay_stubs: { label: 'Pay stubs', to: '/app/payroll/stubs' },
 };
 
@@ -196,7 +196,7 @@ export const RENDERERS = {
     const g = { role: data.team.byRole, location: data.team.byLocation, department: data.team.byDepartment, crew: data.team.byCrew, pay: data.team.byPay }[settings.groupBy] || data.team.byRole;
     const max = Math.max(...g.map((x) => x.count), 1);
     return { title: t('team'), body: h('div', { class: 'stack', style: { '--gap': '14px' } }, h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '12px' } }, h('div', { class: 'big accent' }, String(data.team.active)), h('div', { class: 'sub' }, data.team.newThisMonth ? `${data.team.newThisMonth} new this month` : 'on payroll')),
-      g.length ? h('ul', { class: 'row-list' }, ...g.slice(0, 6).map((x) => h('li', {}, h('span', {}, x.label), h('span', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, h('span', { class: 'bar-track', style: { width: '60px' } }, h('span', { class: 'bar-seg', style: { width: `${(x.count / max) * 100}%` } })), h('b', { class: 'amt' }, String(x.count)))))) : empty(data.team.active ? `Nobody is tagged by ${settings.groupBy} yet.` : 'Nobody here yet.', '/app/people/new', 'Add a person')) };
+      g.length ? h('ul', { class: 'row-list' }, ...g.slice(0, 6).map((x) => h('li', {}, h('span', {}, x.label), h('span', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, h('span', { class: 'bar-track', style: { width: '60px' } }, h('span', { class: 'bar-seg', style: { width: `${(x.count / max) * 100}%` } })), h('b', { class: 'amt' }, String(x.count)))))) : empty(data.team.active ? `Nobody is tagged by ${settings.groupBy} yet.` : 'Nobody here yet.', '/app/onboarding', 'Add a person')) };
   },
   people_table({ data, settings, t }) {
     const input = h('input', { class: 'in search', type: 'search', placeholder: `Search ${t('people').toLowerCase()}`, 'aria-label': 'Search people' });
@@ -204,7 +204,7 @@ export const RENDERERS = {
     const draw = () => {
       const q = input.value.trim().toLowerCase();
       const rows = data.people.filter((p) => !q || p.name.toLowerCase().includes(q) || p.role.toLowerCase().includes(q)).slice(0, settings.rows || 10);
-      body.replaceChildren(...(rows.length ? rows.map((p) => h('tr', {}, h('td', {}, link(`/app/people/${p.id}`, { class: 'pl-name' }, p.name)), h('td', {}, p.role), h('td', {}, p.location || '—'), settings.showPay ? h('td', { class: 'r' }, p.pay.kind === 'hourly' ? `${money(p.pay.cents)}/hr` : `${money(p.pay.cents)}/yr`) : null, settings.showForms ? h('td', {}, p.done ? h('span', { class: 'dchip good' }, 'Ready') : h('span', { class: 'dchip warn' }, 'Forms')) : null)) : [h('tr', {}, h('td', { colspan: 5 }, empty(data.people.length ? 'No one matches.' : 'Nobody here yet.', '/app/people/new', 'Add a person')))]));
+      body.replaceChildren(...(rows.length ? rows.map((p) => h('tr', {}, h('td', {}, link(`/app/people/${p.id}`, { class: 'pl-name' }, p.name)), h('td', {}, p.role), h('td', {}, p.location || '—'), settings.showPay ? h('td', { class: 'r' }, p.pay.kind === 'hourly' ? `${money(p.pay.cents)}/hr` : `${money(p.pay.cents)}/yr`) : null, settings.showForms ? h('td', {}, p.done ? h('span', { class: 'dchip good' }, 'Ready') : h('span', { class: 'dchip warn' }, 'Forms')) : null)) : [h('tr', {}, h('td', { colspan: 5 }, empty(data.people.length ? 'No one matches.' : 'Nobody here yet.', '/app/onboarding', 'Add a person')))]));
     };
     input.addEventListener('input', draw); draw();
     return { title: t('people'), body: h('div', { class: 'stack', style: { '--gap': '12px' } }, input, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Name'), h('th', {}, 'Role'), h('th', {}, 'Location'), settings.showPay ? h('th', { class: 'r' }, 'Pay') : null, settings.showForms ? h('th', {}, 'Forms') : null)), body)) };

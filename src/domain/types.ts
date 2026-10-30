@@ -307,11 +307,15 @@ export interface Employee {
 export interface EmployeeOnboarding {
   invitedAt?: string;
   inviteEmail?: string;
+  /** SHA-256 of the link's secret. The secret itself is only ever in the email and the employer's screen. */
   inviteTokenHash?: string;
   inviteExpiresAt?: string;
+  /** Which forms the employer asked for: w4, i9, deposit, and stateForm when the state has one. */
+  requested?: Array<'w4' | 'i9' | 'deposit' | 'stateForm'>;
+  startDate?: string;
   w4?: { completedAt: string };
   stateForm?: { id: string; completedAt: string };
-  i9?: { section1At?: string; section2At?: string; section2By?: string };
+  i9?: { section1At?: string; section2At?: string; section2By?: string; /** Date of birth, citizenship status and the section 2 document, encrypted. */ detailsEncrypted?: string };
   deposit?: { completedAt: string };
   reminders?: Array<{ at: string }>;
 }

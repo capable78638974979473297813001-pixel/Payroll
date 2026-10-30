@@ -6,6 +6,7 @@ import type { Company, Employee, PayRun } from '../domain/types.ts';
 import { nextPayday } from '../payroll/schedule.ts';
 import { availabilityFor } from './defaults.ts';
 import { stateFacts } from '../builder/facts.ts';
+import { STATE_FORMS } from '../onboarding/forms.ts';
 
 /** One employee's new-hire forms. A person added directly has nothing recorded, so only what is known counts as done. */
 export function formsOf(e: Employee, wantsStateForm: boolean) {
@@ -153,7 +154,7 @@ export function dashboardData(store: Store, company: Company, today: string) {
 
   return {
     asOf: today,
-    company: { name: company.legalName, state: company.homeState, schedule: { frequency: company.paySchedule.frequency, payWeekday: company.paySchedule.payWeekday ?? null }, workweekStartDay: company.settings.workweekStartDay, industry: company.industry, niche: company.niche, hasEin: !!company.ein, paymentSetUp: !!company.payment.employerBank, locations: company.locations ?? [] },
+    company: { name: company.legalName, state: company.homeState, schedule: { frequency: company.paySchedule.frequency, payWeekday: company.paySchedule.payWeekday ?? null }, workweekStartDay: company.settings.workweekStartDay, industry: company.industry, niche: company.niche, hasEin: !!company.ein, stateForm: STATE_FORMS[company.homeState] ?? null, roles: company.settings.roles.map((r) => ({ key: r.key, label: r.label, pay: r.pay, tipped: r.tipped })), paymentSetUp: !!company.payment.employerBank, locations: company.locations ?? [] },
     nextPayday: nextPayday(company, today, runs),
     runs: runs.slice(0, 10).map((r) => totalsOf(r)),
     latest: totalsOf(latest),

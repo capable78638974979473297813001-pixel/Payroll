@@ -240,7 +240,7 @@ async function hoursStep(period, data) {
     h('div', { class: 'grid g32', style: { gridTemplateColumns: 'minmax(0,1fr) 340px', marginTop: '18px' } },
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Hours and tips'), h('span', { class: 'cap' }, `${weeks === 1 ? 'Week' : 'Period'} of ${shortDate(period.periodStart)}. Edit any cell.`)),
         rows.length ? h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th', {}, 'Employee'), h('th', { class: 'l hm' }, 'Location'), h('th', {}, 'Regular hrs'), h('th', {}, 'Overtime hrs'), h('th', {}, 'Tips ($)'), h('th', { class: 'l hm' }, 'Notes'))), tbody)
-          : h('div', { class: 'empty' }, 'Nobody is on payroll for this period yet. ', link('/app/people/new', { class: 'link' }, 'Add your first person')),
+          : h('div', { class: 'empty' }, 'Nobody is on payroll for this period yet. ', link('/app/onboarding', { class: 'link' }, 'Invite your first person')),
         h('p', { class: 'cap', style: { marginTop: '10px' } }, 'Overtime is worked out from the total: anything over 40 hours in a week is paid at time and a half, whichever box you type it in.')), side),
     formError,
     h('div', { class: 'acts', style: { justifyContent: 'flex-end', marginTop: '18px' } }, link('/app/payroll/run', { class: 'link' }, 'Back'), next), legal());
