@@ -13,17 +13,6 @@ const rid = () => `w_${Math.random().toString(36).slice(2, 10).padEnd(8, 'a')}`;
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'tab';
 const RESERVED = new Set(['contractors', 'login', 'signup', 'setup', 'join', 'app', 'api', 'run', 'new', 'help', 'settings']);
 
-export function helpPage() {
-  return async (ctx) => appPage(ctx, { active: 'help', title: 'Help', render: ({ t }) => h('div', { class: 'stack', style: { '--gap': '20px', maxWidth: '720px' } },
-    h('div', { class: 'ph2' }, h('div', {}, h('h1', { class: 'pt' }, 'Help'), h('p', {}, 'Answers, and a person to ask.'))),
-    h('section', { class: 'card', style: { '--span': 12 } }, h('h3', { class: 'card-title' }, 'Getting started'), h('ul', { class: 'row-list' },
-      h('li', {}, h('span', {}, `Add your ${t('people').toLowerCase()} and invite them to fill in their forms.`)),
-      h('li', {}, h('span', {}, 'Enter hours and tips, then run payroll. Totali calculates every paycheck and tax.')),
-      h('li', {}, h('span', {}, 'Paying your team happens at your own bank. Totali writes the file; you approve it there.')),
-      h('li', {}, h('span', {}, 'Change how this dashboard looks and what it shows with Customize on any dashboard page.')))),
-    h('section', { class: 'card', style: { '--span': 12 } }, h('h3', { class: 'card-title' }, 'Questions'), h('p', { style: { margin: 0 } }, 'Email ', h('a', { href: 'mailto:hello@omnia.tax' }, 'hello@omnia.tax'), '. Totali is a product of OMNIA TAX LLC.'))) });
-}
-
 /** A page of cards: the company's tab, drawn from its saved dashboard, or from the editor's draft while customizing. */
 export function dashboardTab() {
   return async (ctx) => {

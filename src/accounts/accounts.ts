@@ -242,6 +242,26 @@ export class AccountService {
     return { user, token: this.createSession(user.id) };
   }
 
+  /** Change the password from inside the account. Every other browser is signed out; the one asking stays in. */
+  async changePassword(userId: string, currentToken: string | null, current: unknown, next: unknown): Promise<void> {
+    const user = this.store.users.get(userId);
+    if (!user) throw unauthorized('Sign in again.');
+    if (typeof current !== 'string' || !(await verifyPassword(current, user.passwordHash))) throw new ApiError(400, 'wrong_password', 'That isn’t your current password.', { field: 'current' });
+    const problem = passwordProblem(next, user.email);
+    if (problem) throw badRequest(problem, { field: 'password' });
+    const passwordHash = await hashPassword(next as string);
+    const keep = currentToken ? sha256(currentToken) : null;
+    this.store.tx(() => {
+      this.store.users.put({ ...user, passwordHash });
+      for (const s of this.store.sessions.where((x) => x.userId === userId && x.hash !== keep)) this.store.sessions.delete(s.id);
+    });
+  }
+
+  /** Sign out of every browser and phone, this one included. */
+  logoutAll(userId: string): void {
+    this.store.tx(() => { for (const s of this.store.sessions.where((x) => x.userId === userId)) this.store.sessions.delete(s.id); });
+  }
+
   createSession(userId: string, meta: { ip?: string; userAgent?: string } = {}): string {
     const token = newSecret('tsess');
     const at = this.iso();

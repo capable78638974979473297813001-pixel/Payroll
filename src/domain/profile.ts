@@ -120,3 +120,39 @@ export function removeDocument(store: Store, companyId: string, docId: string) {
   store.tx(() => store.companies.put(company));
   return profileView(company);
 }
+
+/** The account numbers a business registers with its state and city. Free text, short, never markup. */
+const acct = (raw: unknown, label: string): string => {
+  if (typeof raw !== 'string') throw badRequest(`${label} must be text.`);
+  const t = raw.trim();
+  if (t.length > 30 || /[^A-Za-z0-9 \-/#.]/.test(t)) throw badRequest(`${label} can only have letters, numbers, spaces and dashes (up to 30).`, { field: label });
+  return t;
+};
+
+export function saveTaxAccounts(store: Store, companyId: string, body: unknown) {
+  const o = v.obj(body);
+  const company = structuredClone(store.companies.require(companyId, 'Company'));
+  const p: CompanyProfile = company.profile ?? blank();
+  const st = company.taxAccounts ?? {};
+  const home = company.homeState;
+  if (o.uia !== undefined) {
+    const n = acct(o.uia, 'Unemployment account number');
+    st.state = { ...(st.state ?? {}), [home]: { ...(st.state?.[home] ?? {}), ...(n ? { account: n } : {}) } };
+    if (!n && st.state[home]) delete st.state[home]!.account;
+  }
+  if (o.withholding !== undefined) { const n = acct(o.withholding, 'Withholding account number'); p.accounts = { ...(p.accounts ?? {}), withholding: n }; }
+  if (o.cities !== undefined) {
+    const c = v.obj(o.cities, 'cities');
+    const cities: Record<string, string> = { ...(p.accounts?.cities ?? {}) };
+    for (const [slug, val] of Object.entries(c)) { if (!/^[a-z0-9_]{1,40}$/.test(slug)) throw badRequest('Unknown city.'); cities[slug] = acct(val, 'City account number'); }
+    p.accounts = { ...(p.accounts ?? {}), cities };
+  }
+  company.taxAccounts = st;
+  company.profile = p;
+  store.tx(() => store.companies.put(company));
+  return taxAccountsView(company);
+}
+
+export function taxAccountsView(company: Company) {
+  return { state: company.homeState, uia: company.taxAccounts?.state?.[company.homeState]?.account ?? '', withholding: company.profile?.accounts?.withholding ?? '', cities: company.profile?.accounts?.cities ?? {} };
+}

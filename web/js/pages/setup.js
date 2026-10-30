@@ -83,7 +83,7 @@ const CITY_HINTS = {
 
 // ---------------------------------------------------------------- question bodies
 // Each returns { el, value(), valid() } and calls change() whenever the provisional answer changes.
-function bodyFor(q, current, ctx, change) {
+export function bodyFor(q, current, ctx, change) {
   const states = ctx.meta.states;
   switch (q.kind) {
     case 'state': {
@@ -186,7 +186,7 @@ const HELP = {
   contractors: 'People you pay by invoice and send a 1099, not a paycheck.',
 };
 
-function summarize(q, v, ctx) {
+export function summarize(q, v, ctx) {
   if (v === undefined || v === null) return 'Not answered';
   switch (q.kind) {
     case 'state': { const s = ctx.meta.states.find((x) => x.code === v); return s ? s.name : v; }

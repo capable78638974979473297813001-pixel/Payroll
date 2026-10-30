@@ -13,14 +13,16 @@ import { AchService } from '../money/ach.ts';
 import { BankService, bankAccountView } from '../banking/accounts.ts';
 import { DEBIT_AUTHORIZATION_VERSION, debitAuthorizationText, recordDebitAuthorization, setFundingAccount } from '../banking/authorization.ts';
 import { ledgerBalances } from '../money/ledger.ts';
-import { stripeMode } from '../money/stripe.ts';
 import { dataKeyConfigured } from '../lib/crypto.ts';
 import { runMasteryTax, type MasteryCommand } from '../tax/masterytax.ts';
 import { tipSplit } from '../tax/tipSplit.ts';
 import { tipReport } from '../restaurant/reports.ts';
 import { suggestPeriods } from '../payroll/schedule.ts';
+import { BillingService } from '../billing/service.ts';
+import { StripeClient, stripeConfigured, stripeMode, type StripeBillingApi } from '../money/stripe.ts';
+import { updateSetup } from '../builder/edit.ts';
 import { OnboardingService } from '../onboarding/service.ts';
-import { profileView, saveProfile, addDocument, removeDocument } from '../domain/profile.ts';
+import { profileView, saveProfile, saveTaxAccounts, taxAccountsView, addDocument, removeDocument } from '../domain/profile.ts';
 import { weekSummary, saveWeek } from '../domain/weekEntry.ts';
 import { getIndustry, getNiche, listIndustries } from '../industries/index.ts';
 import { isIsoDate } from '../lib/dates.ts';
@@ -113,7 +115,7 @@ export interface App {
   handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
 }
 
-export function createApp(deps: { store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer }): App {
+export function createApp(deps: { store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer; billingStripe?: StripeBillingApi | null }): App {
   const { store, banks, ach, config } = deps;
   const mailer = deps.mailer ?? new OutboxMailer();
   const accounts = deps.accounts ?? new AccountService(store, mailer, { ...(deps.now ? { now: deps.now } : {}), ...(deps.log ? { log: deps.log } : {}) });
@@ -138,6 +140,8 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     if (!config.devTools) throw new ApiError(503, 'public_url_not_set', 'PUBLIC_BASE_URL is not set on this server, so links in emails cannot be built.');
     return `http://${req.headers.host ?? 'localhost'}`;
   };
+  const billing = new BillingService(store, deps.billingStripe !== undefined ? deps.billingStripe : stripeConfigured() ? new StripeClient() : null, now);
+  const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
   const onboarding = new OnboardingService(store, mailer, deps.banks, now, deps.log);
   const joinLimit = (c: { ip: string }) => { const wait = logins.hit(`join:${c.ip}`, 200, now().getTime()); if (wait) throw new ApiError(429, 'rate_limited', 'Too many tries. Wait a few minutes and try again.', { retryAfterSeconds: wait }); };
   const secureCookies = (req: IncomingMessage) => (config.publicBaseUrl ?? '').startsWith('https://') || (config.trustProxy && req.headers['x-forwarded-proto'] === 'https');
@@ -201,6 +205,18 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       const o = c.json();
       await accounts.resetPassword(o.email, o.code, o.password);
       return { ok: true };
+    }),
+    route('POST', '/v1/auth/change-password', 'user', async (c) => {
+      requireCsrf(c.req);
+      const o = c.json();
+      const token = cookieValue(c.req.headers.cookie, SESSION_COOKIE) ?? null;
+      await accounts.changePassword((c.principal as { userId: string }).userId, token, o.current, o.password);
+      return { ok: true };
+    }),
+    route('POST', '/v1/auth/logout-all', 'user', (c) => {
+      requireCsrf(c.req);
+      accounts.logoutAll((c.principal as { userId: string }).userId);
+      return new Reply({ ok: true }, { 'set-cookie': sessionCookie(c.req, '', true) });
     }),
     route('POST', '/v1/auth/logout', 'none', (c) => {
       requireCsrf(c.req);
@@ -335,6 +351,35 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('POST', '/v1/join/:token/w4', 'none', (c) => { joinLimit(c); return onboarding.submitW4(c.params.token, c.json()); }),
     route('POST', '/v1/join/:token/i9', 'none', (c) => { joinLimit(c); return onboarding.submitI9(c.params.token, c.json()); }),
     route('POST', '/v1/join/:token/deposit', 'none', (c) => { joinLimit(c); return onboarding.submitDeposit(c.params.token, c.json()); }),
+    route('PUT', `${C}/setup`, 'company', (c) => {
+      const today = now().toISOString().slice(0, 10);
+      const o = c.json();
+      const company = updateSetup(store, c.params.cid, o.answers, today, now());
+      dashboards.reconcile(company.id);
+      return { answers: company.setup!.answers, locations: company.locations ?? [], paySchedule: company.paySchedule };
+    }),
+    route('GET', `${C}/billing`, 'company', (c) => billing.view(c.params.cid, ownerEmail(c))),
+    route('PUT', `${C}/billing/email`, 'company', (c) => ({ email: billing.setEmail(c.params.cid, c.json().email) })),
+    route('POST', `${C}/billing/card`, 'company', async (c) => billing.startCard(c.params.cid, ownerEmail(c))),
+    route('POST', `${C}/billing/card/finish`, 'company', async (c) => billing.finishCard(c.params.cid, c.json().setupIntentId)),
+    route('POST', '/v1/stripe/webhook', 'none', async (c) => billing.webhook(c.raw, String(c.req.headers['stripe-signature'] ?? '') || undefined, (process.env.STRIPE_WEBHOOK_SECRET ?? '').trim() || undefined)),
+    route('GET', `${C}/tax-accounts`, 'company', (c) => taxAccountsView(store.companies.require(c.params.cid, 'Company'))),
+    route('PUT', `${C}/tax-accounts`, 'company', (c) => saveTaxAccounts(store, c.params.cid, c.json())),
+    route('POST', `${C}/support`, 'company', async (c) => {
+      const wait = logins.hit(`support:${c.principal && c.principal.kind === 'company' ? c.principal.companyId : c.ip}`, 10, now().getTime());
+      if (wait) throw new ApiError(429, 'rate_limited', 'You’ve sent a few messages already. We’ll write back soon.');
+      const o = c.json();
+      const text = typeof o.message === 'string' ? o.message.trim() : '';
+      if (text.length < 5 || text.length > 4000) throw badRequest('Tell us a little about what you were doing (up to 4000 characters).', { field: 'message' });
+      const p = c.principal && c.principal.kind === 'company' ? c.principal : null;
+      const u = p && p.userId ? store.users.get(p.userId) : undefined;
+      const company = p ? store.companies.get(p.companyId) : undefined;
+      const to = (process.env.SUPPORT_EMAIL ?? 'hello@omnia.tax').trim();
+      const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]!));
+      const r = await mailer.send({ to, subject: `[Totali] ${company ? company.legalName : 'Help'}: ${text.split('\n')[0]!.slice(0, 70)}`, text: `${text}\n\n--\n${u ? `${u.firstName} ${u.lastName} <${u.email}>` : 'unknown'}\n${company ? `${company.legalName} (${company.id}, ${company.homeState})` : ''}`, html: `<p style="white-space:pre-wrap">${esc(text)}</p><hr><p>${u ? esc(`${u.firstName} ${u.lastName} <${u.email}>`) : ''}<br>${company ? esc(`${company.legalName} (${company.id})`) : ''}</p>`, ...(u ? { replyTo: u.email } : {}) });
+      if (!r.sent) throw new ApiError(503, 'support_unavailable', `We couldn’t send that just now. Email ${to} and we’ll reply.`);
+      return { sent: true };
+    }),
     route('GET', `${C}/profile`, 'company', (c) => profileView(store.companies.require(c.params.cid, 'Company'))),
     route('PUT', `${C}/profile`, 'company', (c) => saveProfile(store, c.params.cid, c.json())),
     route('POST', `${C}/profile/documents`, 'company', (c) => addDocument(store, c.params.cid, c.json()), 201),

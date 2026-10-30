@@ -292,6 +292,32 @@ test('a wrong reset code costs a try, five cancel it, an old one expires, and th
   await fails(s.accounts.resetPassword(GOOD.email, second, 'a-brand-new-password'), 'code_expired');
 });
 
+// ---------------------------------------------------------------- inside the account
+
+test('changing the password needs the current one, signs out every other browser and keeps this one', async () => {
+  const s = service();
+  const { user, token } = await s.accounts.signup(GOOD);
+  s.accounts.verifyEmail(user.id, s.code());
+  const other = (await s.accounts.login(GOOD.email, GOOD.password)).token;
+  await fails(s.accounts.changePassword(user.id, token, 'not-it-at-all', 'a-brand-new-password'), 'wrong_password');
+  await fails(s.accounts.changePassword(user.id, token, GOOD.password, 'short'), 'invalid_request');
+  await s.accounts.changePassword(user.id, token, GOOD.password, 'a-brand-new-password');
+  assert.ok(s.accounts.resolveSession(token), 'this browser stays signed in');
+  assert.equal(s.accounts.resolveSession(other), null, 'the other one is signed out');
+  await s.accounts.login(GOOD.email, 'a-brand-new-password');
+  await fails(s.accounts.login(GOOD.email, GOOD.password), 'unauthorized');
+});
+
+test('sign out everywhere ends every session', async () => {
+  const s = service();
+  const { user, token } = await s.accounts.signup(GOOD);
+  s.accounts.verifyEmail(user.id, s.code());
+  const second = (await s.accounts.login(GOOD.email, GOOD.password)).token;
+  s.accounts.logoutAll(user.id);
+  assert.equal(s.accounts.resolveSession(token), null);
+  assert.equal(s.accounts.resolveSession(second), null);
+});
+
 // ---------------------------------------------------------------- Resend
 
 test('Resend gets the message with the headers its edge needs, and the key never reaches the log', async () => {

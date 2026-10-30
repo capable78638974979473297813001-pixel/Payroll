@@ -13,6 +13,8 @@ export interface CompanyProfile {
   addressParts?: { street: string; city: string; state: string; zip: string };
   owners: Array<{ id: string; name: string; percent: number; runsBusiness: boolean }>;
   documents: Array<{ id: string; name: string; type: string; size: number; addedAt: string; contentEncrypted: string }>;
+  /** State and city account numbers the business registers for itself. The unemployment number also feeds the filings. */
+  accounts?: { withholding?: string; cities?: Record<string, string> };
   submittedAt?: string;
 }
 
@@ -25,6 +27,8 @@ export interface Company {
   /** The state the establishment is in. Decides whether a tip credit is in effect for pooling rules. */
   homeState: string;
   address?: string;
+  /** Billing: the card on file (brand and last four only, held by Stripe) and who gets the invoices. */
+  billing?: { stripeCustomerId?: string; email?: string; card?: { paymentMethodId: string; brand: string; last4: string; expMonth: number; expYear: number }; updatedAt?: string };
   /** Business verification (Company setup): who the business is and who owns it. */
   profile?: CompanyProfile;
   paySchedule: { frequency: PayFrequency; checkDateLagDays: number; /** The weekday employees are paid, when the business pays weekly or every other week. */ payWeekday?: string };

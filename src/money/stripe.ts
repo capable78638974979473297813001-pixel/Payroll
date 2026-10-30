@@ -1,5 +1,8 @@
 /**
- * Stripe, used for one thing: connecting to people's banks.
+ * Stripe, used for two things: connecting to people's banks, and saving the owner's card so Totali can invoice them
+ * (a SetupIntent: nothing is charged here). It never moves payroll money.
+ *
+ * Bank linking:
  *
  * Totali moves the money itself, by ACH (see src/ach and src/money/ach.ts).
  * Stripe Financial Connections is how an employer or an employee proves they
@@ -168,6 +171,22 @@ export class StripeClient implements StripeApi {
     return this.call<{ id: string }>('POST', '/v1/customers', p, key);
   }
 
+  updateCustomer(id: string, p: { email?: string; name?: string; invoice_settings?: { default_payment_method: string } }) {
+    return this.call<{ id: string }>('POST', `/v1/customers/${encodeURIComponent(id)}`, p);
+  }
+
+  createSetupIntent(p: { customer: string; metadata?: Record<string, string> }, key: string) {
+    return this.call<{ id: string; client_secret: string }>('POST', '/v1/setup_intents', { customer: p.customer, usage: 'off_session', automatic_payment_methods: { enabled: true, allow_redirects: 'never' }, ...(p.metadata ? { metadata: p.metadata } : {}) }, key);
+  }
+
+  retrieveSetupIntent(id: string) {
+    return this.call<{ id: string; status: string; customer: string | null; payment_method: { id: string; card?: { brand: string; last4: string; exp_month: number; exp_year: number } } | null }>('GET', `/v1/setup_intents/${encodeURIComponent(id)}`, { expand: ['payment_method'] });
+  }
+
+  detachPaymentMethod(id: string) {
+    return this.call<{ id: string }>('POST', `/v1/payment_methods/${encodeURIComponent(id)}/detach`, {});
+  }
+
   createFcSession(p: { customer: string; permissions: FcPermission[]; prefetch?: Array<'balances' | 'ownership'> }, key: string) {
     return this.call<{ id: string; client_secret: string }>(
       'POST',
@@ -188,6 +207,15 @@ export class StripeClient implements StripeApi {
   refreshFcAccount(id: string, features: Array<'balance' | 'ownership'>) {
     return this.call<FcAccount>('POST', `/v1/financial_connections/accounts/${encodeURIComponent(id)}/refresh`, { features });
   }
+}
+
+/** What billing needs from Stripe: a customer, a card saved through a SetupIntent, and its brand and last four digits. */
+export interface StripeBillingApi {
+  createCustomer(p: { name: string; email?: string; metadata?: Record<string, string> }, idempotencyKey: string): Promise<{ id: string }>;
+  updateCustomer(id: string, p: { email?: string; name?: string; invoice_settings?: { default_payment_method: string } }): Promise<{ id: string }>;
+  createSetupIntent(p: { customer: string; metadata?: Record<string, string> }, idempotencyKey: string): Promise<{ id: string; client_secret: string }>;
+  retrieveSetupIntent(id: string): Promise<{ id: string; status: string; customer: string | null; payment_method: { id: string; card?: { brand: string; last4: string; exp_month: number; exp_year: number } } | null }>;
+  detachPaymentMethod(id: string): Promise<{ id: string }>;
 }
 
 export function stripeFromEnv(): StripeApi {

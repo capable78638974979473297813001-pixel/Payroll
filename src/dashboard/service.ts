@@ -80,6 +80,23 @@ export class DashboardService {
     return this.describe(doc.id);
   }
 
+  /**
+   * The business's answers changed. Cards for sections it no longer has are removed, and sections it now has are added
+   * at the end of the first page, so nothing the owner arranged moves. A dashboard never saved is simply made fresh.
+   */
+  reconcile(companyId: string) {
+    const doc = this.store.dashboards.get(companyId);
+    if (!doc) return;
+    const company = this.company(companyId);
+    const a = availabilityFor(company, this.date());
+    const have = new Set(a.moduleIds);
+    const tabs = doc.config.tabs.map((t) => ({ ...t, widgets: t.widgets.filter((x) => widgetAvailable(x.type, a) && (x.type !== 'module' || have.has(String(x.settings.module))) && (x.type !== 'state_card' || a.states.includes(String(x.settings.state)))) }));
+    const shown = new Set(tabs.flatMap((t) => t.widgets).filter((x) => x.type === 'module').map((x) => String(x.settings.module)));
+    const first = tabs.find((t) => t.kind === 'page');
+    if (first) for (const id of a.moduleIds) if (!shown.has(id)) first.widgets.push({ id: newWidgetId(), type: 'module', span: 4, settings: { module: id } });
+    this.write(doc, validateConfig({ ...doc.config, tabs }, a));
+  }
+
   /** Go back to the starting dashboard for what the business has. The current one is kept in the history. */
   reset(companyId: string) {
     const doc = this.get(companyId);

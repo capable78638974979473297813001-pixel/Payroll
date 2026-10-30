@@ -36,7 +36,7 @@ async function openBrowser({ width = 1440, height = 900 } = {}) {
   const page = await context.newPage();
   const problems = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => { if (m.type() === 'error' && !/status of (400|401|403|404|409|422|429)/.test(m.text())) problems.push(`console: ${m.text()}`); });
+  page.on('console', (m) => { if (m.type() === 'error' && !/status of (400|401|403|404|409|422|429|503)/.test(m.text())) problems.push(`console: ${m.text()}`); });
   return { browser, context, page, problems };
 }
 

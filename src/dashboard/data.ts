@@ -144,6 +144,7 @@ export function dashboardData(store: Store, company: Company, today: string) {
     counts: a.build.counts,
     leftOut: a.build.leftOut,
     answers: answerChips(company, answers),
+    answersRaw: answers,
   };
 
   // ---- the niche's reminders for this state

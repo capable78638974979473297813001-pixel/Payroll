@@ -40,13 +40,29 @@ export async function appPage(ctx, { active, title, render, config: override, ed
     Logo({ small: true, href: '/app' }),
     link('/app', { class: 'org', 'aria-label': config.brand.name }, brandMark(config.brand), h('b', {}, config.brand.name), config.brand.tagline ? h('span', { class: 'sub', style: { marginLeft: '2px' } }, config.brand.tagline) : null),
     h('nav', { class: 'tabs', 'aria-label': 'Dashboard' }, ...tabLinks),
-    h('span', { class: 'rt2' }, ...rightLinks, h('button', { class: 'av signout-av', type: 'button', title: `${session.user.firstName} ${session.user.lastName} · Sign out`, 'aria-label': 'Sign out', onClick: async () => { await signOut(); navigate('/'); } }, initials(session.user))));
+    h('span', { class: 'rt2' }, ...rightLinks, accountMenu()));
   const main = h('main', { class: 'dash-main wrap ui', id: 'main' });
   const frame = h('div', { class: 'dash-frame' }, nav, h('div', {}, editbar || null, main));
   root.append(frame);
   const out = await render({ root, main, config, t, data: app.data, dash: app.dash });
   if (out) main.append(out);
   return { title: `${title} — ${config.brand.name}`, el: root };
+}
+
+/** The initials at the top right: who is signed in, and the places that aren't tabs. */
+function accountMenu() {
+  const u = session.user;
+  const menu = h('div', { class: 'avmenu', role: 'menu', hidden: true },
+    h('div', { class: 'who2' }, h('b', {}, `${u.firstName} ${u.lastName}`), h('span', {}, u.email)),
+    link('/app/settings', { role: 'menuitem' }, 'Settings'), link('/app/billing', { role: 'menuitem' }, 'Billing'), link('/app/help', { role: 'menuitem' }, 'Help'),
+    h('button', { type: 'button', role: 'menuitem', 'data-testid': 'sign-out', onClick: async () => { await signOut(); navigate('/'); } }, 'Sign out'));
+  const btn = h('button', { class: 'av signout-av', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': 'Your account', 'data-testid': 'account-menu' }, initials(u));
+  const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', away, true); document.removeEventListener('keydown', esc); };
+  const away = (e) => { if (!wrap.contains(e.target)) close(); else if (e.target.closest('a')) close(); };
+  const esc = (e) => { if (e.key === 'Escape') { close(); btn.focus(); } };
+  btn.addEventListener('click', () => { if (!menu.hidden) return close(); menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); document.addEventListener('click', away, true); document.addEventListener('keydown', esc); });
+  const wrap = h('span', { class: 'avwrap' }, btn, menu);
+  return wrap;
 }
 
 /** "Fri, Oct 30 · 2 locations in Michigan · 14 people" */

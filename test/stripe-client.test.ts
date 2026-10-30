@@ -113,7 +113,9 @@ test('no key configured: a clear error and nothing is sent', async () => {
   assert.equal(seen.length, 0);
 });
 
-test('the client cannot create a payment, a payout or a transfer: Stripe is for bank linking only', () => {
+test('the client cannot create a payment, a payout or a transfer: Stripe links banks and saves the owner\'s own card for Totali\'s invoices, nothing else', () => {
   const methods = Object.getOwnPropertyNames(StripeClient.prototype).filter((m) => m !== 'constructor');
-  assert.deepEqual(methods.sort(), ['call', 'createCustomer', 'createFcSession', 'key', 'refreshFcAccount', 'retrieveFcAccount', 'retrieveFcSession']);
+  // Bank linking: customer, Financial Connections. Billing: save a card (SetupIntent), read it, detach it. No charge, payment intent, payout or transfer.
+  assert.deepEqual(methods.sort(), ['call', 'createCustomer', 'createFcSession', 'createSetupIntent', 'detachPaymentMethod', 'key', 'refreshFcAccount', 'retrieveFcAccount', 'retrieveFcSession', 'retrieveSetupIntent', 'updateCustomer']);
+  assert.ok(!methods.some((m) => /charge|paymentIntent|payout|transfer|refund/i.test(m)));
 });
