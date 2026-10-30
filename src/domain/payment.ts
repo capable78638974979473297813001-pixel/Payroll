@@ -44,6 +44,7 @@ export function setPaymentSetup(store: Store, companyId: string, body: unknown, 
   if (!/^[A-Za-z0-9]{1,10}$/.test(immediateOrigin)) throw badRequest('employerBank.immediateOrigin is at most 10 letters and digits');
   const fileNameTemplate = b.fileNameTemplate === undefined ? DEFAULT_FILE_NAME_TEMPLATE : v.str(b, 'fileNameTemplate', { max: 100 });
   validateTemplate(fileNameTemplate);
+  const leadBankingDays = b.leadBankingDays === undefined ? undefined : v.int(b, 'leadBankingDays', 0, 10);
 
   const existing = company.payment.employerBank;
   let sftp: EmployerBankSetup['sftp'];
@@ -68,6 +69,7 @@ export function setPaymentSetup(store: Store, companyId: string, body: unknown, 
     immediateOrigin,
     companyId: companyIdValue,
     fileNameTemplate,
+    ...(leadBankingDays !== undefined ? { leadBankingDays } : {}),
     ...(sftp ? { sftp } : {}),
   };
   return store.tx(() => store.companies.put({ ...company, payment: { mode, employerBank } }));

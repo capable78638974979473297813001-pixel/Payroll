@@ -155,7 +155,8 @@ test('prepare: the same run does not produce a second file for people already co
 test('prepare: effective dates must be banking days, not in the past; a date the schedule cannot meet needs acceptLate', async () => {
   const s = await setup();
   await assert.rejects(s.ach.preparePayment(s.company.id, s.run.id, { effectiveDate: '2026-06-13' }), /banking day/);
-  await assert.rejects(s.ach.preparePayment(s.company.id, s.run.id, { effectiveDate: '2026-06-05' }), /not in the past/);
+  await assert.rejects(s.ach.preparePayment(s.company.id, s.run.id, { effectiveDate: '2026-06-05' }), /cannot be earlier than 2026-06-09/);
+  await assert.rejects(s.ach.preparePayment(s.company.id, s.run.id, { effectiveDate: '2026-06-08' }), /cannot be earlier than/, 'the same day as the file is created is not allowed by default (Chase rejects it)');
   assert.equal((await s.ach.preparePayment(s.company.id, s.run.id, { effectiveDate: '2026-06-10' })).effectiveDate, '2026-06-10');
 
   const late = await setup({ start: '2026-06-12' });
@@ -394,4 +395,34 @@ test('sftp: nothing unsafe reaches the command line or the script', async () => 
 test('sftp: a missing sftp client is reported plainly, never as a silent success', async () => {
   const d = new SftpDelivery({ binary: '/nonexistent/sftp-binary', timeoutMs: 2_000 });
   await assert.rejects(d.deliver({ host: 'sftp.x.test', port: 22, username: 'u', remoteDir: '', knownHostsLine: KNOWN, privateKey: KEY }, 'a.ach', 'x'), /must be installed|exited 127/);
+});
+
+test('a bank with a longer lead time (Chase for Business wants payroll created at least two business days before it debits) moves the earliest date', async () => {
+  const s = await setup();
+  setPaymentSetup(s.store, s.company.id, { mode: 'employer_bank', employerBank: { ...BANK, leadBankingDays: 3 } }, 'company');
+  const t = s.ach.timeline(s.company.id, s.run.id) as any;
+  assert.equal(t.earliestCreditEffectiveDate, '2026-06-11', 'Monday plus three banking days');
+  assert.equal(t.onTime, true);
+  await assert.rejects(s.ach.preparePayment(s.company.id, s.run.id, { effectiveDate: '2026-06-10' }), /needs 3 banking day/);
+  assert.equal((await s.ach.preparePayment(s.company.id, s.run.id)).effectiveDate, '2026-06-12');
+
+  const late = await setup({ start: '2026-06-10' });
+  setPaymentSetup(late.store, late.company.id, { mode: 'employer_bank', employerBank: { ...BANK, leadBankingDays: 3 } }, 'company');
+  await assert.rejects(late.ach.preparePayment(late.company.id, late.run.id), (e: any) => e.code === 'check_date_unreachable' && e.details.earliest === '2026-06-15');
+  assert.throws(() => setPaymentSetup(late.store, late.company.id, { mode: 'employer_bank', employerBank: { ...BANK, leadBankingDays: 11 } }, 'company'), /0 to 10/);
+});
+
+test('a bank that takes same-day files can be set to a lead of zero', async () => {
+  const s = await setup();
+  setPaymentSetup(s.store, s.company.id, { mode: 'employer_bank', employerBank: { ...BANK, leadBankingDays: 0 } }, 'company');
+  assert.equal((await s.ach.preparePayment(s.company.id, s.run.id, { effectiveDate: '2026-06-08' })).effectiveDate, '2026-06-08');
+});
+
+test('the prepared file shows its control totals, which some banks make the employer type in before they release it', async () => {
+  const s = await setup();
+  const out = await s.ach.preparePayment(s.company.id, s.run.id);
+  assert.equal(out.controlTotals!.creditsCents, s.run.totals.payableCents);
+  assert.equal(out.controlTotals!.debitsCents, 0);
+  assert.equal(out.controlTotals!.entryCount, 2);
+  assert.match(out.controlTotals!.note, /Truist/);
 });

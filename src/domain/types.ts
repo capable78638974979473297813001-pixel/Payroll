@@ -54,6 +54,12 @@ export interface EmployerBankSetup {
   companyId: string;
   /** How files are named for the bank. Tokens: {date} {time} {seq} {routing} {companyId}. */
   fileNameTemplate: string;
+  /**
+   * Banking days a payroll file needs between being prepared and taking effect. Standard ACH is 1. A bank can
+   * require more: Chase for Business says payroll must be created at least two business days before the day it
+   * debits the employer, which is itself before the effective date. 0 means the bank accepts same-day files.
+   */
+  leadBankingDays?: number;
   /** Automatic delivery to the bank's SFTP server, when the bank offers it. Delivery is not approval: the employer still releases the file at the bank. */
   sftp?: {
     host: string;

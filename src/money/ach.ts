@@ -257,7 +257,8 @@ export class AchService {
     const run = getRun(this.store, companyId, runId);
     if (this.store.companies.require(companyId, 'Company').payment.mode === 'employer_bank') {
       const today = this.today();
-      const earliest = addBankingDays(onOrAfterBankingDay(today), this.cfg.creditLeadBankingDays);
+      const lead = this.store.companies.require(companyId, 'Company').payment.employerBank?.leadBankingDays ?? this.cfg.creditLeadBankingDays;
+      const earliest = addBankingDays(onOrAfterBankingDay(today), lead);
       const target = onOrBeforeBankingDay(run.checkDate);
       return { mode: 'employer_bank', today, checkDate: run.checkDate, targetCreditDate: target, earliestCreditEffectiveDate: earliest, onTime: earliest <= target, note: "The employer's bank sends the money. This is the earliest the file can take effect if it is released at the bank in time for its cutoff." };
     }
@@ -524,10 +525,12 @@ export class AchService {
     if (this.inflight.has(runId)) throw conflict('preparation_in_progress', 'A payment file for this run is already being prepared.');
 
     const today = this.today();
-    const earliest = addBankingDays(onOrAfterBankingDay(today), this.cfg.creditLeadBankingDays);
+    const lead = eb.leadBankingDays ?? this.cfg.creditLeadBankingDays;
+    const earliest = addBankingDays(onOrAfterBankingDay(today), lead);
     const target = onOrBeforeBankingDay(run.checkDate);
     if (opts.effectiveDate !== undefined) {
-      if (!isBankingDay(opts.effectiveDate) || opts.effectiveDate < today) throw badRequest('effectiveDate must be a banking day that is not in the past');
+      if (!isBankingDay(opts.effectiveDate)) throw badRequest('effectiveDate must be a banking day');
+      if (opts.effectiveDate < earliest) throw badRequest(`effectiveDate cannot be earlier than ${earliest}: your bank needs ${lead} banking day(s) between preparing a payroll file and its effective date.`);
     }
     const effective = opts.effectiveDate ?? (target >= earliest ? target : earliest);
     if (effective > target && !opts.acceptLate) {
@@ -547,6 +550,7 @@ export class AchService {
         effectiveDate: out.effectiveDate,
         late: out.late,
         needsInYourAccountCents: sum(out.planned.map(({ leg }) => leg.amountCents)),
+        controlTotals: file ? { entryCount: file.totals.entryCount, creditsCents: file.totals.creditCents, debitsCents: file.totals.debitCents, note: 'Some banks (Truist, KeyBank) will not release a file until you type in these totals. They are the sum of all credits and, separately, of all debits in the file.' } : null,
         youPayYourselfCents: { employeeTaxesWithheld: run2.totals.employeeTaxCents, employerTaxes: run2.totals.employerTaxCents, deductionsHeld: run2.totals.deductionsCents },
         next: file ? (file.delivery?.status === 'sent' ? "The file was delivered to your bank's SFTP server. Approve it in your bank's portal, then confirm here that you released it." : 'Download the file, import it in your bank\'s ACH portal and approve it there, then confirm here that you released it.') : 'Nothing to send: everyone owed is either paid or not set up yet.',
       };
@@ -616,7 +620,7 @@ export class AchService {
     const created = this.store.tx(() => {
       const pending = this.store.bankAccounts.where((a) => a.companyId === companyId && a.ownerKind === 'employee' && a.status === 'pending' && a.verification.method === 'prenote' && a.verification.status === 'pending' && !a.verification.prenoteFileId);
       if (pending.length === 0) return null;
-      const effectiveDate = addBankingDays(onOrAfterBankingDay(this.today()), this.cfg.creditLeadBankingDays);
+      const effectiveDate = addBankingDays(onOrAfterBankingDay(this.today()), eb?.leadBankingDays ?? this.cfg.creditLeadBankingDays);
       const file = this.createFile({
         companyId,
         kind: 'prenote',
