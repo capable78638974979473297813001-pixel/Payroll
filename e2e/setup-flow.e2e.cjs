@@ -15,6 +15,7 @@ const counter = async (page) => ({
   const shot = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
   try {
     await signUpAndVerify(page, server.base);
+    await page.waitForSelector('.ind-option');
     await shot('industry');
 
     // five industries, each with its three tags
