@@ -88,6 +88,15 @@ What is not built: connecting to a bank's API, PGP, password logins, and any beh
 - **Returns** arrive as a status, without an R-code. Totali treats them as an unrecognised return: the employee's net pay is owed again and their bank account is disabled until someone checks.
 - **Legal:** the employer stays the originator, with their own agreement with the bank, and Totali never holds the money. Whether the bank's terms allow a software provider to use the employer's credentials, and whether Totali needs any registration for this, are for the employer's bank and a lawyer to say. Totali does not claim an answer.
 
+**Banks checked for an API adapter and not built (2026-10-30)**
+
+- **KeyBank:** publishes an ACH Origination API (`/ach/payments/v1/...`) with a status call and an "undo" call that works for roughly ten minutes before the collection window. That is a short cancel window, not a hold for release, so it would need the same in-Totali approval. The request format could not be read (the documentation pages returned 404 to me), so no adapter.
+- **Wells Fargo and Bank of America:** their developer portals only load in a browser, so nothing could be read. Third-party summaries describe OAuth and ACH endpoints but nothing about release or holds.
+- **PNC:** the ACH credit service sheet mentions a Payments API that takes a batch in one call. No PNC developer documentation turned up.
+- **Everyone else:** nothing public to read.
+
+A bank is added when its own documentation can be read, cited, and shown to say how a payment is sent and cancelled.
+
 ## How many banks
 
 **There is no published count of banks that accept ACH files over SFTP.** For scale: the FDIC counted [4,336 insured institutions at the end of 2025](https://fdic.gov/quarterly-banking-profile/statistics-glance-historical-trends-fourth-quarter-2025.pdf) and the NCUA [4,287 federally insured credit unions](https://ncua.gov/newsroom/press-release/2026/ncua-releases-fourth-quarter-2025-credit-union-system-performance-data), about 8,600 in all. Among the nine above, **five confirm an automatic file channel with a named protocol or name** (Wells Fargo, PNC, U.S. Bank, Truist, KeyBank), J.P. Morgan has one without naming the protocol, Bank of America has a file channel (CashPro Connect) without naming SFTP, and for Fifth Third, Regions and Chase for Business I found none.
