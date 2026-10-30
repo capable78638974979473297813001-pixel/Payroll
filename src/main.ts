@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { loadConfig } from './config.ts';
 import { Store } from './store/store.ts';
 import { createApp } from './api/app.ts';
@@ -9,7 +10,10 @@ import { SandboxBank } from './ach/sandbox.ts';
 import { ColumnClient } from './column/client.ts';
 import { ColumnSubmitter } from './column/submitter.ts';
 import { dataKeyConfigured } from './lib/crypto.ts';
+import { mailerFromEnv } from './mail/mailer.ts';
 
+// A git-ignored .env next to the code, if there is one. Real environment variables win.
+if (existsSync('.env')) process.loadEnvFile('.env');
 const config = loadConfig();
 const log = (m: string) => console.error(`[totali] ${m}`);
 
@@ -29,7 +33,9 @@ const store = new Store(config.dataFile);
 const banks = new BankService(store, stripeFromEnv());
 const submitter = config.ach.mode === 'sandbox' ? new SandboxBank() : config.ach.mode === 'column' ? new ColumnSubmitter(new ColumnClient({ apiKey: config.ach.column!.apiKey, bankAccountId: config.ach.column!.bankAccountId })) : new OutboxSubmitter(config.ach.outboxDir);
 const ach = new AchService(store, banks, submitter, config.ach.config);
-const app = createApp({ store, banks, ach, config, log });
+const mailer = mailerFromEnv(process.env, log);
+log(mailer.kind === 'resend' ? 'email: Resend' : 'email: no RESEND_API_KEY, so verification codes are not emailed (they are kept in an in-memory outbox' + (config.devTools ? ' and shown at /v1/dev/outbox)' : '; set TOTALI_DEV=1 to read them in development)'));
+const app = createApp({ store, banks, ach, config, log, mailer });
 
 const timer = setInterval(() => void reconcile(ach, store, { autoDisburse: config.autoDisburse, log }), 60_000);
 timer.unref();

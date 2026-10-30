@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { ApiError, badRequest, forbidden, notFound } from '../lib/errors.ts';
+import { ApiError, badRequest, forbidden, notFound, unauthorized } from '../lib/errors.ts';
 import * as v from '../lib/validate.ts';
 import type { Config } from '../config.ts';
 import type { Store } from '../store/store.ts';
@@ -26,6 +26,11 @@ import { rotateDataKey } from '../domain/rotation.ts';
 import { paymentSetupView, setPaymentSetup } from '../domain/payment.ts';
 import { getProfile, listProfiles } from '../banks/index.ts';
 import { API_AUTHORIZATION_VERSION, apiAuthorizationText } from '../bankapi/authorization.ts';
+import { AccountService, publicUser } from '../accounts/accounts.ts';
+import { OutboxMailer, type Mailer } from '../mail/mailer.ts';
+import type { User } from '../accounts/types.ts';
+import { SECURITY_HEADERS, serveStatic } from '../web/static.ts';
+import { fileURLToPath } from 'node:url';
 
 const MAX_BODY = 1_000_000;
 /** Failed authentications allowed per client address per minute before everything from it is refused. */
@@ -41,8 +46,32 @@ class Text {
   }
 }
 
+/** A response with extra headers (a cookie) or a status other than the route's default. */
+class Reply {
+  body: unknown;
+  headers: Record<string, string>;
+  status?: number;
+  constructor(body: unknown, headers: Record<string, string> = {}, status?: number) {
+    this.body = body;
+    this.headers = headers;
+    if (status !== undefined) this.status = status;
+  }
+}
+
+const SESSION_COOKIE = 'totali_session';
+const DEFAULT_WEB_ROOT = fileURLToPath(new URL('../../web', import.meta.url));
+
+function cookieValue(header: string | undefined, name: string): string | undefined {
+  for (const part of (header ?? '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim();
+  }
+  return undefined;
+}
+
 interface Ctx {
   req: IncomingMessage;
+  user: User | null;
   params: Record<string, string>;
   query: URLSearchParams;
   raw: string;
@@ -56,7 +85,7 @@ interface Route {
   method: string;
   re: RegExp;
   keys: string[];
-  auth: 'none' | 'admin' | 'company';
+  auth: 'none' | 'admin' | 'company' | 'user';
   handler: Handler;
   status: number;
 }
@@ -74,8 +103,13 @@ export interface App {
   handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
 }
 
-export function createApp(deps: { store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date }): App {
+export function createApp(deps: { store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer }): App {
   const { store, banks, ach, config } = deps;
+  const mailer = deps.mailer ?? new OutboxMailer();
+  const accounts = deps.accounts ?? new AccountService(store, mailer, { ...(deps.now ? { now: deps.now } : {}), ...(deps.log ? { log: deps.log } : {}) });
+  const webRoot = config.webRoot ?? DEFAULT_WEB_ROOT;
+  const signups = new RateLimiter(3_600_000);
+  const logins = new RateLimiter(3_600_000);
   const log = deps.log ?? (() => {});
   const now = deps.now ?? (() => new Date());
   const limiter = new RateLimiter();
@@ -86,6 +120,20 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     return meta;
   };
 
+  const publicUserReply = (u: User) => ({ user: publicUser(u) });
+  const secureCookies = (req: IncomingMessage) => (config.publicBaseUrl ?? '').startsWith('https://') || (config.trustProxy && req.headers['x-forwarded-proto'] === 'https');
+  const sessionCookie = (req: IncomingMessage, token: string, clear = false) => `${SESSION_COOKIE}=${clear ? '' : token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${clear ? 0 : 365 * 86_400}${secureCookies(req) ? '; Secure' : ''}`;
+  /** A page can only send this header from our own origin, so a request that carries it was not forged from another site. */
+  const requireCsrf = (req: IncomingMessage) => {
+    if (req.headers['x-totali-csrf'] !== '1') throw forbidden('Missing the same-origin header.');
+    const origin = req.headers.origin;
+    if (origin && req.headers.host) {
+      let host = '';
+      try { host = new URL(origin).host; } catch { /* malformed */ }
+      if (host !== req.headers.host) throw forbidden('Cross-origin request refused.');
+    }
+  };
+
   const routes: Route[] = [
     route('GET', '/health', 'none', () => ({
       ok: true,
@@ -94,6 +142,44 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       ssnEncryptionConfigured: dataKeyConfigured(),
       persistence: config.dataFile ? 'sqlite' : 'memory',
     })),
+
+    // ---- accounts: signup, email verification, sign in
+    route('GET', '/v1/auth/config', 'none', () => ({
+      google: false,
+      mail: mailer.kind,
+      stripePublishableKey: (process.env.STRIPE_PUBLISHABLE_KEY ?? '').trim() || null,
+      termsVersion: '2026-10-terms-v1',
+    })),
+    route('GET', '/v1/auth/me', 'none', (c) => ({ user: c.user ? publicUser(c.user) : null })),
+    route('POST', '/v1/auth/signup', 'none', async (c) => {
+      requireCsrf(c.req);
+      const wait = signups.hit(`signup:${c.ip}`, 20, now().getTime());
+      if (wait) throw new ApiError(429, 'rate_limited', `Too many signups from here. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
+      const r = await accounts.signup(c.json());
+      return new Reply({ user: publicUser(r.user), verification: r.sent }, { 'set-cookie': sessionCookie(c.req, r.token) }, 201);
+    }),
+    route('POST', '/v1/auth/login', 'none', async (c) => {
+      requireCsrf(c.req);
+      const wait = logins.hit(`login:${c.ip}`, 60, now().getTime());
+      if (wait) throw new ApiError(429, 'rate_limited', `Too many attempts from here. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
+      const o = c.json();
+      const r = await accounts.login(o.email, o.password);
+      return new Reply({ user: publicUser(r.user) }, { 'set-cookie': sessionCookie(c.req, r.token) });
+    }),
+    route('POST', '/v1/auth/logout', 'none', (c) => {
+      requireCsrf(c.req);
+      const token = cookieValue(c.req.headers.cookie, SESSION_COOKIE);
+      if (token) accounts.destroySession(token);
+      return new Reply({ ok: true }, { 'set-cookie': sessionCookie(c.req, '', true) });
+    }),
+    route('POST', '/v1/auth/verify', 'user', (c) => publicUserReply(accounts.verifyEmail(c.user!.id, c.json().code))),
+    route('POST', '/v1/auth/resend', 'user', async (c) => ({ verification: await accounts.sendCode(c.user!.id) })),
+    route('POST', '/v1/auth/change-email', 'user', async (c) => ({ verification: await accounts.changeEmail(c.user!.id, c.json().email), user: publicUser(store.users.require(c.user!.id, 'User')) })),
+    route('GET', '/v1/dev/outbox', 'none', () => {
+      // Only where the operator asked for it: it shows verification codes.
+      if (!config.devTools || !(mailer instanceof OutboxMailer)) throw notFound('Route');
+      return { messages: mailer.messages.slice(-20) };
+    }),
 
     // ---- the picker
     route('GET', '/v1/bank-profiles', 'none', () => ({ banks: listProfiles(), note: 'What each bank has published about accepting ACH files, and where Totali read it. Only facts read from the bank are stated as rules; everything else is a question to ask the bank.' })),
@@ -316,13 +402,18 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     let status = 500;
     const method = req.method ?? 'GET';
     const send = (code: number, body: unknown, headers: Record<string, string> = {}) => {
+      if (body instanceof Reply) {
+        headers = { ...body.headers, ...headers };
+        code = body.status ?? code;
+        body = body.body;
+      }
       status = code;
       const isText = body instanceof Text;
       const payload = isText ? (body as Text).text : JSON.stringify(body);
       res.writeHead(code, {
         'content-type': isText ? 'text/plain; charset=utf-8' : 'application/json; charset=utf-8',
         'cache-control': 'no-store',
-        'x-content-type-options': 'nosniff',
+        ...SECURITY_HEADERS,
         ...(isText && (body as Text).filename ? { 'content-disposition': `attachment; filename="${(body as Text).filename}"` } : {}),
         ...headers,
       });
@@ -334,6 +425,14 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       if (config.rateLimitPerMinute > 0 && wait) throw new ApiError(429, 'rate_limited', `Too many requests. Try again in ${wait} seconds.`, { retryAfterSeconds: wait });
 
       const url = new URL(req.url ?? '/', 'http://localhost');
+      // The app itself: every GET outside the API is a file in web/, or a page the front end routes.
+      if ((method === 'GET' || method === 'HEAD') && !url.pathname.startsWith('/v1/') && url.pathname !== '/health') {
+        if (serveStatic(webRoot, req, res, url.pathname)) {
+          status = 200;
+          return;
+        }
+        throw notFound('Page');
+      }
       let matched: { r: Route; params: Record<string, string> } | undefined;
       let pathKnown = false;
       for (const r of routes) {
@@ -352,12 +451,27 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       companyId = params.cid;
 
       const raw = method === 'GET' || method === 'DELETE' ? '' : await readBody(req);
-      if (r.auth === 'admin' || r.auth === 'company' || (r.auth === 'none' && req.headers.authorization)) {
-        try {
-          principal = authenticate(store, req.headers.authorization, config.adminToken);
-        } catch (e) {
-          if (config.rateLimitPerMinute > 0) limiter.hit(`auth:${ip}`, AUTH_FAILURES_PER_MINUTE, nowMs);
-          throw e;
+      let user: User | null = null;
+      const sessionToken = req.headers.authorization ? undefined : cookieValue(req.headers.cookie, SESSION_COOKIE);
+      if (sessionToken) {
+        const found = accounts.resolveSession(sessionToken);
+        if (found) {
+          user = found.user;
+          principal = user.companyId && user.emailVerifiedAt ? { kind: 'company', companyId: user.companyId, via: 'session', userId: user.id } : { kind: 'user', userId: user.id, via: 'session' };
+          // A signed-in browser must prove the request came from our own pages.
+          if (method !== 'GET' && method !== 'HEAD' && r.auth !== 'none') requireCsrf(req);
+        }
+      }
+      if (r.auth === 'user') {
+        if (!user) throw unauthorized('Sign in to continue.');
+      } else if (r.auth === 'admin' || r.auth === 'company' || (r.auth === 'none' && req.headers.authorization)) {
+        if (!principal || r.auth === 'admin' || req.headers.authorization) {
+          try {
+            principal = authenticate(store, req.headers.authorization, config.adminToken);
+          } catch (e) {
+            if (config.rateLimitPerMinute > 0) limiter.hit(`auth:${ip}`, AUTH_FAILURES_PER_MINUTE, nowMs);
+            throw e;
+          }
         }
       }
       if (r.auth === 'admin') assertAdmin(principal!);
@@ -367,6 +481,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       let parsed: Record<string, unknown> | undefined;
       const ctx: Ctx = {
         req,
+        user,
         params,
         query: url.searchParams,
         raw,
@@ -395,7 +510,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       if (method !== 'GET' && principal) {
         try {
           const path = (req.url ?? '').split('?')[0];
-          store.tx(() => store.auditLog.put({ id: newId('aud'), at: now().toISOString(), actor: principal!.kind === 'admin' ? 'admin' : principal!.companyId, method, path, status, ...(companyId ? { companyId } : {}), ip }));
+          store.tx(() => store.auditLog.put({ id: newId('aud'), at: now().toISOString(), actor: principal!.kind === 'admin' ? 'admin' : principal!.kind === 'company' ? principal!.companyId : principal!.userId, method, path, status, ...(companyId ? { companyId } : {}), ip }));
         } catch (e) {
           log(`audit log write failed: ${(e as Error).message}`);
         }

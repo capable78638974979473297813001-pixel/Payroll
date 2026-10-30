@@ -3,7 +3,11 @@ import { newSecret, safeEqual, sha256 } from '../lib/crypto.ts';
 import { forbidden, unauthorized } from '../lib/errors.ts';
 import type { Store } from '../store/store.ts';
 
-export type Principal = { kind: 'admin' } | { kind: 'company'; companyId: string };
+/**
+ * Who is calling. A company key, or a signed-in person who owns a company, is a 'company' principal (`via` says which).
+ * A signed-in person who has not finished the builder yet has no company: they are a 'user'.
+ */
+export type Principal = { kind: 'admin' } | { kind: 'company'; companyId: string; via?: 'session'; userId?: string } | { kind: 'user'; userId: string; via: 'session' };
 
 /** Mint a company API key. The secret is returned once; only its hash is stored. */
 export function mintApiKey(store: Store, companyId: string, label: string): string {
@@ -26,7 +30,7 @@ export function authenticate(store: Store, header: string | undefined, adminToke
 /** A company key may touch only its own company; an admin may touch any. */
 export function assertCompanyAccess(p: Principal, companyId: string): void {
   if (p.kind === 'admin') return;
-  if (p.companyId !== companyId) throw forbidden('This key cannot access that company');
+  if (p.kind === 'user' || p.companyId !== companyId) throw forbidden('This key cannot access that company');
 }
 
 export function assertAdmin(p: Principal): void {

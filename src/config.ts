@@ -16,6 +16,12 @@ export interface Config {
     outboxDir: string;
     config: AchConfig;
   };
+  /** The public address of the site (https://...). Decides whether cookies are marked Secure and what links in emails point to. */
+  publicBaseUrl?: string;
+  /** Development helpers (the email outbox endpoint). Never in production. */
+  devTools?: boolean;
+  /** Where the web app's files are. Defaults to web/ in the repo. */
+  webRoot?: string;
   /** Pay employees automatically once a run is funded and the hold has passed. */
   autoDisburse: boolean;
   /** Requests per minute per client address. 0 turns the limiter off. */
@@ -75,6 +81,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         trustSettlementDate: env.TOTALI_TRUST_SETTLEMENT_DATE === '1',
       },
     },
+    ...((env.PUBLIC_BASE_URL ?? '').trim() ? { publicBaseUrl: (env.PUBLIC_BASE_URL ?? '').trim().replace(/\/+$/, '') } : {}),
+    devTools: env.TOTALI_DEV === '1' && env.NODE_ENV !== 'production',
+    ...((env.TOTALI_WEB_ROOT ?? '').trim() ? { webRoot: (env.TOTALI_WEB_ROOT ?? '').trim() } : {}),
     autoDisburse: env.TOTALI_AUTO_DISBURSE === '1',
     rateLimitPerMinute: int(env, 'TOTALI_RATE_LIMIT_PER_MIN', 600, 0, 1_000_000),
     trustProxy: env.TOTALI_TRUST_PROXY === '1',
