@@ -60,6 +60,10 @@ export interface EmployerBankSetup {
    * debits the employer, which is itself before the effective date. 0 means the bank accepts same-day files.
    */
   leadBankingDays?: number;
+  /** Which bank this is, when Totali has a profile for it (src/banks). The profile's rules are checked against the setup and every file. */
+  bankProfile?: string;
+  /** A limits tier of the bank's service the employer is on (only where the bank publishes limits per service). */
+  limitsTier?: string;
   /** Automatic delivery to the bank's SFTP server, when the bank offers it. Delivery is not approval: the employer still releases the file at the bank. */
   sftp?: {
     host: string;

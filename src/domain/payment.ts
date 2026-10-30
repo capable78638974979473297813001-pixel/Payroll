@@ -3,6 +3,9 @@ import { encryptField } from '../lib/crypto.ts';
 import { validateRoutingNumber } from '../../engine/payroll/directDeposit.ts';
 import { validateSftp, validateTemplate } from '../ach/sftp.ts';
 import * as v from '../lib/validate.ts';
+import { getProfile, PROFILE_IDS } from '../banks/index.ts';
+import { checkSetup, errorsOf } from '../banks/checks.ts';
+import type { Finding } from '../banks/types.ts';
 import type { Store } from '../store/store.ts';
 import type { Company, EmployerBankSetup, PaymentSetup } from './types.ts';
 
@@ -44,7 +47,12 @@ export function setPaymentSetup(store: Store, companyId: string, body: unknown, 
   if (!/^[A-Za-z0-9]{1,10}$/.test(immediateOrigin)) throw badRequest('employerBank.immediateOrigin is at most 10 letters and digits');
   const fileNameTemplate = b.fileNameTemplate === undefined ? DEFAULT_FILE_NAME_TEMPLATE : v.str(b, 'fileNameTemplate', { max: 100 });
   validateTemplate(fileNameTemplate);
-  const leadBankingDays = b.leadBankingDays === undefined ? undefined : v.int(b, 'leadBankingDays', 0, 10);
+  const bankProfile = b.bankProfile === undefined ? undefined : v.oneOf(b, 'bankProfile', PROFILE_IDS);
+  const profile = bankProfile ? getProfile(bankProfile) : undefined;
+  const limitsTier = b.limitsTier === undefined ? undefined : v.str(b, 'limitsTier', { max: 60 });
+  // A bank's own lead time is the default; the employer can set more, or less if the bank's rule is only our reading of it.
+  const leadGiven = b.leadBankingDays === undefined ? undefined : v.int(b, 'leadBankingDays', 0, 10);
+  const leadBankingDays = leadGiven ?? profile?.rules.defaultLeadBankingDays?.days;
 
   const existing = company.payment.employerBank;
   let sftp: EmployerBankSetup['sftp'];
@@ -63,6 +71,14 @@ export function setPaymentSetup(store: Store, companyId: string, body: unknown, 
     sftp = { host, port, username, remoteDir, knownHostsLine, privateKeyEncrypted: keyEncrypted };
   }
 
+  if (profile) {
+    const findings = checkSetup(profile, { odfiRoutingNumber, immediateOrigin, ...(leadBankingDays !== undefined ? { leadBankingDays } : {}), ...(limitsTier !== undefined ? { limitsTier } : {}), ...(sftp ? { sftp: { host: sftp.host, port: sftp.port } } : {}) });
+    const errs = errorsOf(findings);
+    if (errs.length > 0) throw badRequest(errs.map((e) => e.message).join(' '), { findings });
+  } else if (limitsTier !== undefined) {
+    throw badRequest('employerBank.limitsTier needs employerBank.bankProfile');
+  }
+
   const employerBank: EmployerBankSetup = {
     odfiRoutingNumber,
     odfiName: v.str(b, 'odfiName', { max: 60 }),
@@ -70,15 +86,33 @@ export function setPaymentSetup(store: Store, companyId: string, body: unknown, 
     companyId: companyIdValue,
     fileNameTemplate,
     ...(leadBankingDays !== undefined ? { leadBankingDays } : {}),
+    ...(bankProfile ? { bankProfile } : {}),
+    ...(limitsTier !== undefined ? { limitsTier } : {}),
     ...(sftp ? { sftp } : {}),
   };
   return store.tx(() => store.companies.put({ ...company, payment: { mode, employerBank } }));
 }
 
 /** What a caller may see: never the private key. */
-export function paymentSetupView(company: Company) {
+export interface PaymentSetupView {
+  mode: PaymentSetup['mode'];
+  employerBank?: Omit<EmployerBankSetup, 'sftp'> & { sftp?: { host: string; port: number; username: string; remoteDir: string; knownHostsLine: string; hasPrivateKey: true } };
+  bank?: { id: string; name: string; guidance: string[]; askYourBank: string[]; findings: Finding[] };
+}
+
+export function paymentSetupView(company: Company): PaymentSetupView {
   const eb = company.payment.employerBank;
   if (!eb) return { mode: company.payment.mode };
   const { sftp, ...rest } = eb;
-  return { mode: company.payment.mode, employerBank: { ...rest, ...(sftp ? { sftp: { host: sftp.host, port: sftp.port, username: sftp.username, remoteDir: sftp.remoteDir, knownHostsLine: sftp.knownHostsLine, hasPrivateKey: true } } : {}) } };
+  const profile = eb.bankProfile ? getProfile(eb.bankProfile) : undefined;
+  const bank = profile
+    ? {
+        id: profile.id,
+        name: profile.name,
+        guidance: profile.guidance,
+        askYourBank: profile.askBank,
+        findings: checkSetup(profile, { odfiRoutingNumber: eb.odfiRoutingNumber, immediateOrigin: eb.immediateOrigin, ...(eb.leadBankingDays !== undefined ? { leadBankingDays: eb.leadBankingDays } : {}), ...(eb.limitsTier !== undefined ? { limitsTier: eb.limitsTier } : {}), ...(sftp ? { sftp: { host: sftp.host, port: sftp.port } } : {}) }),
+      }
+    : undefined;
+  return { mode: company.payment.mode, employerBank: { ...rest, ...(sftp ? { sftp: { host: sftp.host, port: sftp.port, username: sftp.username, remoteDir: sftp.remoteDir, knownHostsLine: sftp.knownHostsLine, hasPrivateKey: true } } : {}) }, ...(bank ? { bank } : {}) };
 }

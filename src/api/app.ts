@@ -24,6 +24,7 @@ import { newId } from '../lib/ids.ts';
 import { RateLimiter } from './ratelimit.ts';
 import { rotateDataKey } from '../domain/rotation.ts';
 import { paymentSetupView, setPaymentSetup } from '../domain/payment.ts';
+import { getProfile, listProfiles } from '../banks/index.ts';
 
 const MAX_BODY = 1_000_000;
 /** Failed authentications allowed per client address per minute before everything from it is refused. */
@@ -94,6 +95,8 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     })),
 
     // ---- the picker
+    route('GET', '/v1/bank-profiles', 'none', () => ({ banks: listProfiles(), note: 'What each bank has published about accepting ACH files, and where Totali read it. Only facts read from the bank are stated as rules; everything else is a question to ask the bank.' })),
+    route('GET', '/v1/bank-profiles/:id', 'none', (c) => getProfile(c.params.id)),
     route('GET', '/v1/industries', 'none', () => ({ industries: listIndustries() })),
     route('GET', '/v1/industries/:id', 'none', (c) => {
       const i = getIndustry(c.params.id);

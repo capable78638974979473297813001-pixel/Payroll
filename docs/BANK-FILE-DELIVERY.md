@@ -47,6 +47,21 @@ From the Chase guide. These are real constraints, and Totali already follows the
 - **PGP is optional**, set per product folder; **Totali does not support PGP**, so do not turn it on for the ACH folder.
 - SFTP by key works with Totali. Password SFTP does not (see below).
 
+## How Totali uses each bank's rules
+
+`src/banks/profiles.ts` has a profile for each bank above, the smaller banks (First Citizens, Johnson Financial, Banner Bank) and a generic `other`. `GET /v1/bank-profiles` lists them and `GET /v1/bank-profiles/:id` returns one, with its sources, cutoffs, guidance and the questions to ask the bank.
+
+An employer picks a bank with `employerBank.bankProfile` in `PUT /payment-setup`. Then:
+
+- **Defaults.** The bank's lead time is applied unless the employer sets their own.
+- **Setup is checked.** It is refused if it cannot work: SFTP for Truist (password login only), a lead time of 0 where the effective date must follow creation (Chase), a file id of the wrong shape (Wells Fargo wants ten characters), an unknown limits tier. It only warns where the bank's rule is our reading of its guide, or the employer may know something a public page does not (SFTP at a bank that documents none, a host or port that differs from the guide, a routing number the spec does not show).
+- **Every file is checked before it is offered for release.** A file that breaks a rule is rolled back, with its payment legs, and the response says which rule: same-day not supported, same-day entry over PNC's $100,000, further ahead than the bank accepts (Wells Fargo 45 banking days, J.P. Morgan 90 days), over a published per-batch or monthly limit when the employer has set `limitsTier` (Regions' Online Banking Business Services). Control totals (Truist, KeyBank), IP allow-listing, PGP and trace-number behaviour come back as notes on the prepared file.
+- **Release stays manual.** Nothing here approves or sends anything.
+
+Each profile records, for each source, whether the page was read or only seen as a search summary. The four marked summary-only (U.S. Bank, Fifth Third, KeyBank, Banner Bank) should be treated as leads, and the profile's `askBank` list says what to confirm. Facts that were not found are left out of the rules and listed there instead.
+
+What is not built: connecting to a bank's API, PGP, password logins, and any behaviour that depends on a bank rule that has not been read.
+
 ## How many banks
 
 **There is no published count of banks that accept ACH files over SFTP.** For scale: the FDIC counted [4,336 insured institutions at the end of 2025](https://fdic.gov/quarterly-banking-profile/statistics-glance-historical-trends-fourth-quarter-2025.pdf) and the NCUA [4,287 federally insured credit unions](https://ncua.gov/newsroom/press-release/2026/ncua-releases-fourth-quarter-2025-credit-union-system-performance-data), about 8,600 in all. Among the nine above, **five confirm an automatic file channel with a named protocol or name** (Wells Fargo, PNC, U.S. Bank, Truist, KeyBank), J.P. Morgan has one without naming the protocol, Bank of America has a file channel (CashPro Connect) without naming SFTP, and for Fifth Third, Regions and Chase for Business I found none.

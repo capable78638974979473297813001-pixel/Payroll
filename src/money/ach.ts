@@ -8,6 +8,9 @@ import { PRENOTE_WAITING_PERIOD_BUSINESS_DAYS } from '../../engine/payroll/direc
 import type { DirectDepositAccount } from '../../engine/payroll/types.ts';
 import type { Store } from '../store/store.ts';
 import type { AchFile, AchFileEntry, BankAccount, Company, EmployerBankSetup, MoneyLeg, PayRun } from '../domain/types.ts';
+import { getProfile } from '../banks/index.ts';
+import { checkFile, errorsOf } from '../banks/checks.ts';
+import type { Finding } from '../banks/types.ts';
 import { buildAchFile, type AchEntry, type Originator } from '../ach/nacha.ts';
 import { parseReturnFile, RETURN_CODES } from '../ach/returns.ts';
 import type { AchSubmitter } from '../ach/submitter.ts';
@@ -538,7 +541,17 @@ export class AchService {
     }
     this.inflight.add(runId);
     try {
-      const out = this.store.tx(() => this.buildCredits(companyId, runId, { rail: 'employer', description: 'PAYROLL', originator: this.employerOriginator(company, eb), fileNameTemplate: eb.fileNameTemplate, effectiveDate: effective }));
+      let bankChecks: Finding[] = [];
+      const out = this.store.tx(() => {
+        const built = this.buildCredits(companyId, runId, { rail: 'employer', description: 'PAYROLL', originator: this.employerOriginator(company, eb), fileNameTemplate: eb.fileNameTemplate, effectiveDate: effective });
+        if (built.file && eb.bankProfile) {
+          // Inside the transaction: a file that breaks the bank's rules is undone, not offered for release.
+          bankChecks = this.checkAgainstBank(company, eb, built.file);
+          const errs = errorsOf(bankChecks);
+          if (errs.length > 0) throw conflict('bank_rule_violation', `This payment file breaks ${getProfile(eb.bankProfile).name}'s rules: ${errs.map((e) => e.message).join(' ')}`, { findings: bankChecks });
+        }
+        return built;
+      });
       if (out.file) await this.deliverFile(out.file.id);
       const file = out.file ? this.store.achFiles.get(out.file.id)! : null;
       const run2 = this.store.payRuns.require(runId, 'Pay run');
@@ -549,6 +562,7 @@ export class AchService {
         waitingForBankAccount: out.waiting,
         effectiveDate: out.effectiveDate,
         late: out.late,
+        bankChecks,
         needsInYourAccountCents: sum(out.planned.map(({ leg }) => leg.amountCents)),
         controlTotals: file ? { entryCount: file.totals.entryCount, creditsCents: file.totals.creditCents, debitsCents: file.totals.debitCents, note: 'Some banks (Truist, KeyBank) will not release a file until you type in these totals. They are the sum of all credits and, separately, of all debits in the file.' } : null,
         youPayYourselfCents: { employeeTaxesWithheld: run2.totals.employeeTaxCents, employerTaxes: run2.totals.employerTaxCents, deductionsHeld: run2.totals.deductionsCents },
@@ -557,6 +571,24 @@ export class AchService {
     } finally {
       this.inflight.delete(runId);
     }
+  }
+
+  /** The employer's bank's published rules, applied to a file just built. */
+  private checkAgainstBank(company: Company, eb: EmployerBankSetup, file: AchFile): Finding[] {
+    const profile = getProfile(eb.bankProfile);
+    const month = file.effectiveDate.slice(0, 7);
+    const monthSoFarCents = sum(this.store.achFiles.where((f) => f.companyId === company.id && f.rail === 'employer' && f.id !== file.id && f.kind === 'credit' && f.status !== 'rejected' && f.effectiveDate.startsWith(month)).map((f) => f.totals.creditCents));
+    return checkFile(profile, {
+      kind: file.kind === 'prenote' ? 'prenote' : 'credit',
+      today: this.today(),
+      effectiveDate: file.effectiveDate,
+      entryCount: file.totals.entryCount,
+      creditsCents: file.totals.creditCents,
+      debitsCents: file.totals.debitCents,
+      largestEntryCents: Math.max(0, ...file.entries.map((e) => e.amountCents)),
+      monthSoFarCents,
+      ...(eb.limitsTier !== undefined ? { limitsTier: eb.limitsTier } : {}),
+    });
   }
 
   /** Deliver an employer-bank file to the bank's SFTP server, if one is set up. Delivery is not approval: the file waits for the employer to release it. */
