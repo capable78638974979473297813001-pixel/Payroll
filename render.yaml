@@ -1,0 +1,39 @@
+# Deploys Totali to Render. Secrets are never stored here: Render asks for each `sync: false` value in the dashboard
+# the first time the blueprint is applied. Put RESEND_API_KEY there.
+services:
+  - type: web
+    name: totali
+    runtime: node
+    plan: starter            # a persistent disk needs a paid instance
+    buildCommand: "true"     # no build step: the server runs TypeScript directly and the web app is plain files
+    startCommand: node src/main.ts
+    healthCheckPath: /health
+    disk:
+      name: totali-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 22.18.0
+      - key: NODE_ENV
+        value: production
+      - key: TOTALI_TRUST_PROXY     # Render sits behind its own proxy
+        value: "1"
+      - key: TOTALI_DATA_FILE
+        value: /var/data/db.sqlite
+      - key: TOTALI_ACH_OUTBOX
+        value: /var/data/ach-outbox
+      - key: TOTALI_ADMIN_TOKEN
+        generateValue: true
+      - key: TOTALI_DATA_KEY        # 32 random bytes, base64. Back it up apart from the disk: losing it loses SSNs and bank numbers.
+        sync: false
+      - key: PUBLIC_BASE_URL        # for example https://totali.onrender.com, or your own domain
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM            # an address on a domain you have verified in Resend
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false

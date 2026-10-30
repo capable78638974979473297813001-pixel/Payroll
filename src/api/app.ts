@@ -18,6 +18,8 @@ import { dataKeyConfigured } from '../lib/crypto.ts';
 import { runMasteryTax, type MasteryCommand } from '../tax/masterytax.ts';
 import { tipSplit } from '../tax/tipSplit.ts';
 import { tipReport } from '../restaurant/reports.ts';
+import { suggestPeriods } from '../payroll/schedule.ts';
+import { weekSummary, saveWeek } from '../domain/weekEntry.ts';
 import { getIndustry, getNiche, listIndustries } from '../industries/index.ts';
 import { isIsoDate } from '../lib/dates.ts';
 import { newId } from '../lib/ids.ts';
@@ -310,10 +312,22 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       for (const d of [from, to]) if (d !== undefined && !isIsoDate(d)) throw badRequest('from and to must be YYYY-MM-DD');
       return { shifts: listShifts(store, c.params.cid, { from, to, employeeId: c.query.get('employeeId') ?? undefined }) };
     }),
+    route('GET', `${C}/time/week`, 'company', (c) => {
+      const from = c.query.get('start'); const to = c.query.get('end');
+      if (!isIsoDate(from) || !isIsoDate(to)) throw badRequest('start and end must be YYYY-MM-DD');
+      return weekSummary(store, store.companies.require(c.params.cid, 'Company'), from, to);
+    }),
+    route('PUT', `${C}/time/week`, 'company', (c) => saveWeek(store, store.companies.require(c.params.cid, 'Company'), c.json())),
     route('DELETE', `${C}/shifts/:sid`, 'company', (c) => (deleteShift(store, c.params.cid, c.params.sid), { deleted: true })),
     route('PUT', `${C}/house-days`, 'company', (c) => recordHouseDay(store, c.params.cid, c.json())),
 
     // ---- pay runs
+    route('GET', `${C}/payroll/periods`, 'company', (c) => {
+      const company = store.companies.require(c.params.cid, 'Company');
+      const today = now().toISOString().slice(0, 10);
+      const runs = store.payRuns.where((r) => r.companyId === company.id);
+      return { today, periods: suggestPeriods(company, today, runs, 8, `${today.slice(0, 4)}-01-01`) };
+    }),
     route('POST', `${C}/pay-runs`, 'company', (c) => draftPayRun(store, c.params.cid, c.json()), 201),
     route('GET', `${C}/pay-runs`, 'company', (c) => ({ payRuns: store.payRuns.where((r) => r.companyId === c.params.cid).sort((a, b) => b.periodStart.localeCompare(a.periodStart)).map(({ paychecks, ...r }) => ({ ...r, paycheckCount: paychecks.length })) })),
     route('GET', `${C}/pay-runs/:rid`, 'company', (c) => getRun(store, c.params.cid, c.params.rid)),

@@ -72,7 +72,7 @@ test('signup creates an unverified account, stores no plaintext, and emails a co
   assert.equal(Date.parse(sent.expiresAt) - s.clock.now.getTime(), 15 * 60_000);
   const m = s.mailer.messages.at(-1)!;
   assert.equal(m.to, 'sam@harbor.test');
-  assert.match(m.subject, /verification code/i);
+  assert.match(m.subject, /Totali code/i);
   assert.match(m.html, /Sam/);
   const stored = JSON.stringify([...s.store.users.all(), ...s.store.emailCodes.all(), ...s.store.sessions.all()]);
   assert.ok(!stored.includes(s.code()), 'the code is stored only as a hash');

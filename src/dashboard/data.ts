@@ -153,7 +153,7 @@ export function dashboardData(store: Store, company: Company, today: string) {
 
   return {
     asOf: today,
-    company: { name: company.legalName, state: company.homeState, industry: company.industry, niche: company.niche, hasEin: !!company.ein, paymentSetUp: !!company.payment.employerBank, locations: company.locations ?? [] },
+    company: { name: company.legalName, state: company.homeState, schedule: { frequency: company.paySchedule.frequency, payWeekday: company.paySchedule.payWeekday ?? null }, workweekStartDay: company.settings.workweekStartDay, industry: company.industry, niche: company.niche, hasEin: !!company.ein, paymentSetUp: !!company.payment.employerBank, locations: company.locations ?? [] },
     nextPayday: nextPayday(company, today, runs),
     runs: runs.slice(0, 10).map((r) => totalsOf(r)),
     latest: totalsOf(latest),

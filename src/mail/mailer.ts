@@ -130,34 +130,40 @@ export function mailerFromEnv(env: NodeJS.ProcessEnv = process.env, log: (m: str
 
 // ---------------------------------------------------------------- the messages Totali sends
 
+// The look is the design's: cream paper, berry headings, a tangerine underline under the name. Email clients ignore web
+// fonts, so the headings fall back to Georgia, which is also a serif.
+const BERRY = '#8E1F4E';
 const wrap = (heading: string, body: string, foot: string) => `
-<div style="font-family:'Inter Tight',Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 8px;color:#0A0A0A">
-  <p style="font-family:'JetBrains Mono',Menlo,Consolas,monospace;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#1F3BFF;margin:0 0 18px">Totali</p>
-  <h1 style="font-size:24px;font-weight:700;margin:0 0 12px;letter-spacing:-.02em">${heading}</h1>
+<div style="background:#FFF6EA;padding:28px 12px">
+<div style="font-family:Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:28px 28px 22px;background:#FFFDF9;border:1px solid #E8D9CC;border-radius:12px;color:#3B2A33">
+  <p style="font-family:Fraunces,Georgia,'Times New Roman',serif;font-size:26px;font-weight:500;letter-spacing:-.02em;color:${BERRY};margin:0 0 18px;padding-bottom:5px;border-bottom:3px solid #F0613A;display:inline-block;line-height:1">totali</p>
+  <h1 style="font-family:Fraunces,Georgia,'Times New Roman',serif;font-size:24px;font-weight:400;margin:0 0 12px;letter-spacing:-.01em;color:${BERRY}">${heading}</h1>
   ${body}
-  <p style="font-size:12.5px;color:#6E7079;margin:24px 0 0;border-top:1px solid #E1E3E8;padding-top:12px">${foot}</p>
+  <p style="font-size:12.5px;color:#7B6A72;margin:24px 0 0;border-top:1px solid #E8D9CC;padding-top:12px">${foot}</p>
+</div>
 </div>`.trim();
 
-const para = (t: string) => `<p style="font-size:15px;line-height:1.6;color:#6E7079;margin:0 0 22px">${t}</p>`;
-const button = (href: string, label: string) => `<p style="margin:0 0 22px"><a href="${escapeHtml(href)}" style="display:inline-block;background:#1F3BFF;color:#FFFFFF;font-weight:700;text-decoration:none;padding:14px 24px">${escapeHtml(label)}</a></p>`;
+const para = (t: string) => `<p style="font-size:15px;line-height:1.6;color:#3B2A33;margin:0 0 22px">${t}</p>`;
+const button = (href: string, label: string) => `<p style="margin:0 0 22px"><a href="${escapeHtml(href)}" style="display:inline-block;background:${BERRY};color:#FFF6EA;font-weight:600;text-decoration:none;padding:13px 22px;border-radius:8px">${escapeHtml(label)}</a></p>`;
+const codeBlock = (code: string) => `<p style="font-family:'IBM Plex Mono',Menlo,Consolas,monospace;font-size:32px;font-weight:500;letter-spacing:.2em;color:${BERRY};margin:14px 0 22px">${escapeHtml(code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code)}</p>`;
 
 export function verificationEmail(a: { to: string; firstName: string; code: string; expiresAt: string; now?: Date }): Message {
   const minutes = Math.max(1, Math.round((new Date(a.expiresAt).getTime() - (a.now ?? new Date()).getTime()) / 60_000));
   const name = escapeHtml(a.firstName);
   const html = wrap(
-    `Confirm your email, ${name}`,
-    `${para(`Use this code to verify your email. It expires in ${minutes} minute${minutes === 1 ? '' : 's'}.`)}<div style="font-family:'JetBrains Mono',Menlo,Consolas,monospace;font-size:30px;font-weight:700;letter-spacing:.34em;background:#0A0A0A;color:#FFFFFF;text-align:center;padding:18px 8px">${escapeHtml(a.code)}</div>`,
-    'If you didn’t ask for it, you can ignore this email. Nothing happens without the code. Totali is a product of OMNIA TAX LLC.',
+    `Hi ${name},`,
+    `${para('Use this code to finish creating your account.')}${codeBlock(a.code)}${para(`It expires in ${minutes} minute${minutes === 1 ? '' : 's'}. If you didn’t ask for it, ignore this email.`)}`,
+    'OMNIA TAX LLC',
   );
-  return { to: a.to, subject: 'Your verification code', html, text: `Hi ${a.firstName}, your Totali verification code is ${a.code}. It expires in ${minutes} minute(s). If you didn’t ask for it, ignore this email.` };
+  return { to: a.to, subject: 'Your Totali code', html, text: `Hi ${a.firstName}, your Totali verification code is ${a.code}. It expires in ${minutes} minute(s). If you didn’t ask for it, ignore this email.` };
 }
 
 export function resetEmail(a: { to: string; firstName: string; code: string; expiresAt: string; now?: Date }): Message {
   const minutes = Math.max(1, Math.round((new Date(a.expiresAt).getTime() - (a.now ?? new Date()).getTime()) / 60_000));
   const html = wrap(
-    `Reset your password, ${escapeHtml(a.firstName)}`,
-    `${para(`Use this code to choose a new password. It expires in ${minutes} minute${minutes === 1 ? '' : 's'}.`)}<div style="font-family:'JetBrains Mono',Menlo,Consolas,monospace;font-size:30px;font-weight:700;letter-spacing:.34em;background:#0A0A0A;color:#FFFFFF;text-align:center;padding:18px 8px">${escapeHtml(a.code)}</div>`,
-    'If you didn’t ask to reset your password, ignore this email. Your password has not changed.',
+    `Hi ${escapeHtml(a.firstName)},`,
+    `${para('Use this code to choose a new password.')}${codeBlock(a.code)}${para(`It expires in ${minutes} minute${minutes === 1 ? '' : 's'}.`)}`,
+    'If you didn’t ask to reset your password, ignore this email. Your password has not changed. OMNIA TAX LLC',
   );
   return { to: a.to, subject: 'Your password reset code', html, text: `Hi ${a.firstName}, your Totali password reset code is ${a.code}. It expires in ${minutes} minute(s). If you didn’t ask for it, ignore this email.` };
 }
@@ -166,7 +172,7 @@ export function inviteEmail(a: { to: string; firstName: string; businessName: st
   const forms = a.forms.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
   const html = wrap(
     `Welcome to ${escapeHtml(a.businessName)}, ${escapeHtml(a.firstName)}`,
-    `${para(`${escapeHtml(a.businessName)} uses Totali for payroll. Please fill in your new-hire forms. It takes a few minutes and works on your phone.`)}<ul style="font-size:15px;line-height:1.8;color:#0A0A0A;margin:0 0 22px;padding-left:20px">${forms}</ul>${button(a.link, 'Start your forms')}`,
+    `${para(`${escapeHtml(a.businessName)} uses Totali for payroll. Please fill in your new-hire forms. It takes a few minutes and works on your phone.`)}<ul style="font-size:15px;line-height:1.8;color:#3B2A33;margin:0 0 22px;padding-left:20px">${forms}</ul>${button(a.link, 'Start your forms')}`,
     'This link is just for you. Don’t forward it. If you weren’t expecting this, you can ignore it.',
   );
   return { to: a.to, subject: `${a.businessName}: your new-hire forms`, html, text: `${a.businessName} uses Totali for payroll. Fill in your new-hire forms (${a.forms.join(', ')}): ${a.link}\nThis link is just for you.` };
@@ -176,7 +182,7 @@ export function reminderEmail(a: { to: string; firstName: string; businessName: 
   const items = a.missing.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
   const html = wrap(
     `A reminder from ${escapeHtml(a.businessName)}`,
-    `${para(`Hi ${escapeHtml(a.firstName)}, a few things are still missing before you can be paid:`)}<ul style="font-size:15px;line-height:1.8;color:#0A0A0A;margin:0 0 22px;padding-left:20px">${items}</ul>${button(a.link, 'Finish your forms')}`,
+    `${para(`Hi ${escapeHtml(a.firstName)}, a few things are still missing before you can be paid:`)}<ul style="font-size:15px;line-height:1.8;color:#3B2A33;margin:0 0 22px;padding-left:20px">${items}</ul>${button(a.link, 'Finish your forms')}`,
     'This link is just for you. Don’t forward it.',
   );
   return { to: a.to, subject: `${a.businessName}: still missing ${a.missing.join(', ')}`, html, text: `Hi ${a.firstName}, still missing: ${a.missing.join(', ')}. Finish here: ${a.link}` };

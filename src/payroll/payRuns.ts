@@ -241,6 +241,12 @@ export function buildPayRun(store: Store, company: Company, input: DraftInput, k
       continue;
     }
 
+    // A new hire who has not finished their W-4 cannot be taxed yet. They are left out, and the operator is told.
+    if (employee.onboarding && !employee.onboarding.w4) {
+      issues.push(review('w4_missing', `${name} has no W-4 on file, so taxes can’t be worked out yet. They were left out of this run until it is.`, { employeeId: employee.id }));
+      continue;
+    }
+
     // Tax engine
     const engineEarnings: Earning[] = earnings.map((e) => ({ code: e.code, category: e.category, amount: e.amountCents }));
     const cashGross = sum(earnings.filter((e) => e.category !== 'imputed' && e.category !== 'reimbursement').map((e) => e.amountCents));
