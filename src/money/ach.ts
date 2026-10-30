@@ -767,6 +767,20 @@ export class AchService {
     }
   }
 
+  /**
+   * API-sent files worth asking the bank about: a payment still in flight, dated within the last 30 days, for a
+   * company that still has the API set up. Without these limits the timer would ask about an old payment for ever,
+   * or log an error every minute after an employer removed their credentials.
+   */
+  apiFilesToCheck(): AchFile[] {
+    const cutoff = new Date(this.now().getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
+    return this.store.achFiles.where((f) => {
+      if (!f.apiDelivery || f.effectiveDate < cutoff) return false;
+      if (!this.store.companies.get(f.companyId)?.payment.employerBank?.api) return false;
+      return Object.values(f.apiDelivery.entries).some((e) => e.state === 'sent' && !!e.paymentId && e.bank !== 'completed' && e.bank !== 'rejected' && e.bank !== 'returned');
+    });
+  }
+
   /** Ask the bank where each payment from an API-sent file stands. Not more often than every 15 minutes per payment unless forced. */
   async refreshApiStatus(companyId: string, fileId: string, opts: { force?: boolean } = {}) {
     const company = this.requireMode(companyId, 'employer_bank');
@@ -1040,7 +1054,7 @@ export async function reconcile(ach: AchService, store: Store, opts: { autoDisbu
       log(`reconcile submit ${f.id}: ${(e as Error).message}`);
     }
   }
-  for (const f of store.achFiles.where((x) => !!x.apiDelivery && Object.values(x.apiDelivery.entries).some((e) => e.state === 'sent' && e.bank !== 'completed' && e.bank !== 'rejected' && e.bank !== 'returned'))) {
+  for (const f of ach.apiFilesToCheck()) {
     try {
       await ach.refreshApiStatus(f.companyId, f.id);
     } catch (e) {

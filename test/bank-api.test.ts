@@ -4,7 +4,7 @@ import { createVerify, generateKeyPairSync } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { Store } from '../src/store/store.ts';
 import { BankService } from '../src/banking/accounts.ts';
-import { AchService } from '../src/money/ach.ts';
+import { AchService, reconcile } from '../src/money/ach.ts';
 import { SandboxBank } from '../src/ach/sandbox.ts';
 import { createApp } from '../src/api/app.ts';
 import type { Config } from '../src/config.ts';
@@ -438,6 +438,29 @@ test('a payment the bank rejects the moment it takes it is failed straight away'
   assert.equal(out.complete, true);
   assert.equal(s.store.legs.get(s.legIds[0]!)!.status, 'failed');
   assert.equal(s.entries()[s.legIds[0]!]!.state, 'rejected');
+});
+
+test('the background check stops asking the bank 30 days after the payment date, and stays quiet once the API is removed', async () => {
+  const s = await setup({ staff: 1 });
+  await s.send();
+  const gets = () => s.bank.reqs.filter((r) => r.method === 'GET').length;
+  const logs: string[] = [];
+  const tick = () => reconcile(s.ach, s.store, { autoDisburse: false, log: (m) => logs.push(m) });
+  s.clock.now = new Date('2026-06-09T15:00:00Z');
+  await tick();
+  assert.equal(gets(), 1, 'a payment still in flight is checked');
+  s.clock.now = new Date('2026-06-09T15:20:00Z');
+  await tick();
+  assert.equal(gets(), 2);
+  s.clock.now = new Date('2026-07-13T15:00:00Z'); // more than 30 days after the 12th
+  await tick();
+  assert.equal(gets(), 2, 'no longer asked about a payment this old');
+  // Employer removes the API setup: the timer neither calls the bank nor logs an error every minute.
+  s.clock.now = new Date('2026-06-10T15:00:00Z');
+  setPaymentSetup(s.store, s.company.id, { mode: 'employer_bank', employerBank: { ...BANK } }, 'company');
+  await tick();
+  assert.equal(gets(), 2);
+  assert.deepEqual(logs, []);
 });
 
 // ---------------------------------------------------------------- API

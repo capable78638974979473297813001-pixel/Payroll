@@ -40,7 +40,7 @@ Node 22.18+ and Python 3.10+ (MasteryTax). No packages to install.
 
 ```bash
 cp .env.example .env     # then fill it in; set these in your host's secret store, not in git
-npm test                 # Totali: 258 tests, a few seconds
+npm test                 # Totali: 259 tests, a few seconds
 npm run typecheck        # types for src/, test/, scripts/
 npm run test:vendored    # the vendored engine's own suites (2,107 tests)
 npm run check:stripe     # read-only: what is not ready for bank linking and ACH

@@ -84,7 +84,7 @@ What is not built: connecting to a bank's API, PGP, password logins, and any beh
 
 - **Onboarding is the employer's.** Credentials, the certificate, a client-testing environment and its base URL come from the employer's J.P. Morgan representative. Totali cannot get them.
 - **mTLS and digital signatures:** the documentation says they "may be required depending on the capability" and does not say whether ACH needs them. This adapter does neither. If the bank requires them the call will fail, safely, with no payment made.
-- **Callbacks** need an implementation request with the bank and the documentation does not say how they are signed, so status is polled (at most every 15 minutes per payment).
+- **Callbacks** need an implementation request with the bank and the documentation does not say how they are signed, so status is polled (at most every 15 minutes per payment, and not for payments more than 30 days old).
 - **Returns** arrive as a status, without an R-code. Totali treats them as an unrecognised return: the employee's net pay is owed again and their bank account is disabled until someone checks.
 - **Legal:** the employer stays the originator, with their own agreement with the bank, and Totali never holds the money. Whether the bank's terms allow a software provider to use the employer's credentials, and whether Totali needs any registration for this, are for the employer's bank and a lawyer to say. Totali does not claim an answer.
 
