@@ -15,8 +15,9 @@ export const rangeLabel = (a, b) => `${shortDate(a)} to ${shortDate(b)}, ${year(
 const FREQ = { weekly: 'Weekly', biweekly: 'Every other week', semimonthly: 'Twice a month', monthly: 'Monthly' };
 const legal = () => h('div', { class: 'legal ui' }, h('p', {}, 'Totali is a product of OMNIA TAX LLC. Tax amounts are calculated by the Omnia.tax engine.'));
 
-const STEPS = ['Pick period', 'Hours and tips', 'Review', 'Approve'];
+const STEPS = ['Hours & tips', 'Review & approve', 'Payment steps'];
 function pstep(current) {
+  current = current <= 1 ? 0 : current === 2 ? 1 : 2;
   const kids = [];
   STEPS.forEach((s, i) => {
     kids.push(h('span', { class: i < current ? 'done' : i === current ? 'on' : '', 'data-n': String(i + 1), 'aria-current': i === current ? 'step' : undefined }, s));
@@ -41,6 +42,11 @@ export function dollarsToCents(text) {
   if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
   return Math.round(Number(s) * 100);
 }
+export function csvCell(value) {
+  let text = String(value ?? '');
+  if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
+  return '"' + text.replaceAll('"', '""') + '"';
+}
 const minutesText = (m) => (m === 0 ? '0' : hoursFromMinutes(m));
 const centsText = (c) => (c / 100).toFixed(2);
 
@@ -55,6 +61,7 @@ export function parseCsv(text) {
     else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cur); cur = ''; if (row.some((x) => x.trim() !== '')) rows.push(row); row = []; }
     else cur += ch;
   }
+  if (q) throw new Error('The spreadsheet has an unclosed quote. Check the CSV and try again.');
   row.push(cur); if (row.some((x) => x.trim() !== '')) rows.push(row);
   return rows;
 }
@@ -71,36 +78,25 @@ export function runPayrollPage() {
       const hit = r.periods.find((p) => p.periodStart === q.get('start'));
       if (hit && hit.state !== 'paid') return hoursStep(hit, app.data);
     }
-    return pickStep(data || app.data);
+    const periods = await api.get(`${base()}/payroll/periods`);
+    const nextStart = app.data.nextPayday.period.periodStart;
+    const chosen = periods.periods.find(p => p.periodStart === nextStart && p.state !== 'paid') || periods.periods.find(p => p.state !== 'paid');
+    if (!chosen) return h('div', { class: 'card empty' }, h('h2', {}, 'You’re all caught up.'), h('p', {}, 'Every available period is paid.'), Button({ href: '/app/payroll' }, 'View payroll history'));
+    if (chosen.state === 'in_progress' && chosen.runId) { navigate(`/app/payroll/runs/${chosen.runId}`, { replace: true }); return h('div'); }
+    return hoursStep(chosen, app.data);
   } });
 }
 
-async function pickStep(data) {
-  const r = await api.get(`${base()}/payroll/periods`);
-  const next = data.nextPayday.period;
-  let pick = r.periods.find((p) => p.periodStart === next.periodStart && p.state !== 'paid') || r.periods.find((p) => p.state !== 'paid');
-  const list = h('div', { class: 'opts', role: 'radiogroup', 'aria-label': 'Pay period' });
-  const go = Button({ size: 'lg', type: 'button' }, 'Continue');
-  const status = (p) => (p.state === 'paid' ? 'Paid' : p.state === 'in_progress' ? 'Run started' : p.current ? 'Still open' : 'Ready to run');
-  const draw = () => {
-    list.replaceChildren(...r.periods.map((p) => h('button', { type: 'button', class: `opt ${pick && pick.periodStart === p.periodStart ? 'on' : ''}`, role: 'radio', 'aria-checked': String(!!pick && pick.periodStart === p.periodStart), disabled: p.state === 'paid', 'data-period': p.periodStart, onClick: () => { pick = p; draw(); } },
-      h('span', { class: 'rd' }), h('span', {}, rangeLabel(p.periodStart, p.periodEnd), h('small', {}, `Pay date ${longDate(p.checkDate)} · ${status(p)}`)),
-      p.periodStart === next.periodStart && p.state !== 'paid' ? h('em', {}, 'Next') : null)));
-    go.disabled = !pick;
-    go.firstChild.textContent = pick && pick.state === 'in_progress' ? 'Continue this run' : 'Continue';
-  };
-  draw();
-  go.addEventListener('click', async () => {
-    if (!pick) return;
-    if (pick.state === 'in_progress' && pick.runId) return navigate(`/app/payroll/runs/${pick.runId}`);
-    navigate(`/app/payroll/run?start=${pick.periodStart}&end=${pick.periodEnd}&check=${pick.checkDate}`);
-  });
-  return h('div', {}, pageHead(['Run ', h('em', {}, 'payroll')], `${FREQ[data.company.schedule.frequency] || 'Pay'} pay run for ${data.company.name}`), pstep(0),
-    h('div', { class: 'card', style: { maxWidth: '640px', marginTop: '18px' } }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Which pay period?'), h('span', { class: 'cap' }, 'Your pay schedule picks these.')), list,
-      h('div', { class: 'acts', style: { justifyContent: 'flex-end', marginTop: '18px' } }, go)), legal());
-}
-
 async function hoursStep(period, data) {
+  const schedule = await api.get(`${base()}/payroll/periods`);
+  const periodSelect = h('select', { class: 'in', 'aria-label': 'Pay period', 'data-testid': 'pay-period', onChange: async e => {
+    const selected = schedule.periods.find(p => p.periodStart === e.target.value);
+    if (!selected) return;
+    try { await save(); } catch (error) { periodSelect.value = period.periodStart; formError.replaceChildren(Alert('error', error.message)); return; }
+    if (selected.state === 'in_progress' && selected.runId) navigate(`/app/payroll/runs/${selected.runId}`);
+    else navigate(`/app/payroll/run?start=${selected.periodStart}&end=${selected.periodEnd}&check=${selected.checkDate}`);
+  } }, ...schedule.periods.map(p => h('option', { value: p.periodStart, selected: p.periodStart === period.periodStart, disabled: p.state === 'paid' }, `${rangeLabel(p.periodStart, p.periodEnd)}${p.state === 'paid' ? ' · Paid' : ''}`)));
+  const periodBar = h('section', { class: 'restaurant-period-bar', 'aria-label': 'Payroll dates' }, h('label', {}, h('span', {}, 'PAY PERIOD'), periodSelect), h('div', {}, h('span', {}, 'PAY DATE'), h('b', {}, longDate(period.checkDate))), h('div', {}, h('span', {}, 'PEOPLE'), h('b', {}, String(data.team.active))));
   const week = await api.get(`${base()}/time/week?start=${period.periodStart}&end=${period.periodEnd}`);
   const weeks = Math.max(1, Math.ceil((Math.round((Date.parse(`${period.periodEnd}T12:00:00Z`) - Date.parse(`${period.periodStart}T12:00:00Z`)) / 86_400_000) + 1) / 7));
   const capMinutes = 2400 * weeks;
@@ -108,7 +104,7 @@ async function hoursStep(period, data) {
   const hasExtras = app.data.built.modules.some((m) => m.items.some((i) => i.id === 'bonus_pay'));
   const earlier = (await api.get(`${base()}/pay-runs`)).payRuns.find((x) => x.status === 'draft' && x.periodStart === period.periodStart && x.periodEnd === period.periodEnd);
   let adjustments = earlier ? (await api.get(`${base()}/pay-runs/${earlier.id}`)).adjustments : [];
-  const rows = week.people.map((p) => ({ ...p, reg: minutesText(p.regularMinutes), ot: minutesText(p.overtimeMinutes), tips: centsText(p.tipsCents), errors: {} }));
+  const rows = week.people.map((p) => ({ ...p, reg: minutesText(p.regularMinutes), ot: minutesText(p.overtimeMinutes), tips: centsText(p.chargedTipsCents ?? p.tipsCents), cash: centsText(p.cashTipsCents || 0), errors: {} }));
   const tbody = h('tbody', {});
   const tipsTotal = h('span', { class: 'n' });
   const sideAlerts = h('div', { class: 'stack', style: { '--gap': '12px' } });
@@ -127,14 +123,14 @@ async function hoursStep(period, data) {
     r.locked ? h('span', { class: 'chip line' }, 'Paid') : null,
   ];
   function drawTotals() {
-    const t = rows.reduce((n, r) => n + (dollarsToCents(r.tips) || 0), 0);
+    const t = rows.reduce((n, r) => n + (dollarsToCents(r.tips) || 0) + (dollarsToCents(r.cash) || 0), 0);
     tipsTotal.textContent = money(t);
   }
   const cells = new Map(); // employeeId -> { reg, ot, tips, notes }
   /** Cells are updated in place, never rebuilt: a rebuild while someone is tabbing to the next cell would swallow their click. */
   function syncRow(r) {
     const c = cells.get(r.employeeId);
-    c.reg.value = r.reg; c.ot.value = r.ot; if (c.tips) c.tips.value = r.tips;
+    c.reg.value = r.reg; c.ot.value = r.ot; if (c.tips) c.tips.value = r.tips; if (c.cash) c.cash.value = r.cash;
     c.ot.className = (hoursToMinutes(r.ot) || 0) > 0 ? 'e' : '';
     c.notes.replaceChildren(...notes(r).filter(Boolean));
   }
@@ -142,21 +138,21 @@ async function hoursStep(period, data) {
     const input = h('input', { value: r[key], inputmode: 'decimal', 'aria-label': `${label} for ${r.name}`, 'data-key': key, disabled: r.locked || r.shiftByShift });
     input.addEventListener('input', () => {
       r[key] = input.value;
-      const bad = key === 'tips' ? dollarsToCents(input.value) === null : hoursToMinutes(input.value) === null;
+      const bad = ['tips', 'cash'].includes(key) ? dollarsToCents(input.value) === null : hoursToMinutes(input.value) === null;
       input.setAttribute('aria-invalid', String(bad)); input.style.borderColor = bad ? '#C0392B' : ''; drawTotals();
     });
     input.addEventListener('change', () => {
-      if (key !== 'tips' && hoursToMinutes(input.value) !== null) { normalize(r); syncRow(r); }
-      else if (key === 'tips' && dollarsToCents(input.value) !== null) { r.tips = centsText(dollarsToCents(input.value)); input.value = r.tips; }
+      if (!['tips', 'cash'].includes(key) && hoursToMinutes(input.value) !== null) { normalize(r); syncRow(r); }
+      else if (['tips', 'cash'].includes(key) && dollarsToCents(input.value) !== null) { r[key] = centsText(dollarsToCents(input.value)); input.value = r[key]; }
     });
     return input;
   }
   const trs = new Map();
   function drawRow(r) {
     if (trs.has(r.employeeId)) { syncRow(r); return trs.get(r.employeeId); }
-    const c = { reg: field(r, 'reg', 'Regular hours'), ot: field(r, 'ot', 'Overtime hours'), tips: r.tipped ? field(r, 'tips', 'Tips') : null, notes: h('td', { class: 'l hm' }) };
+    const c = { reg: field(r, 'reg', 'Regular hours'), ot: field(r, 'ot', 'Overtime hours'), tips: r.tipped ? field(r, 'tips', 'Paycheck tips') : null, cash: r.tipped ? field(r, 'cash', 'Cash tips already received') : null, notes: h('td', { class: 'l hm' }) };
     cells.set(r.employeeId, c);
-    const tr = h('tr', { 'data-employee': r.employeeId }, h('td', {}, who(r.name, r.role)), h('td', { class: 'l hm' }, r.location || ''), h('td', {}, c.reg), h('td', {}, c.ot), h('td', {}, c.tips || h('span', { class: 'mut' }, '–')), c.notes);
+    const tr = h('tr', { 'data-employee': r.employeeId }, h('td', {}, who(r.name, r.role)), h('td', { class: 'l hm' }, r.location || ''), h('td', {}, c.reg), h('td', {}, c.ot), h('td', {}, c.tips || h('span', { class: 'mut' }, '–')), h('td', {}, c.cash || h('span', { class: 'mut' }, '–')), c.notes);
     trs.set(r.employeeId, tr);
     syncRow(r);
     return tr;
@@ -172,10 +168,10 @@ async function hoursStep(period, data) {
     const entries = [];
     for (const r of rows) {
       if (r.locked || r.shiftByShift) continue;
-      const reg = hoursToMinutes(r.reg); const ot = hoursToMinutes(r.ot); const tips = dollarsToCents(r.tips);
+      const reg = hoursToMinutes(r.reg); const ot = hoursToMinutes(r.ot); const tips = dollarsToCents(r.tips); const cashTips = dollarsToCents(r.cash);
       if (reg === null || ot === null) throw new Error(`${r.name}: hours must be a number like 32.5 or 32:30.`);
-      if (tips === null) throw new Error(`${r.name}: tips must be dollars, like 412.30.`);
-      entries.push({ employeeId: r.employeeId, regularMinutes: reg, overtimeMinutes: ot, tipsCents: tips });
+      if (tips === null || cashTips === null) throw new Error(`${r.name}: tips must be dollars, like 412.30.`);
+      entries.push({ employeeId: r.employeeId, regularMinutes: reg, overtimeMinutes: ot, tipsCents: tips, cashTipsCents: cashTips });
     }
     return entries;
   }
@@ -190,7 +186,7 @@ async function hoursStep(period, data) {
     try { await save(); toast('success', 'Saved. Your hours and tips are kept.'); } catch (e) { formError.replaceChildren(Alert('error', e.message)); }
     setLoading(saveDraft, false);
   });
-  const next = Button({ type: 'button' }, 'Continue to review');
+  const next = Button({ type: 'button' }, 'Review payroll →');
   next.addEventListener('click', async () => {
     formError.replaceChildren(); setLoading(next, true);
     try {
@@ -206,12 +202,13 @@ async function hoursStep(period, data) {
   const file = h('input', { type: 'file', accept: '.csv,text/csv', hidden: true, 'aria-label': 'Hours spreadsheet' });
   file.addEventListener('change', async () => {
     const f = file.files[0]; if (!f) return;
-    const csv = parseCsv(await f.text());
+    let csv;
+    try { if (f.size > 1000000) throw new Error('Import a spreadsheet smaller than 1 MB.'); csv = parseCsv(await f.text()); } catch (error) { file.value = ''; return toast('error', error.message); }
     file.value = '';
     if (csv.length < 2) return toast('error', 'That file has no rows.');
     const head = csv[0].map((x) => x.trim().toLowerCase());
     const col = (...names) => head.findIndex((x) => names.some((n) => x === n || x.startsWith(n)));
-    const iName = col('employee', 'name'); const iReg = col('regular', 'hours', 'hrs'); const iOt = col('overtime', 'ot'); const iTips = col('tips', 'tip');
+    const iName = col('employee', 'name'); const iReg = col('regular', 'hours', 'hrs'); const iOt = col('overtime', 'ot'); const iTips = col('paycheck tips', 'tips', 'tip'); const iCash = col('cash');
     if (iName < 0 || iReg < 0) return toast('error', 'The first row needs “Employee” and “Regular hrs” columns.');
     let filled = 0; const lost = [];
     for (const line of csv.slice(1)) {
@@ -220,6 +217,7 @@ async function hoursStep(period, data) {
       if (!r) { lost.push(line[iName]); continue; }
       if (r.locked || r.shiftByShift) continue;
       r.reg = (line[iReg] || '0').trim(); r.ot = iOt >= 0 ? (line[iOt] || '0').trim() : '0'; if (iTips >= 0 && r.tipped) r.tips = (line[iTips] || '0').trim().replace(/^\$/, '');
+      if (iCash >= 0 && r.tipped) r.cash = (line[iCash] || '0').trim().replace(/^\$/, '');
       if (hoursToMinutes(r.reg) !== null && hoursToMinutes(r.ot) !== null) normalize(r);
       drawRow(r); filled++;
     }
@@ -229,7 +227,7 @@ async function hoursStep(period, data) {
   const importBtn = Button({ variant: 'ghost', size: 'sm', type: 'button', full: true, onClick: () => file.click() }, 'Import hours from a spreadsheet');
   const template = h('a', { class: 'link', href: '#', style: { textAlign: 'center', fontSize: '12.5px' }, onClick: (e) => {
     e.preventDefault();
-    const csv = ['Employee,Regular hrs,Overtime hrs,Tips', ...rows.map((r) => `"${r.name}",${r.reg},${r.ot},${r.tips}`)].join('\n');
+    const csv = [['Employee','Regular hrs','Overtime hrs','Paycheck tips','Cash tips'], ...rows.map(r => [r.name,r.reg,r.ot,r.tips,r.cash])].map(row => row.map(csvCell).join(',')).join('\r\n');
     const a = h('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: `hours-${period.periodStart}.csv` }); document.body.append(a); a.click(); a.remove();
   } }, 'Download a template with your people in it');
 
@@ -255,23 +253,21 @@ async function hoursStep(period, data) {
   drawExtras();
   const posConn = (await api.get(`${base()}/pos`)).connection;
   const sched = data.company.schedule.frequency;
-  const locs = data.company.locations.map((l) => l.name);
   const tipped = rows.some((r) => r.tipped);
-  const side = h('div', { class: 'grid' },
-    h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '10px' } }, 'This pay run'), h('dl', { class: 'kv', style: { gridTemplateColumns: '110px 1fr', fontSize: '13.5px' } }, h('dt', {}, 'Period'), h('dd', {}, rangeLabel(period.periodStart, period.periodEnd)), h('dt', {}, 'Pay date'), h('dd', {}, longDate(period.checkDate)), h('dt', {}, 'Schedule'), h('dd', {}, FREQ[sched] || sched), locs.length ? [h('dt', {}, 'Locations'), h('dd', {}, locs.join(', '))] : null)),
-    tipped ? h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Tips this period'), h('div', { class: 'big2' }, h('div', {}, tipsTotal)), h('p', { class: 'cap' }, 'Tips paid through payroll. Cash tips someone already kept don’t need to be entered.')) : null,
+  const side = h('div', { class: 'grid restaurant-payroll-tools' },
+    tipped ? h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Tips this period'), h('div', { class: 'big2' }, h('div', {}, tipsTotal)), h('p', { class: 'cap' }, 'Keep paycheck tips and cash already received in separate columns. Both are reported; cash tips are taxed without being paid twice.')) : null,
     pullCard(posConn, period),
     hasExtras || adjustments.length ? h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Bonuses and reimbursements'), h('button', { class: 'link as-button', type: 'button', 'data-testid': 'add-extra', onClick: addExtra }, 'Add')), extrasList) : null,
     sideAlerts, importBtn, template, file);
 
-  return h('div', {}, pageHead(['Run ', h('em', {}, 'payroll')], `${FREQ[sched] || 'Pay'} pay run for ${data.company.name}`, saveDraft), pstep(1),
-    h('div', { class: 'grid g32', style: { gridTemplateColumns: 'minmax(0,1fr) 340px', marginTop: '18px' } },
+  return h('div', { class: 'restaurant-payroll-flow' }, pageHead(['Prepare ', h('em', {}, 'payroll')], `${FREQ[sched] || 'Pay'} pay run for ${data.company.name}`, saveDraft), pstep(1), periodBar,
+    h('div', { class: 'grid g32 restaurant-payroll-prep-layout', style: { gridTemplateColumns: 'minmax(0,1fr)', marginTop: '18px' } },
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Hours and tips'), h('span', { class: 'cap' }, `${weeks === 1 ? 'Week' : 'Period'} of ${shortDate(period.periodStart)}. Edit any cell.`)),
-        rows.length ? h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th', {}, 'Employee'), h('th', { class: 'l hm' }, 'Location'), h('th', {}, 'Regular hrs'), h('th', {}, 'Overtime hrs'), h('th', {}, 'Tips ($)'), h('th', { class: 'l hm' }, 'Notes'))), tbody)
+        rows.length ? h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th', {}, 'Employee'), h('th', { class: 'l hm' }, 'Location'), h('th', {}, 'Regular hrs'), h('th', {}, 'Overtime hrs'), h('th', {}, 'Paycheck tips ($)'), h('th', {}, 'Cash already paid ($)'), h('th', { class: 'l hm' }, 'Notes'))), tbody)
           : h('div', { class: 'empty' }, 'Nobody is on payroll for this period yet. ', link('/app/onboarding', { class: 'link' }, 'Invite your first person')),
         h('p', { class: 'cap', style: { marginTop: '10px' } }, 'Overtime is worked out from the total: anything over 40 hours in a week is paid at time and a half, whichever box you type it in.')), side),
     formError,
-    h('div', { class: 'acts', style: { justifyContent: 'flex-end', marginTop: '18px' } }, link('/app/payroll/run', { class: 'link' }, 'Back'), next), legal());
+    h('div', { class: 'acts restaurant-payroll-footer', style: { justifyContent: 'flex-end', marginTop: '18px' } }, link('/app', { class: 'link' }, 'Back to overview'), next), legal());
 }
 
 // ---------------------------------------------------------------- 3 and 4: review the run, approve it, then pay your team
@@ -289,40 +285,36 @@ export function runPage() {
 
 const stat = (label, value, small) => h('div', {}, h('i', {}, label), h('b', {}, value), small ? h('small', {}, small) : null);
 
-function cols(run) {
-  const has = (k) => run.paychecks.some((p) => p.taxLines.some((l) => l.payer === 'employee' && l.amount > 0 && TAXCOL(l) === k));
-  const stateName = app.data.built ? app.data.built.answers[0] : app.data.company.state;
-  return [['fit', 'Federal'], ['fica', 'SS + Medicare'], ['state', stateName], ['local', 'City']].filter(([k]) => has(k) || k === 'fit' || k === 'fica');
-}
-const taxIn = (pc, k) => pc.taxLines.filter((l) => l.payer === 'employee' && TAXCOL(l) === k).reduce((n, l) => n + l.amount, 0);
-
 function paychecksTable(run, info, { stubs = false } = {}) {
-  const C = cols(run);
-  const tipsOf = (pc) => pc.tips.chargedKeptCents + pc.tips.tipOutReceivedCents + pc.tips.poolShareCents + pc.tips.cashCents;
-  const grossOf = (pc) => pc.taxableWagesCents;
-  const tot = { tips: 0, gross: 0, net: 0 }; const colTot = Object.fromEntries(C.map(([k]) => [k, 0]));
-  const body = run.paychecks.map((pc) => {
-    const p = info.get(pc.employeeId);
-    tot.tips += tipsOf(pc); tot.gross += grossOf(pc); tot.net += pc.netPayCents;
-    for (const [k] of C) colTot[k] += taxIn(pc, k);
+  const rows = run.paychecks.map(pc => {
+    const person = info.get(pc.employeeId);
+    const details = h('details', { class: 'restaurant-paycheck-detail' }, h('summary', {}, 'Paycheck breakdown'),
+      h('dl', {}, h('dt', {}, 'Hours'), h('dd', {}, String(pc.hours)),
+        h('dt', {}, 'Reported cash tips already received'), h('dd', {}, money(pc.cashTipsCents)),
+        h('dt', {}, 'Deductions'), h('dd', {}, money(pc.deductionsCents)),
+        ...pc.taxLines.filter(t => t.payer === 'employee').flatMap(t => [h('dt', {}, t.name), h('dd', {}, money(t.amount))]),
+        h('dt', {}, 'Net including cash tips'), h('dd', {}, money(pc.netPayCents)),
+        h('dt', {}, 'Still owed in paycheck'), h('dd', {}, money(pc.payableCents))),
+      stubs ? link(`/app/payroll/runs/${run.id}/stub/${pc.employeeId}`, { class: 'link' }, 'Open pay stub →') : null);
     return h('tr', { 'data-employee': pc.employeeId },
-      h('td', {}, stubs ? link(`/app/payroll/runs/${run.id}/stub/${pc.employeeId}`, { class: 'who-link' }, who(pc.name, p && p.role)) : who(pc.name, p && p.role)),
-      h('td', { class: 'l hm' }, (p && p.location) || ''), h('td', { class: 'hm' }, String(Math.round(pc.hours * 100) / 100)),
-      h('td', { class: 'hm' }, tipsOf(pc) ? money(tipsOf(pc)) : h('span', { class: 'mut' }, '–')), h('td', {}, money(grossOf(pc))),
-      ...C.map(([k]) => h('td', { class: 'hm' }, money(taxIn(pc, k)))), h('td', {}, h('b', {}, money(pc.netPayCents))));
+      h('td', {}, stubs ? link(`/app/payroll/runs/${run.id}/stub/${pc.employeeId}`, { class: 'who-link' }, who(pc.name, person?.role)) : who(pc.name, person?.role), details),
+      h('td', {}, money(pc.taxableWagesCents + pc.reimbursementCents)), h('td', {}, money(pc.employeeTaxCents)), h('td', {}, h('b', {}, money(pc.payableCents))));
   });
-  return h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th', {}, 'Employee'), h('th', { class: 'l hm' }, 'Location'), h('th', { class: 'hm' }, 'Hours'), h('th', { class: 'hm' }, 'Tips'), h('th', {}, 'Gross'), ...C.map(([, label]) => h('th', { class: 'hm' }, label)), h('th', {}, 'Net'))),
-    h('tbody', {}, ...body, h('tr', { class: 'tot' }, h('td', {}, `Total, ${plural(run.paychecks.length, 'employee')}`), h('td', { class: 'hm' }), h('td', { class: 'hm' }), h('td', { class: 'hm' }, money(tot.tips)), h('td', {}, money(tot.gross)), ...C.map(([k]) => h('td', { class: 'hm' }, money(colTot[k]))), h('td', {}, money(tot.net)))));
+  return h('table', { class: 'tbl restaurant-paycheck-table' }, h('thead', {}, h('tr', {}, h('th', {}, 'Person'), h('th', {}, 'Gross pay'), h('th', {}, 'Employee taxes'), h('th', {}, 'Paycheck amount'))),
+    h('tbody', {}, ...rows, h('tr', { class: 'tot' }, h('td', {}, plural(run.paychecks.length, 'person', 'people')), h('td', {}, money(run.totals.grossCents)), h('td', {}, money(run.paychecks.reduce((s,p)=>s+p.employeeTaxCents,0))), h('td', {}, money(run.totals.payableCents)))));
 }
 
 function statsStrip(run) {
   const left = Math.max(0, app.data.team.active - run.paychecks.length);
-  return h('div', { style: { margin: '18px 0' } }, h('div', { class: 'stats' }, stat('Gross pay', money(run.totals.grossCents)), stat('Employee taxes', money(run.totals.employeeTaxCents)), stat('Net pay', money(run.paychecks.reduce((n, p) => n + p.netPayCents, 0))), stat('Employees on this run', String(run.paychecks.length), left ? `${left} left out` : undefined)));
+  return h('div', { style: { margin: '18px 0' } }, h('div', { class: 'stats' }, stat('Gross pay', money(run.totals.grossCents)), stat('Employee taxes', money(run.totals.employeeTaxCents)), stat('Paycheck amounts', money(run.totals.payableCents), `${money(run.totals.cashTipsCents)} cash tips already received`), stat('Employees on this run', String(run.paychecks.length), left ? `${left} left out` : undefined)));
 }
 
 function costCard(run) {
-  return h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'What it costs you'),
-    h('table', { class: 'tbl' }, h('tbody', {}, h('tr', {}, h('td', {}, 'Gross pay'), h('td', {}, money(run.totals.grossCents))), h('tr', {}, h('td', {}, 'Employer taxes'), h('td', {}, money(run.totals.employerTaxCents))), h('tr', { class: 'tot' }, h('td', {}, 'Total'), h('td', {}, money(run.totals.grossCents + run.totals.employerTaxCents))))));
+  const rows = [['Paycheck amounts',run.totals.payableCents],['Employee taxes collected',run.totals.employeeTaxCents],['Employer taxes',run.totals.employerTaxCents],['Deductions to remit',run.totals.deductionsCents]];
+  return h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '10px' } }, 'What to set aside'),
+    h('div', { class: 'restaurant-funding-total' }, money(run.totals.fundingRequiredCents)),
+    h('dl', { class: 'restaurant-funding-breakdown' }, ...rows.flatMap(([label,value]) => [h('dt', {}, label),h('dd', {}, money(value))])),
+    h('p', { class: 'cap' }, 'Excludes cash tips already received. Employee payments, tax remittance and deductions have separate next steps.'));
 }
 
 function reviewView(run, info) {
@@ -365,15 +357,19 @@ function reviewView(run, info) {
   }
   approve.addEventListener('click', () => {
     err.replaceChildren();
-    if (!reviews.length) return doApprove(false);
     const ok = h('input', { type: 'checkbox', id: 'ack' });
-    const go = Button({ disabled: true }, 'Approve');
+    const go = Button({ disabled: true }, 'Approve payroll');
     ok.addEventListener('change', () => { go.disabled = !ok.checked; });
-    const m = modal({ title: 'Before you approve', body: h('div', { class: 'f' }, h('p', { class: 'fine', style: { margin: 0 } }, `${plural(reviews.length, 'thing')} need${reviews.length === 1 ? 's' : ''} a person’s eye. Totali made a note instead of guessing:`), h('ul', { style: { margin: '10px 0 14px 18px', fontSize: '13.5px' } }, ...reviews.map((i) => h('li', {}, i.message))), h('label', { class: 'ck2' }, ok, h('span', { class: 'cb' }), h('span', { class: 'fine' }, 'I’ve read these and want to approve anyway.'))), actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Go back'), go] });
-    go.addEventListener('click', () => { m.close(); doApprove(true); });
+    const m = modal({ title: 'Ready to approve payroll?', body: h('div', { class: 'f' },
+      h('div', { class: 'restaurant-approval-total' }, h('small', {}, 'TOTAL TO SET ASIDE'), h('b', {}, money(run.totals.fundingRequiredCents)), h('span', {}, `${plural(run.paychecks.length, 'person', 'people')} · Pay date ${longDate(run.checkDate)}`)),
+      h('p', { class: 'fine' }, 'Approval locks these amounts and prepares pay stubs. You’ll review payment-file instructions next. No bank payment is released by this button.'),
+      reviews.length ? h('div', {}, h('b', {}, `${plural(reviews.length, 'review item')}`), h('ul', {}, ...reviews.map(i => h('li', {}, i.message)))) : null,
+      h('label', { class: 'ck2' }, ok, h('span', { class: 'cb' }), h('span', { class: 'fine' }, reviews.length ? 'I reviewed the paychecks and every review item, and approve this payroll.' : 'I reviewed these paychecks and approve this payroll.'))),
+      actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Keep reviewing'), go] });
+    go.addEventListener('click', () => { m.close(); doApprove(reviews.length > 0); });
   });
 
-  return h('div', {}, pageHead(['Review the ', h('em', {}, 'pay run')], `${FREQ[app.data.company.schedule.frequency] || 'Pay'} · ${rangeLabel(run.periodStart, run.periodEnd)} · Pay date ${longDate(run.checkDate)}`, Button({ variant: 'ghost', size: 'sm', href: `/app/payroll/run?start=${run.periodStart}&end=${run.periodEnd}&check=${run.checkDate}` }, 'Back to hours')), pstep(2), statsStrip(run),
+  return h('div', { class: 'restaurant-payroll-flow' }, pageHead(['Review ', h('em', {}, 'pay run')], `${FREQ[app.data.company.schedule.frequency] || 'Pay'} · ${rangeLabel(run.periodStart, run.periodEnd)} · Pay date ${longDate(run.checkDate)}`, Button({ variant: 'ghost', size: 'sm', href: `/app/payroll/run?start=${run.periodStart}&end=${run.periodEnd}&check=${run.checkDate}` }, 'Back to hours')), pstep(2), statsStrip(run),
     h('div', { class: 'grid', style: { gridTemplateColumns: 'minmax(0,1fr) 360px' } },
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Every paycheck, line by line'), h('span', { class: 'cap' }, 'Taxes by the Omnia.tax engine')), run.paychecks.length ? paychecksTable(run, info) : h('div', { class: 'empty' }, 'No one has pay in this period. Go back and enter hours.')),
       h('div', { class: 'grid' },

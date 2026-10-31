@@ -104,3 +104,30 @@ test('hours by day: set a day, change it, clear it, and see the tip pool for tha
   assert.equal(sum.tips.totalCents, 20000);
   assert.throws(() => saveDay(store, company, { employeeId: cook.id, date: '2025-01-01', minutes: 60 }), /wasn’t employed/);
 });
+
+test('weekly payroll keeps paycheck tips and already-received cash tips separate, including when resaved', () => {
+  const { store, company, server } = setup();
+  const entries = [{ employeeId: server.id, regularMinutes: 2400, tipsCents: 20000, cashTipsCents: 5000 }];
+  saveWeek(store, company, { periodStart: FROM, periodEnd: TO, entries });
+  saveWeek(store, company, { periodStart: FROM, periodEnd: TO, entries });
+  const row = rowOf(store, company, server.id);
+  assert.equal(row.chargedTipsCents, 20000);
+  assert.equal(row.cashTipsCents, 5000);
+  assert.equal(row.tipsCents, 25000);
+  const shifts = store.shifts.where(s => s.employeeId === server.id);
+  assert.equal(shifts.reduce((n, s) => n + s.cashTipsCents, 0), 5000);
+  assert.equal(shifts.reduce((n, s) => n + s.chargedTipsCents, 0), 20000);
+  const run = draftPayRun(store, company.id, { periodStart: FROM, periodEnd: TO, checkDate: '2026-10-30' });
+  assert.equal(run.totals.cashTipsCents, 5000);
+  assert.equal(run.paychecks[0]!.tips.cashCents, 5000);
+  assert.equal(run.paychecks[0]!.payableCents, run.paychecks[0]!.netPayCents - 5000, 'cash already received is not paid twice');
+});
+
+test('invalid cash-tip input rolls back the whole weekly update', () => {
+  const { store, company, server } = setup();
+  saveWeek(store, company, { periodStart: FROM, periodEnd: TO, entries: [{ employeeId: server.id, regularMinutes: 2400, tipsCents: 20000, cashTipsCents: 5000 }] });
+  assert.throws(() => saveWeek(store, company, { periodStart: FROM, periodEnd: TO, entries: [{ employeeId: server.id, regularMinutes: 1200, cashTipsCents: -1 }] }));
+  const row = rowOf(store, company, server.id);
+  assert.equal(row.regularMinutes, 2400);
+  assert.equal(row.cashTipsCents, 5000);
+});

@@ -14,7 +14,8 @@
     "test:vendored": "cd engine && node --test tests/*.test.ts",
     "check:column": "node scripts/check-column.ts",
     "check:stripe": "node scripts/check-stripe.ts",
-    "sync:upstream": "scripts/sync-upstream.sh"
+    "sync:upstream": "scripts/sync-upstream.sh",
+    "dev": "node scripts/dev.ts"
   },
   "license": "UNLICENSED"
 }

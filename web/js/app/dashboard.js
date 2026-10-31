@@ -1,4 +1,5 @@
 import { h } from '../dom.js';
+import { restaurantOverview } from './overview.js';
 import { api } from '../api.js';
 import { navigate } from '../router.js';
 import { Button, Field, icon, modal, setLoading, toast } from '../ui.js';
@@ -18,7 +19,7 @@ export function dashboardTab() {
   return async (ctx) => {
     await loadApp();
     const wrapper = h('div', {});
-    const st = { tabId: ctx.params.tab || app.dash.config.tabs.find((t) => t.kind === 'page').id, editing: false, draft: null, panel: null };
+    const st = { tabId: ctx.params.tab || app.dash.config.tabs.find((t) => t.kind === 'page').id, editing: false, detailed: sessionStorage.getItem(`totali.overview.${app.companyId}`) === 'detailed', draft: null, panel: null };
     let drawerEl = null;
     let page = null;
 
@@ -51,6 +52,7 @@ export function dashboardTab() {
 
     // ------------------------------------------------------------ the page
     function view(tab, { config, t, data, dash }) {
+      if (tab.id === config.tabs.find(x => x.kind === 'page').id && !st.editing && !st.detailed) return restaurantOverview(data, { customize: startEdit });
       const grid = h('div', { class: 'grid cards', 'data-testid': 'grid' });
       for (const w of tab.widgets) grid.append(cardElement(w, { config, t, data, dash, tools: st.editing ? tools(tab, w) : null }));
       if (!tab.widgets.length) grid.append(h('div', { class: 'card', style: { '--span': 12 } }, h('div', { class: 'empty' }, st.editing ? 'This tab is empty. Add a card to start.' : 'This tab is empty.', st.editing ? null : [' ', h('button', { class: 'link as-button', type: 'button', onClick: startEdit }, 'Customize')])));
@@ -58,6 +60,7 @@ export function dashboardTab() {
       const first = tab.id === config.tabs.find((x) => x.kind === 'page').id;
       return h('div', {}, h('div', { class: 'ph2' }, h('div', {}, h('h1', { class: 'pt' }, first ? config.brand.name : tab.label), first ? h('p', {}, subline(data)) : null),
         h('div', { class: 'acts' },
+          first && !st.editing ? Button({ variant: 'ghost', size: 'sm', onClick: () => { st.detailed = false; sessionStorage.removeItem(`totali.overview.${app.companyId}`); draw(); } }, 'Simple overview') : null,
           first ? Button({ variant: 'ghost', size: 'sm', href: '/app/onboarding' }, 'Add employee') : null,
           tab.id === 'people' ? Button({ variant: 'ghost', size: 'sm', type: 'button', onClick: importPeopleModal }, 'Import from spreadsheet') : null,
           tab.id === 'people' ? Button({ size: 'sm', href: '/app/onboarding' }, 'Add employee') : null,
@@ -68,7 +71,7 @@ export function dashboardTab() {
     }
 
     // ------------------------------------------------------------ edit mode
-    function startEdit() { st.draft = clone(app.dash.config); st.editing = true; window.addEventListener('beforeunload', guard); draw(); }
+    function startEdit() { st.detailed = true; sessionStorage.setItem(`totali.overview.${app.companyId}`, 'detailed'); st.draft = clone(app.dash.config); st.editing = true; window.addEventListener('beforeunload', guard); draw(); }
     function guard(e) { if (dirty()) { e.preventDefault(); e.returnValue = ''; } }
     function stopEdit() { st.editing = false; st.draft = null; closePanel(); window.removeEventListener('beforeunload', guard); draw(); }
 
