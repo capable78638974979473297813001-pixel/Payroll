@@ -462,6 +462,8 @@ export type PayRunStatus =
   | 'voided';
 
 export interface PayRun {
+  /** Fingerprint of the POS import and mapping reviewed before approval. */
+  posRevision?: string;
   id: string;
   companyId: string;
   periodStart: string;

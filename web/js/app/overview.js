@@ -1,41 +1,52 @@
 import { h, money, shortDate, longDate, hoursFromMinutes, plural } from '../dom.js';
-import { link } from '../router.js';
-import { Button, Chip } from '../ui.js';
-import { session } from '../session.js';
+import { link, navigate } from '../router.js';
+import { Button, Alert, setLoading } from '../ui.js';
+import { api } from '../api.js';
+import { base, refreshData } from './state.js';
+import { providerButtons } from './pos.js';
 
-/** A focused operational view; every number comes from dashboard/data. */
-export function restaurantOverview(data, { customize }) {
-  const next = data.nextPayroll;
-  const period = next.period;
-  const runPath = next.runId ? `/app/payroll/runs/${next.runId}` : '/app/payroll/run';
-  const remaining = data.guide.steps.filter(s => !s.done);
-  const readiness = [
-    { title: 'Hours gathered', detail: `${next.people.hourlyWithHours} of ${next.people.hourly} hourly people have time recorded`, ready: next.people.hourly > 0 && next.people.hourlyWithHours === next.people.hourly, to: '/app/time' },
-    { title: 'Team paperwork', detail: next.people.missingW4 ? plural(next.people.missingW4, 'person needs', 'people need') + ' a W-4' : 'W-4s are on file for your team', ready: data.team.active > 0 && !next.people.missingW4, to: '/app/onboarding' },
-    { title: 'Payment setup', detail: data.company.paymentSetUp ? 'Your employer-bank details are saved' : 'Add your bank’s payment-file details', ready: data.company.paymentSetUp, to: '/app/settings/payments' },
-  ];
-  const metric = (label, value, detail, symbol) => h('div', { class: 'restaurant-metric' }, h('div', { class: 'restaurant-metric-label' }, label, h('span', { 'aria-hidden': 'true' }, symbol)), h('b', {}, value), h('small', {}, detail));
-  const sectionTitle = (title, href, text) => h('div', { class: 'restaurant-section-heading' }, h('h2', {}, title), href ? link(href, {}, text || 'View all ↗') : null);
-  const todo = data.todos;
-  return h('div', { class: 'restaurant-overview', 'data-testid': 'restaurant-overview' },
-    h('div', { class: 'restaurant-page-head' }, h('div', {}, h('div', { class: 'restaurant-eyebrow' }, 'YOUR RESTAURANT, IN GOOD ORDER'), h('h1', {}, `Good to see you, ${session.user.firstName}.`), h('p', {}, 'A little less admin. A little more room for your people.')), Button({ variant: 'ghost', size: 'sm', onClick: customize, 'data-testid': 'customize' }, 'Customize view')),
-    h('section', { class: 'restaurant-payday', 'aria-label': 'Next payroll' },
-      h('div', { class: 'restaurant-payday-main' }, h('div', { class: 'restaurant-eyebrow' }, next.stage === 'approved' ? 'PAYROLL APPROVED · PAYMENT NEXT' : 'YOUR NEXT PAYROLL'), h('h2', {}, `${shortDate(period.periodStart)} – ${shortDate(period.periodEnd)}`), h('p', {}, `Pay date ${longDate(period.checkDate)} · ${plural(data.team.active, 'person', 'people')}`), h('p', { class: next.runByPassed ? 'restaurant-runby passed' : 'restaurant-runby' }, `${next.runByPassed ? 'Run-by date passed: ' : 'Run it by '}${longDate(next.runBy)}${next.runByPassed ? ' · Check bank timing before payment' : ''}`),
-        h('div', { class: 'restaurant-payday-actions' }, Button({ href: runPath }, next.stage === 'approved' ? 'Open payment steps →' : next.runId ? 'Continue payroll →' : 'Prepare payroll →'), Chip(next.stage === 'approved' ? 'Approved' : next.stage === 'draft' ? 'Draft in progress' : 'Not started', next.stage === 'approved' ? 'ok' : 'line'))),
-      h('div', { class: 'restaurant-payday-checks' }, ...readiness.map(item => link(item.to, { class: 'restaurant-readiness' }, h('span', { class: item.ready ? 'ready' : 'waiting', 'aria-hidden': 'true' }, item.ready ? '✓' : '○'), h('span', {}, h('b', {}, item.title), h('small', {}, item.detail)), h('span', { 'aria-hidden': 'true' }, '↗'))))),
-    h('div', { class: 'restaurant-section-heading' }, h('h2', {}, 'This week at your restaurant'), h('span', {}, `${shortDate(data.hours.weekStart)} – ${shortDate(data.hours.weekEnd)}`)),
-    h('div', { class: 'restaurant-metrics' }, metric('Hours recorded', hoursFromMinutes(data.hours.totalMinutes), `${hoursFromMinutes(data.hours.overtimeMinutes)} overtime hours`, '◷'), metric('Estimated wages', money(data.week.wagesCents), 'Hourly estimate, before taxes & tips', '↗'), metric('Reported tips', money(data.tips.chargedCents + data.tips.cashCents), 'Card + reported cash tips', '◇'), metric('Your team', String(data.team.active), `${data.onboarding.complete} paperwork complete`, '♧')),
-    h('div', { class: 'restaurant-home-grid', 'data-testid': 'grid' },
-      h('section', { class: 'restaurant-panel' }, sectionTitle(remaining.length ? 'Make yourself at home' : 'What needs your attention', remaining.length ? null : '/app/onboarding'),
-        remaining.length ? [h('p', { class: 'restaurant-panel-note' }, `${data.guide.done} of ${data.guide.total} setup steps complete. Pick up one thing at a time.`), h('progress', { class: 'restaurant-progress', value: data.guide.done, max: data.guide.total, 'aria-label': 'Restaurant setup progress' }), ...remaining.slice(0, 4).map((task, i) => link(task.to, { class: 'restaurant-task' }, h('span', { class: 'restaurant-task-number' }, String(i + 1)), h('span', {}, h('b', {}, task.title), h('small', {}, task.detail)), h('span', { 'aria-hidden': 'true' }, '→')))] : todo.length ? todo.slice(0, 5).map(task => link(task.to, { class: 'restaurant-task' }, h('span', { class: `restaurant-task-number ${task.severity}` }, task.severity === 'urgent' ? '!' : '○'), h('span', {}, h('b', {}, task.title), h('small', {}, task.detail)), h('span', { 'aria-hidden': 'true' }, '→'))) : h('div', { class: 'restaurant-calm' }, '✓ Nothing outstanding right now. Your next payroll is above.'),
-        remaining.length && todo.length ? h('div', { class: 'restaurant-attention' }, h('b', {}, 'Also needs attention'), ...todo.slice(0, 3).map(t => link(t.to, {}, t.title, ' ↗'))) : null),
-      h('section', { class: 'restaurant-panel' }, sectionTitle('Your hours, connected', '/app/settings/pos', 'Manage ↗'),
-        h('div', { class: 'restaurant-pos-status' }, h('span', { class: 'restaurant-pos-mark', 'aria-hidden': 'true' }, '⊞'), h('div', {}, h('h3', {}, data.pos.connected ? data.pos.label : 'Keep your familiar tools'), h('p', {}, data.pos.connected ? (data.pos.lastSyncAt ? `Last import ${new Date(data.pos.lastSyncAt).toLocaleString()}` : 'Connected · Ready for your first import') : 'Square, Toast, 7shifts or a time-clock report.'))),
-        data.pos.lastError ? h('p', { class: 'restaurant-inline-warning', role: 'status' }, 'The last import needs attention. Open connections to review it.') : null,
-        data.pos.summary?.unmapped ? link('/app/settings/pos', { class: 'restaurant-inline-warning' }, `${plural(data.pos.summary.unmapped, 'person', 'people')} still need matching →`) : null,
-        Button({ href: data.pos.connected ? '/app/payroll/run' : '/app/settings/pos', variant: 'secondary', full: true }, data.pos.connected ? 'Review imported time →' : 'Connect your point of sale →'),
-        h('div', { class: 'restaurant-provider-names' }, h('b', {}, 'Square'), h('b', {}, 'toast'), h('b', {}, '7shifts'), h('span', {}, '+ CSV')),
-        h('hr'), sectionTitle('Labor by role', '/app/time'),
-        data.week.byRole.length ? data.week.byRole.slice(0, 4).map(r => h('div', { class: 'restaurant-role' }, h('div', {}, h('span', {}, r.label), h('b', {}, `${hoursFromMinutes(r.minutes)} h`)), h('progress', { max: Math.max(data.hours.totalMinutes, 1), value: r.minutes, 'aria-label': `${r.label} share of recorded hours` }))) : h('p', { class: 'restaurant-panel-note' }, 'Your role breakdown will appear when hours are recorded.'))),
-    h('section', { class: 'restaurant-panel restaurant-recent' }, sectionTitle('Recent payroll', '/app/payroll', 'Payroll history ↗'), data.runs.length ? h('div', { class: 'restaurant-run-list' }, ...data.runs.slice(0, 3).map(r => link(`/app/payroll/runs/${r.id}`, { class: 'restaurant-run-row' }, h('div', {}, h('b', {}, `${shortDate(r.periodStart)} – ${shortDate(r.periodEnd)}`), h('small', {}, `Pay date ${longDate(r.checkDate)}`)), h('span', {}, plural(r.employees, 'person', 'people')), h('b', {}, money(r.grossCents)), Chip(r.status === 'completed' ? 'Paid' : r.status === 'approved' ? 'Approved · payment next' : r.status.replaceAll('_', ' '), r.status === 'completed' ? 'ok' : 'line')))) : h('div', { class: 'restaurant-calm' }, 'Your first approved payroll will appear here.')));
+/** Payroll is organized around its source and selected period, not unrelated dashboard metrics. */
+export async function restaurantOverview(data, { customize, periodStart } = {}) {
+  const [catalog, periods] = await Promise.all([api.get(`${base()}/pos`), api.get(`${base()}/payroll/periods`)]);
+  const period = periods.periods.find(p => p.periodStart === periodStart) || periods.periods.find(p => p.periodStart === data.nextPayroll.period.periodStart) || periods.periods[0];
+  if (!period) return h('section', { class: 'empty' }, h('h1', {}, 'Payroll'), h('p', {}, 'Set up a pay schedule to get started.'), Button({ href: '/app/settings' }, 'Pay settings'));
+  const source = await api.get(`${base()}/pos/workspace?start=${period.periodStart}&end=${period.periodEnd}`);
+  const readiness = source.readiness;
+  const draft = data.runs.find(r => r.periodStart === period.periodStart && r.periodEnd === period.periodEnd && r.status !== 'voided');
+  const approved = draft && draft.status !== 'draft';
+  const selector = h('select', { class: 'in', 'aria-label': 'Payroll period', onChange: e => navigate(`/app?period=${e.target.value}`) }, ...periods.periods.map(p => h('option', { value: p.periodStart, selected: p.periodStart === period.periodStart }, `${shortDate(p.periodStart)} – ${shortDate(p.periodEnd)}`)));
+  const content = h('div', { class: 'ops-workspace', 'data-testid': 'restaurant-overview' });
+  const error = h('div', { role: 'status' });
+  const action = approved ? Button({ href: `/app/payroll/runs/${draft.id}` }, 'Open payroll') : Button({ href: readiness.ready ? (draft ? `/app/payroll/runs/${draft.id}` : `/app/payroll/run?start=${period.periodStart}&end=${period.periodEnd}&check=${period.checkDate}`) : undefined, disabled: !readiness.ready, 'data-testid': 'run-payroll' }, draft ? 'Continue payroll' : 'Run payroll');
+  const sync = Button({ variant: 'secondary', disabled: !readiness.connected, 'data-testid': 'sync-pos' }, 'Sync from POS');
+  sync.addEventListener('click', async () => { setLoading(sync,true); try { await api.post(`${base()}/pos/sync`,{from:period.periodStart,to:period.periodEnd}); await refreshData(); navigate(`/app?period=${period.periodStart}`); } catch(e) { error.replaceChildren(Alert('error',e.message)); setLoading(sync,false); } });
+  content.append(h('div', { class: 'ops-page-heading' }, h('div', {}, h('h1', {}, 'Payroll'), h('p', {}, data.company.name)), h('div', { class: 'acts' }, Button({ variant:'ghost',size:'sm',onClick:customize,'data-testid':'customize'}, 'Customize'), action)),
+    h('div', { class: 'ops-period-toolbar' }, h('label', {}, 'Pay period', selector), h('div', {}, h('small', {}, 'Pay date'), h('b', {}, longDate(period.checkDate))), h('div', {}, h('small', {}, 'Source'), h('b', {}, readiness.connected ? readiness.label : 'Not connected')), sync),
+    h('div', { class: `ops-source-line ${readiness.ready ? 'is-ready' : 'needs-attention'}` }, h('span', { class:'ops-status-dot','aria-hidden':'true' }), h('strong', {}, approved ? 'Payroll approved' : readiness.ready ? 'POS data ready for payroll' : readiness.connected ? 'POS connected — review required' : 'Connect a POS to run payroll'), h('span', {}, readiness.lastSyncAt ? `Last synced ${new Date(readiness.lastSyncAt).toLocaleString()}` : 'No import yet'), link('/app/settings/pos', {}, 'Manage connection')), error);
+  if (!readiness.connected) {
+    content.append(h('section', { class: 'ops-connect' }, h('div', {}, h('h2', {}, 'Where do your hours come from?'), h('p', {}, 'Connect the system your restaurant uses. Approve access there, match your employees, then import this pay period. Payroll stays locked until the source is ready.')), providerButtons(catalog)));
+    return content;
+  }
+  if (readiness.reasons.length) content.append(h('section', { class: 'ops-exceptions' }, h('h2', {}, 'Before you run payroll'), ...readiness.reasons.map(reason => h('div', {}, h('span', {}, reason.message), link(reason.to, {}, reason.code === 'pos_period_missing' || reason.code === 'pos_sync_failed' ? 'Import this period' : 'Resolve')))));
+  const summary = source.summary;
+  content.append(h('div', { class:'ops-totals' }, ...[['Imported shifts', String(source.totals.shifts)],['Employees',String(source.totals.people)],['Hours',hoursFromMinutes(source.totals.minutes)],['Card tips',money(source.totals.cardTipsCents)],['Cash tips',money(source.totals.cashTipsCents)]].map(([label,value])=>h('div',{},h('small',{},label),h('b',{},value)))),
+    h('div',{class:'ops-table-heading'},h('div',{},h('h2',{},'Imported timecards'),h('p',{},`${readiness.label} · ${shortDate(period.periodStart)} – ${shortDate(period.periodEnd)} · Restaurant local dates`)),link('/app/settings/pos',{},'Employee matching')));
+  const search = h('input',{type:'search',class:'in',placeholder:'Find an employee','aria-label':'Find an employee'});
+  const body = h('tbody',{});
+  let page = 0;
+  const pageLabel = h('span',{}),prev = Button({variant:'ghost',size:'sm'},'Previous'),next = Button({variant:'ghost',size:'sm'},'Next');
+  function draw() {
+    const query=search.value.trim().toLowerCase();const rows=source.rows.filter(r=>(r.name+' '+r.role+' '+(r.location||'')).toLowerCase().includes(query));
+    const slice=rows.slice(page*25,page*25+25);
+    body.replaceChildren(...slice.map(r=>h('tr',{},h('td',{},h('b',{},r.name),h('small',{},r.role)),h('td',{},shortDate(r.workDate)),h('td',{},r.location||'—'),h('td',{class:'numeric'},hoursFromMinutes(r.minutes)),h('td',{class:'numeric'},money(r.cardTipsCents)),h('td',{class:'numeric'},money(r.cashTipsCents)),h('td',{},h('details',{},h('summary',{},'Details'),h('dl',{},h('dt',{},'Source record'),h('dd',{},r.sourceId),h('dt',{},'Clock in'),h('dd',{},r.clockIn?new Date(r.clockIn).toLocaleString():'Not provided'),h('dt',{},'Clock out'),h('dd',{},r.clockOut?new Date(r.clockOut).toLocaleString():'Not provided'),h('dt',{},'Payroll state'),h('dd',{},r.locked?'Locked by payroll':'Open')))))));
+    if(!rows.length)body.append(h('tr',{},h('td',{colspan:7},'No imported timecards for this selection.')));
+    pageLabel.textContent=`${rows.length ? page*25+1 : 0}–${Math.min((page+1)*25,rows.length)} of ${rows.length}`;prev.disabled=page===0;next.disabled=(page+1)*25>=rows.length;
+  }
+  search.addEventListener('input',()=>{page=0;draw()});prev.addEventListener('click',()=>{page--;draw()});next.addEventListener('click',()=>{page++;draw()});draw();
+  content.append(h('div',{class:'ops-table-tools'},search,h('span',{},'Labor data only. Sales and orders are not imported.')),
+    h('div',{class:'ops-table-scroll'},h('table',{class:'ops-table'},h('thead',{},h('tr',{},...['Employee','Date','Location','Hours','Card tips','Cash tips','Source'].map(t=>h('th',{},t)))),body)),
+    h('div',{class:'ops-table-footer'},pageLabel,h('div',{class:'acts'},prev,next)));
+  if(summary?.unmapped.length) content.append(h('section',{class:'ops-exceptions'},h('h2',{},'Not included in payroll'),...summary.unmapped.map(p=>h('div',{},h('span',{},`${p.name} · ${hoursFromMinutes(p.minutes)} hours · not matched`),link('/app/settings/pos',{},'Match employee')))));
+  if(summary?.notes.length) content.append(h('details',{class:'ops-import-notes'},h('summary',{},'Import notes'),...summary.notes.map(n=>h('p',{},n))));
+  return content;
 }

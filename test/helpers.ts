@@ -81,3 +81,11 @@ export function fundingReady(store: Store, companyId: string): BankAccount {
   store.tx(() => store.companies.put({ ...c, payment: { mode: 'totali_ach' }, funding: { bankAccountId: acct.id, debitAuthorization: { bankAccountId: acct.id, acceptedAt: '2026-01-02T00:00:00Z', acceptedBy: 'Owner Person', textVersion: 'draft-1' } } }));
   return acct;
 }
+
+/** A completed source import for tests concerned with downstream payroll calculations. */
+export function posReady(store: Store, companyId: string, from: string, to: string) {
+  store.tx(() => {
+    for (const shift of store.shifts.where(s => s.companyId === companyId && s.workDate >= from && s.workDate <= to)) store.shifts.put({ ...shift, externalId: `pos:square:${shift.id}` });
+    store.posConnections.put({ id: `pos_${companyId}`, companyId, provider: 'square', label: 'Square · Harbor Street Kitchen', credentialsEncrypted: encryptField('{}'), employeeMap: {}, connectedAt: '2026-01-01T00:00:00Z', lastSyncAt: '2026-10-30T15:00:00Z', lastSummary: { at: '2026-01-01T00:00:00Z', from, to, shifts: 1, people: 1, minutes: 0, tipsCents: 0, removed: 0, unmapped: [], problems: [], notes: [] } });
+  });
+}

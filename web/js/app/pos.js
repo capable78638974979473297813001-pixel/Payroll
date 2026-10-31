@@ -87,38 +87,42 @@ export async function pull(from, to) {
   return s;
 }
 
-function connectForm(cat, after) {
-  let pick = cat.providers[0].id;
-  const host = h('div', { class: 'stack', style: { '--gap': '14px' } });
-  const draw = () => {
-    const info = cat.providers.find((p) => p.id === pick);
-    const fields = info.fields.map((f) => ({ f, el: Field({ label: f.label, name: f.name, type: f.secret ? 'password' : 'text', autocomplete: 'off', hint: f.hint, ...(f.options ? { select: true, options: f.options, value: f.options[0].value } : {}) }) }));
-    const err = h('div', {}); const go = Button({ type: 'submit', 'data-testid': 'pos-connect' }, `Connect ${info.name}`);
-    if (info.signIn) {
-      const btn = Button({ type: 'button', 'data-testid': 'pos-signin' }, `Sign in with ${info.name}`);
-      btn.addEventListener('click', async () => { setLoading(btn, true); try { const r = await api.get(`${base()}/pos/${info.id}/start`); location.href = r.url; } catch (e) { err.replaceChildren(Alert('error', e.message)); setLoading(btn, false); } });
-      host.replaceChildren(
-        h('div', { class: 'opts', role: 'radiogroup', 'aria-label': 'Your system' }, ...cat.providers.map((p) => h('button', { type: 'button', class: `opt ${p.id === pick ? 'on' : ''}`, role: 'radio', 'aria-checked': String(p.id === pick), 'data-provider': p.id, onClick: () => { pick = p.id; draw(); } }, h('span', { class: 'rd' }), h('span', {}, p.name, h('small', {}, p.brings.join(', ')))))),
-        h('p', { class: 'cap', style: { margin: 0 } }, `You’ll sign in at ${info.name} and approve Totali to read your staff, hours and tips. Totali never sees your ${info.name} password.`), err, btn);
-      return;
-    }
-    host.replaceChildren(
-      h('div', { class: 'opts', role: 'radiogroup', 'aria-label': 'Your system' }, ...cat.providers.map((p) => h('button', { type: 'button', class: `opt ${p.id === pick ? 'on' : ''}`, role: 'radio', 'aria-checked': String(p.id === pick), 'data-provider': p.id, onClick: () => { pick = p.id; draw(); } }, h('span', { class: 'rd' }), h('span', {}, p.name, h('small', {}, p.brings.join(', ')))))),
-      h('ol', { class: 'cap', style: { margin: '0 0 0 18px', display: 'grid', gap: '4px' } }, ...info.steps.map((x) => h('li', {}, x))),
-      info.caution ? Alert('info', info.caution) : null,
-      h('form', { class: 'f', novalidate: true, onSubmit: async (e) => {
-        e.preventDefault(); err.replaceChildren();
-        const body = { provider: pick };
-        for (const { f, el } of fields) body[f.name] = el.value;
-        setLoading(go, true);
-        try { await api.post(`${base()}/pos/connect`, body); toast('success', `${info.name} is connected.`); await refreshData(); after(); return; }
-        catch (e2) { const t = fields.find(({ f }) => f.name === (e2.details && e2.details.field)); if (t) t.el.setError(e2.message); else err.replaceChildren(Alert('error', e2.message)); }
-        setLoading(go, false);
-      } }, ...fields.map((x) => x.el.el), err, go));
-  };
-  draw();
-  return host;
+/** Provider-owned approval. No merchant token fields in the restaurant flow. */
+export async function beginProvider(provider, onDone = () => navigate('/app')) {
+  if (!provider.signIn) {
+    const m = modal({ title: `${provider.name} connection unavailable`, body: h('p', {}, `Totali’s ${provider.name} connection needs to be enabled before your restaurant can approve access. Contact your administrator.`), actions: [Button({ onClick: () => m.close() }, 'Close')] });
+    return;
+  }
+  if (provider.id !== 'toast') {
+    const result = await api.get(`${base()}/pos/${provider.id}/start`);
+    location.assign(result.url);
+    return;
+  }
+  const request = await api.post(`${base()}/pos/toast/start`);
+  const reference = h('input', { class: 'in', readonly: true, value: request.reference, 'aria-label': 'Toast location reference' });
+  const error = h('div', {});
+  const verify = Button({}, 'Check Toast approval');
+  const m = modal({ title: 'Connect Toast', body: h('div', { class: 'f' },
+    h('p', {}, 'Toast approves access through its integration marketplace. Add Totali, then match this restaurant using the location reference below.'),
+    h('label', { class: 'lab' }, 'Location reference'), reference,
+    h('p', { class: 'cap' }, 'In Toast, add Totali and enter this reference in the integration’s Location ID field. Approval may take 15 minutes or longer to become available.'),
+    h('a', { class: 'btn', href: request.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open Toast to approve access'), error),
+    actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Close'), verify] });
+  verify.addEventListener('click', async () => { setLoading(verify, true); try { await api.post(`${base()}/pos/toast/complete`); m.close(); await refreshData(); onDone(); } catch (e) { error.replaceChildren(Alert('error', e.message)); setLoading(verify, false); } });
 }
+
+export function providerButtons(cat, onDone) {
+  return h('div', { class: 'pos-provider-list' }, ...['square','clover','toast','sevenshifts'].map(id => {
+    const provider = cat.providers.find(p => p.id === id);
+    if (!provider) return null;
+    const error = h('div', {});
+    const connect = Button({ variant: 'secondary', type: 'button', 'data-provider': id }, provider.signIn ? `Connect ${provider.name}` : 'Connection details');
+    connect.addEventListener('click', async () => { setLoading(connect, true); try { await beginProvider(provider, onDone); } catch (e) { error.replaceChildren(Alert('error', e.message)); } finally { setLoading(connect, false); } });
+    return h('section', { class: 'pos-provider-option' }, h('div', {}, h('strong', {}, provider.name), h('small', {}, provider.signIn ? (id === 'toast' ? 'Approve in Toast’s marketplace' : `Approve access at ${provider.name}`) : 'Not enabled yet')), connect, error);
+  }));
+}
+
+function connectForm(cat, after) { return providerButtons(cat, after); }
 
 async function matching(conn) {
   const d = await api.get(`${base()}/pos/people`);
@@ -146,7 +150,7 @@ export async function posSection() {
   if (!cat.connection) {
     return h('div', { class: 'stack', style: { '--gap': '16px', maxWidth: '640px' } }, flash,
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Connect your point of sale')),
-        h('p', { class: 'cap', style: { marginTop: 0 } }, 'Totali doesn’t ring up sales. It reads your staff, their hours and their tips from the system you already use, so nobody types them twice. You can still enter hours by hand.'),
+        h('p', { class: 'cap', style: { marginTop: 0 } }, 'Totali doesn’t ring up sales. It reads your staff, their hours and their tips from the system you already use, so nobody types them twice. Connect a supported source before running payroll.'),
         connectForm(cat, redraw)),
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Using something else?')),
         h('p', { class: 'cap', style: { marginTop: 0 } }, 'Clover, Revel, Lightspeed, Aloha, TouchBistro, SpotOn, Heartland and the rest can all export hours. Choose their report here and Totali reads it, whatever the columns are called.'),

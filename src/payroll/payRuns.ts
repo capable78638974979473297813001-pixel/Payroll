@@ -1,3 +1,4 @@
+import { assertPosPayrollReady, posRevision } from '../pos/readiness.ts';
 import { newId } from '../lib/ids.ts';
 import { badRequest, conflict, notFound } from '../lib/errors.ts';
 import { addDays, daysBetween, workweekStart } from '../lib/dates.ts';
@@ -345,7 +346,8 @@ export function totalsOf(paychecks: readonly Paycheck[]): PayRun['totals'] {
 export function draftPayRun(store: Store, companyId: string, body: unknown): PayRun {
   const company = store.companies.require(companyId, 'Company');
   const input = parseDraftInput(body, company, store);
-  const run = buildPayRun(store, company, input);
+  assertPosPayrollReady(store, companyId, input.periodStart, input.periodEnd);
+  const run = { ...buildPayRun(store, company, input), posRevision: posRevision(store, companyId, input.periodStart, input.periodEnd) };
   return store.tx(() => store.payRuns.put(run));
 }
 
@@ -360,10 +362,11 @@ export function recalculatePayRun(store: Store, companyId: string, runId: string
   const run = getRun(store, companyId, runId);
   if (run.status !== 'draft') throw conflict('not_a_draft', `Only a draft can be recalculated; this run is ${run.status}.`);
   const company = store.companies.require(companyId, 'Company');
+  assertPosPayrollReady(store, companyId, run.periodStart, run.periodEnd);
   // The bonuses and reimbursements for this run may be sent again here, replacing the earlier list.
   const sent = body && typeof body === 'object' && 'adjustments' in (body as object) ? parseDraftInput({ periodStart: run.periodStart, periodEnd: run.periodEnd, checkDate: run.checkDate, adjustments: (body as { adjustments: unknown }).adjustments }, company, store).adjustments : undefined;
   const fresh = buildPayRun(store, company, { periodStart: run.periodStart, periodEnd: run.periodEnd, checkDate: run.checkDate, adjustments: sent ?? run.adjustments }, { id: run.id, createdAt: run.createdAt });
-  return store.tx(() => store.payRuns.put(fresh));
+  return store.tx(() => store.payRuns.put({ ...fresh, posRevision: posRevision(store, companyId, run.periodStart, run.periodEnd) }));
 }
 
 /**
@@ -376,6 +379,9 @@ export function approvePayRun(store: Store, companyId: string, runId: string, bo
   const o = v.obj(body ?? {});
   const run = getRun(store, companyId, runId);
   if (run.status !== 'draft') throw conflict('not_a_draft', `Only a draft can be approved; this run is ${run.status}.`);
+  assertPosPayrollReady(store, companyId, run.periodStart, run.periodEnd);
+  const currentPosRevision = posRevision(store, companyId, run.periodStart, run.periodEnd);
+  if (currentPosRevision && currentPosRevision !== run.posRevision) throw conflict('pos_changed_recalculate', 'POS data or employee matching changed after review. Recalculate this payroll before approving.');
   const blockers = run.issues.filter((i) => i.severity === 'blocking');
   if (blockers.length > 0) throw conflict('blocking_issues', `${blockers.length} blocking issue(s) must be fixed first. Recalculate after fixing.`, { issues: blockers });
   const reviews = run.issues.filter((i) => i.severity === 'review');

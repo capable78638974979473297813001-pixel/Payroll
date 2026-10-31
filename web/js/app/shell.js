@@ -37,14 +37,12 @@ export async function appPage(ctx, { active, title, render, config: override, ed
   const rightLinks = extras.map((tab) => link(tabPath(tab, config), { class: 'hl', 'aria-current': tab.id === active ? 'page' : undefined, 'data-tab': tab.id }, label(tab)));
 
   root.classList.add('restaurant-app');
-  const glyph = { overview: 'overview', payroll: 'payroll', people: 'people', time: 'time', onboarding: 'people', taxes: 'tax', reports: 'report' };
-  const symbols = { overview: '◫', payroll: '↗', people: '♧', time: '◷', tax: '▤', report: '≡' };
   const sidebar = h('aside', { class: 'restaurant-sidebar' },
     h('div', { class: 'restaurant-logo' }, Logo({ small: true, href: '/app' }), h('span', {}, 'FOR RESTAURANTS')),
     link('/app', { class: 'restaurant-switcher' }, brandMark(config.brand), h('span', {}, h('b', {}, config.brand.name), h('small', { class: config.brand.tagline ? 'sub' : '' }, config.brand.tagline || app.data.company.nicheLabel || 'Restaurant workspace'))),
     h('div', { class: 'restaurant-nav-label' }, 'YOUR WORKSPACE'),
-    h('nav', { class: 'restaurant-nav', 'aria-label': 'Dashboard' }, ...pages.map(tab => link(tabPath(tab, config), { class: tab.id === active ? 'on' : '', 'aria-current': tab.id === active ? 'page' : undefined, 'data-tab': tab.id }, h('span', { class: 'restaurant-nav-icon', 'aria-hidden': 'true' }, symbols[glyph[tab.id]] || '◇'), label(tab), tab.id === 'onboarding' && behind > 0 ? h('em', {}, String(behind)) : null))),
-    h('div', { class: 'restaurant-sidebar-bottom' }, link('/app/settings/pos', { class: 'restaurant-connect-link' }, h('span', {}, '⊞'), h('span', {}, 'Your connections', h('small', {}, app.data.pos.connected ? app.data.pos.label : 'Connect your POS'))), h('nav', { class: 'restaurant-nav', 'aria-label': 'Workspace settings' }, ...rightLinks, link('/app/billing', { 'data-tab': 'billing' }, 'Billing'))));
+    h('nav', { class: 'restaurant-nav', 'aria-label': 'Dashboard' }, ...pages.map(tab => link(tabPath(tab, config), { class: tab.id === active ? 'on' : '', 'aria-current': tab.id === active ? 'page' : undefined, 'data-tab': tab.id }, label(tab), tab.id === 'onboarding' && behind > 0 ? h('em', {}, String(behind)) : null))),
+    h('div', { class: 'restaurant-sidebar-bottom' }, link('/app/settings/pos', { class: 'restaurant-connect-link' }, h('span', {}, 'Your connections', h('small', {}, app.data.pos.connected ? app.data.pos.label : 'Connect your POS'))), h('nav', { class: 'restaurant-nav', 'aria-label': 'Workspace settings' }, ...rightLinks, link('/app/billing', { 'data-tab': 'billing' }, 'Billing'))));
   const topbar = h('header', { class: 'restaurant-topbar ui' },
     h('div', {}, h('span', { class: 'restaurant-breadcrumb' }, config.brand.name), h('span', { 'aria-hidden': 'true' }, ' / '), h('b', {}, title)),
     h('div', { class: 'restaurant-user' }, h('span', {}, session.user.firstName), accountMenu()));
