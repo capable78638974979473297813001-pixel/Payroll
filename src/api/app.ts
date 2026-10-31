@@ -471,6 +471,25 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       const r = await portal.signIn(email, o.password, c.req.headers['user-agent']);
       return new Reply({ ok: true }, { 'set-cookie': empCookie(c.req, r.token) });
     }),
+    route('POST', `${C}/portal/resets/:aid/allow`, 'company', (c) => portal.allowReset(c.params.cid, c.params.aid)),
+    route('POST', `${C}/portal/resets/:aid/dismiss`, 'company', (c) => portal.dismissReset(c.params.cid, c.params.aid)),
+    route('POST', '/v1/portal/reset/start', 'none', (c) => {
+      requireCsrf(c.req);
+      const o = c.json();
+      const email = typeof o.email === 'string' ? o.email.trim().toLowerCase().slice(0, 200) : '';
+      const wait = Math.max(logins.hit(`portalrs:${c.ip}`, 30, now().getTime()), logins.hit(`portalrse:${email}`, 20, now().getTime()));
+      if (wait) throw new ApiError(429, 'rate_limited', `Too many tries. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
+      return portal.resetStart(email);
+    }),
+    route('POST', '/v1/portal/reset/finish', 'none', async (c) => {
+      requireCsrf(c.req);
+      const o = c.json();
+      const email = typeof o.email === 'string' ? o.email.trim().toLowerCase().slice(0, 200) : '';
+      const wait = Math.max(logins.hit(`portalrf:${c.ip}`, 30, now().getTime()), logins.hit(`portalrfe:${email}`, 20, now().getTime()));
+      if (wait) throw new ApiError(429, 'rate_limited', `Too many tries. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
+      const r = await portal.resetFinish(email, o.password, c.req.headers['user-agent']);
+      return new Reply({ ok: true }, { 'set-cookie': empCookie(c.req, r.token) });
+    }),
     route('GET', '/v1/portal/account', 'portal', (c) => portal.accountView(c.account!, !c.employee && !!c.account!.employeeId)),
     route('POST', '/v1/portal/request', 'portal', (c) => portal.submitRequest(c.account!, c.json())),
     route('POST', '/v1/portal/reopen', 'portal', (c) => portal.reopen(c.account!)),

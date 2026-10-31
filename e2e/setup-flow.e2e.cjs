@@ -24,11 +24,12 @@ const counter = async (page) => ({
     await page.waitForSelector('.indgrid .it');
     await shot('industry');
 
-    // five industries, each with its three tags
-    assert.equal(await page.locator('.indgrid .it').count(), 5);
+    // Totali is for independent restaurants: one card, and you say yours is one before going on
+    assert.equal(await page.locator('.indgrid .it').count(), 1);
     assert.deepEqual(await page.locator('.indgrid .it').first().locator('.tags .chip').allTextContents(), ['Tips', 'Shift hours', 'Tip pool']);
-    await page.click('[data-industry=restaurant]');
-    assert.match(await page.locator('.indfoot .btn').textContent(), /Continue with Restaurants/);
+    assert.ok((await page.locator('.indhead').textContent()).includes('franchises or fast food chains'));
+    assert.equal(await page.locator('.indfoot .btn').isDisabled(), true, 'it waits for the owner to say the restaurant is independent');
+    await page.check('[data-testid=independent]', { force: true });
     await page.click('.indfoot .btn');
     await page.waitForURL('**/setup/builder');
     await page.waitForSelector('[data-testid=counter]');

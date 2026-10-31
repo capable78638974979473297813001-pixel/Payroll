@@ -1,8 +1,8 @@
 # Totali backend
 
-Totali is an all-in-one payroll app that comes as a different app for each kind of business. You pick **Restaurant → Full-service** and the company starts with that niche's roles, tip rules, pay rules and compliance checklist. This repo is the backend.
+Totali is an all-in-one payroll app for **independent restaurants**: a restaurant you own and run, with one location or a few. It is not built for franchises or fast food chains. You answer a short list of questions and the dashboard is built from your answers, starting from the niche's roles, tip rules, pay rules and compliance checklist. This repo is the backend and the web app.
 
-Restaurant is built end to end, with nine niches: full service, fine dining, quick service, fast casual, café, bar and nightclub, food truck, catering and banquets, pizzeria and delivery. The other industries are in the picker as `planned` and refuse selection until they have a profile.
+Restaurant is built end to end, with nine niches: full service, fine dining, quick service, fast casual, café, bar and nightclub, food truck, catering and banquets, pizzeria and delivery. The catalog still holds questions and rules for four other kinds of business (hotels, trades, office, delivery), but they are not offered: the picker shows one card and the API refuses them (`OFFERED_INDUSTRY_IDS` in `src/builder/catalog.ts`).
 
 Four things do the work:
 
@@ -37,7 +37,7 @@ TOTALI_DEV=1 npm start     # with no RESEND_API_KEY, emailed codes and links app
 Playwright and Chromium are used for end-to-end tests. Each script starts its own server on a free port:
 
 ```bash
-for f in setup-flow dashboard payroll people settings time contractors jobs google; do node e2e/$f.e2e.cjs; done
+for f in setup-flow dashboard payroll people settings time contractors google employee extras; do node e2e/$f.e2e.cjs; done
 ```
 
 ### Deploy to Render
@@ -60,7 +60,7 @@ An employee goes to `/employee`, taps *Create account*, and enters the code, the
 
 The owner sees the request on the Onboarding tab (and as a to-do on the home), picks the role, pay, location and start date, and approves. That is when the employee record is created from the request and linked to the login; the private copy of the request (SSN, bank numbers) is deleted. The owner can instead link a request to someone they already added, so nobody is on the team twice, or decline with a reason. A declined person can fix it and send again.
 
-Back at Totali, anyone with a login sees their name at the top of the landing page and a button to their dashboard. Approved employees see only their own pay stubs and hours, can change their W-4, and can ask to change their bank account (the owner approves). The cookie is `totali_emp`, separate from the owner's session. There is no password reset for employees yet.
+Back at Totali, anyone with a login sees their name at the top of the landing page and a button to their dashboard. Approved employees see only their own pay stubs and hours, can change their W-4, and can ask to change their bank account (the owner approves). The cookie is `totali_emp`, separate from the owner's session. Forgot password: nothing is emailed, so before the owner has approved a login the person can choose a new password straight away (it holds nothing yet), and after that the owner has to allow it from the Requests card first, then the person has 24 hours. A reset signs out every other session.
 
 ### The questions
 
@@ -73,7 +73,6 @@ Said plainly, so nobody finds out the hard way:
 - **Time off, trips and mileage** (office, delivery): the builder lists them as "coming soon" and does not count them.
 - **Garnishments.** The deductions question covers benefits and retirement; court-ordered withholding is not set up.
 - **Manager sign-ins.** Only the owner signs in to the dashboard. Employees have their own, smaller login (above); there are no manager accounts.
-- **Employee password reset.** An employee who forgets their password cannot reset it; nothing is emailed to them.
 - **Texting** invites. Invites go by email (or copy the link).
 - **State forms other than Michigan's MI-W4.** Other states use the federal W-4 numbers and the state's default withholding.
 - **Filing.** Totali keeps records and exports for your accountant (contractors, comp classes, job costs). It does not file 1099s.

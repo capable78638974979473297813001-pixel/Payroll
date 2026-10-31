@@ -29,6 +29,9 @@ export interface PortalAccount {
   employeeId?: string;
   decidedAt?: string;
   declineReason?: string;
+  /** Forgot password. A login that is not approved yet can reset freely; an approved one waits for the owner to allow it. */
+  resetAskedAt?: string;
+  resetAllowedAt?: string;
 }
 
 /** An employee signed in. The cookie holds a random token; only its hash is stored. */

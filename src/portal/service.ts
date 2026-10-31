@@ -23,7 +23,7 @@ import type { JoinRequest, PortalAccount } from './types.ts';
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I: a code read aloud or off a flyer must survive
-const CODE_DAYS = 3; const SESSION_DAYS = 30;
+const CODE_DAYS = 3; const SESSION_DAYS = 30; const RESET_HOURS = 24;
 const PAID_STATES = ['approved', 'funding', 'funded', 'disbursing', 'completed'];
 const norm = (s: unknown) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -62,7 +62,7 @@ export class PortalService {
     const accounts = this.store.portalAccounts.where((a) => a.companyId === companyId);
     return {
       code: c.joinCode!, expiresAt, expired: left <= 0, daysLeft: left > 0 ? Math.ceil(left / 86_400_000) : 0, codeDays: CODE_DAYS,
-      requests: accounts.filter((a) => a.status === 'pending').length, started: accounts.filter((a) => a.status === 'draft').length, joined: accounts.filter((a) => a.status === 'approved').length,
+      requests: accounts.filter((a) => a.status === 'pending').length, resets: accounts.filter((a) => a.status === 'approved' && !!a.resetAskedAt && !this.resetAllowed(a)).length, started: accounts.filter((a) => a.status === 'draft').length, joined: accounts.filter((a) => a.status === 'approved').length,
       signedInRecently: new Set(this.store.portalSessions.where((s) => s.companyId === companyId && Date.parse(s.lastSeenAt) > this.now().getTime() - 30 * 86_400_000).map((s) => s.accountId)).size,
     };
   }
@@ -139,6 +139,64 @@ export class PortalService {
     };
   }
 
+  // ------------------------------------------------------------------ forgot password
+
+  private resetAllowed(a: PortalAccount): boolean {
+    return !!a.resetAllowedAt && Date.parse(a.resetAllowedAt) + RESET_HOURS * 3_600_000 > this.now().getTime();
+  }
+
+  /**
+   * Nothing is emailed, so the owner is the check. Until the owner has approved a login it holds nothing worth taking,
+   * and the person can set a new password at once. After that it holds pay stubs, so the owner has to allow it first,
+   * in the app, and the person then has a day to do it.
+   *   none     no login with that email
+   *   ready    they can choose a new password now
+   *   waiting  the owner has been asked
+   */
+  resetStart(rawEmail: unknown): { state: 'none' | 'ready' | 'waiting' } {
+    const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+    const a = this.store.portalAccounts.where((x) => x.email === email)[0];
+    if (!a) return { state: 'none' };
+    if (a.status !== 'approved' || this.resetAllowed(a)) return { state: 'ready' };
+    const { resetAllowedAt: _stale, ...rest } = a;
+    if (!a.resetAskedAt || a.resetAllowedAt) this.store.tx(() => this.store.portalAccounts.put({ ...rest, resetAskedAt: this.iso() }));
+    return { state: 'waiting' };
+  }
+
+  async resetFinish(rawEmail: unknown, password: unknown, userAgent?: string): Promise<{ token: string }> {
+    const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+    const a = this.store.portalAccounts.where((x) => x.email === email)[0];
+    if (!a) throw new ApiError(400, 'no_login', 'There’s no login with that email.');
+    if (a.status === 'approved' && !this.resetAllowed(a)) throw new ApiError(403, 'reset_not_allowed', 'Your manager hasn’t allowed this yet.');
+    const problem = passwordProblem(password, email);
+    if (problem) throw badRequest(problem, { field: 'password' });
+    const passwordHash = await hashPassword(password as string);
+    return this.store.tx(() => {
+      const { resetAskedAt: _a, resetAllowedAt: _b, ...rest } = this.store.portalAccounts.require(a.id, 'Login');
+      const fresh: PortalAccount = { ...rest, passwordHash };
+      this.store.portalAccounts.put(fresh);
+      for (const s of this.store.portalSessions.where((x) => x.accountId === a.id)) this.store.portalSessions.delete(s.id);
+      return { token: this.startSession(fresh, userAgent) };
+    });
+  }
+
+  /** The owner lets an approved employee choose a new password. */
+  allowReset(companyId: string, accountId: string) {
+    const a = this.store.portalAccounts.get(accountId);
+    if (!a || a.companyId !== companyId || a.status !== 'approved') throw notFound('Login');
+    if (!a.resetAskedAt) throw conflict('not_asked', 'They haven’t asked to reset it.');
+    this.store.tx(() => this.store.portalAccounts.put({ ...a, resetAllowedAt: this.iso() }));
+    return { ok: true };
+  }
+
+  dismissReset(companyId: string, accountId: string) {
+    const a = this.store.portalAccounts.get(accountId);
+    if (!a || a.companyId !== companyId) throw notFound('Login');
+    const { resetAskedAt: _a, resetAllowedAt: _b, ...rest } = a;
+    this.store.tx(() => this.store.portalAccounts.put(rest));
+    return { ok: true };
+  }
+
   // ------------------------------------------------------------------ the request
 
   /** Everything the owner needs to put them on the payroll, checked now so approval can't fail on a typo. */
@@ -182,7 +240,12 @@ export class PortalService {
     const linked = new Set(this.store.portalAccounts.where((a) => a.companyId === companyId && !!a.employeeId).map((a) => a.employeeId!));
     const free = people.filter((e) => !linked.has(e.id));
     const list = this.store.portalAccounts.where((a) => a.companyId === companyId && a.status === 'pending' && !!a.summary).sort((a, b) => a.summary!.submittedAt.localeCompare(b.summary!.submittedAt));
+    const resets = this.store.portalAccounts.where((a) => a.companyId === companyId && a.status === 'approved' && !!a.resetAskedAt && !this.resetAllowed(a)).map((a) => {
+      const e = a.employeeId ? this.store.employees.get(a.employeeId) : undefined;
+      return { accountId: a.id, email: a.email, name: e ? `${e.firstName} ${e.lastName}` : a.email, askedAt: a.resetAskedAt! };
+    });
     return {
+      resets,
       requests: list.map((a) => ({
         accountId: a.id, email: a.email, name: `${a.summary!.firstName} ${a.summary!.lastName}`, firstName: a.summary!.firstName, submittedAt: a.summary!.submittedAt, forms: a.summary!.forms,
         sameEmail: free.find((e) => e.email?.toLowerCase() === a.email)?.id ?? null,

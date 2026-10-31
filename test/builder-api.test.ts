@@ -57,7 +57,7 @@ const FULL = { state: 'MI', locations: [{ name: 'Detroit', city: 'Detroit', stat
 test('the industry list is public and carries every question and the supported states', async () => {
   const r = await call('GET', '/v1/builder/industries');
   assert.equal(r.status, 200);
-  assert.deepEqual(r.json.industries.map((i: { id: string }) => i.id), ['restaurant', 'hotel_lodging', 'construction_trades', 'office_studios', 'delivery_couriers']);
+  assert.deepEqual(r.json.industries.map((i: { id: string }) => i.id), ['restaurant'], 'Totali is for independent restaurants, and offers nothing else');
   assert.deepEqual(r.json.industries[0].tags, ['Tips', 'Shift hours', 'Tip pool']);
   assert.equal(r.json.industries[0].questions.length, 10, 'six core questions, a tip credit question after tips, and three optional ones');
   assert.ok(r.json.states.some((s: { code: string; name: string }) => s.code === 'MI' && s.name === 'Michigan'));
@@ -148,7 +148,7 @@ test('a person who has not built a company yet cannot reach company routes', asy
   assert.equal(r.status, 403);
 });
 
-test('no tips means no tip pool and the fast-casual starting point; other industries get their own', async () => {
+test('no tips means no tip pool and the fast-casual starting point; other kinds of business are refused', async () => {
   const mk = async (industry: string, answers: unknown) => {
     const { cookie } = await person();
     await call('PUT', '/v1/builder/draft', { cookie, body: { industry, answers, step: 'review' } });
@@ -158,10 +158,13 @@ test('no tips means no tip pool and the fast-casual starting point; other indust
   };
   const noTips = await mk('restaurant', { ...FULL, tips: { on: false, pool: 'none' } });
   assert.deepEqual([noTips.niche, noTips.settings.policy.takesTipCredit, noTips.settings.policy.pool.enabled], ['fast_casual', false, false]);
-  const hotel = await mk('hotel_lodging', { state: 'OH', locations: [{ name: 'Inn', city: 'Columbus', state: 'OH' }], team: '26-50', frequency: { value: 'biweekly', weekday: 'thursday' }, service: { on: true } });
-  assert.deepEqual([hotel.industry, hotel.niche, hotel.settings.policy.serviceCharge, hotel.paySchedule.frequency], ['hotel_lodging', 'hotel_venue', 'distribute_to_staff', 'biweekly']);
-  const trades = await mk('construction_trades', { state: 'TX', locations: [{ name: 'Yard', city: 'Austin', state: 'TX' }], team: '1-10', frequency: { value: 'weekly', weekday: 'friday' }, jobs: { on: true } });
-  assert.deepEqual([trades.niche, trades.settings.workweekStartDay, trades.paySchedule.checkDateLagDays], ['trades_contractor', 1, 5]);
+  // other kinds of business are not offered, and the API says so rather than building them
+  const { cookie } = await person();
+  for (const industry of ['hotel_lodging', 'construction_trades', 'office_studios', 'delivery_couriers']) {
+    const r = await call('PUT', '/v1/builder/draft', { cookie, body: { industry, answers: {}, step: 'state' } });
+    assert.equal(r.status, 400, industry);
+    assert.match(r.text, /independent restaurants/);
+  }
 });
 
 test('the pay day sets the lag from the end of the workweek', () => {

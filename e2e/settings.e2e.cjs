@@ -145,7 +145,7 @@ const { startServer, openBrowser, signUpAndVerify, buildCompany } = require('./h
     // ---- sign out from the menu
     await page.click('[data-testid=account-menu]');
     await page.click('[data-testid=sign-out]');
-    await page.waitForSelector('h1:has-text("Payroll for restaurants")');
+    await page.waitForSelector('h1:has-text("Payroll for the")');
     await page.goto(`${server.base}/app`);
     await page.waitForURL('**/login');
     console.log('settings flow: ok');

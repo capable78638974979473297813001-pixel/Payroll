@@ -149,15 +149,20 @@ export const peopleCards = {
     async function load() {
       try {
         const list = await api.get(`${base()}/portal/requests`);
-        cap.textContent = list.requests.length ? String(list.requests.length) : '';
-        body.replaceChildren(list.requests.length ? h('div', {}, ...list.requests.map((r) => h('div', { class: 'row', 'data-request': r.accountId },
+        const total = list.requests.length + list.resets.length;
+        cap.textContent = total ? String(total) : '';
+        const act = (path, ok) => async () => { try { await api.post(`${base()}/portal/resets/${path}`); toast('success', ok); await refreshData(); load(); } catch (e) { toast('error', e.message); } };
+        const resetRows = list.resets.map((r) => h('div', { class: 'row', 'data-reset': r.accountId },
+          h('span', { class: 'l1' }, h('b', {}, r.name), h('i', {}, `Asked to reset their password · ${when(r.askedAt)}`)),
+          h('span', { class: 'acts' }, Button({ size: 'sm', type: 'button', 'data-testid': 'allow-reset', onClick: act(`${r.accountId}/allow`, 'Allowed. They have a day to choose a new password.') }, 'Allow'), h('button', { class: 'link as-button', type: 'button', onClick: act(`${r.accountId}/dismiss`, 'Ignored.') }, 'Ignore'))));
+        body.replaceChildren(total ? h('div', {}, ...list.requests.map((r) => h('div', { class: 'row', 'data-request': r.accountId },
           h('span', { class: 'l1' }, h('b', {}, r.name), h('i', {}, `${r.email} · sent ${when(r.submittedAt)}${r.sameEmail ? ' · matches someone you added' : ''}`)),
-          h('span', { class: 'acts' }, Button({ size: 'sm', type: 'button', 'data-testid': 'review-request', onClick: () => approveModal(r, list) }, 'Review'), h('button', { class: 'link as-button', type: 'button', onClick: () => declineModal(r) }, 'Decline')))))
-          : h('div', { class: 'empty' }, 'Nobody is waiting. When someone makes an account with your code and sends their details, they show up here.'));
+          h('span', { class: 'acts' }, Button({ size: 'sm', type: 'button', 'data-testid': 'review-request', onClick: () => approveModal(r, list) }, 'Review'), h('button', { class: 'link as-button', type: 'button', onClick: () => declineModal(r) }, 'Decline')))), ...resetRows)
+          : h('div', { class: 'empty' }, 'Nobody is waiting. When someone makes an account with your code and sends their details, or forgets their password, they show up here.'));
       } catch (e) { body.replaceChildren(Alert('error', e.message)); }
     }
     load(); onChange(load);
-    return { title: null, head: h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Requests to join'), cap), body };
+    return { title: null, head: h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Requests'), cap), body };
   },
 
   employee_access() {

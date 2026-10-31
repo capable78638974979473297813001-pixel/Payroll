@@ -21,13 +21,19 @@ export interface IndustryCard {
   pickLabel: string;
 }
 
-export const INDUSTRY_CARDS: IndustryCard[] = [
-  { id: 'restaurant', label: 'Restaurants and bars', pickLabel: 'Restaurants', tags: ['Tips', 'Shift hours', 'Tip pool'] },
+/**
+ * Totali is for independent restaurants. The other kinds of business below still have their questions and rules in this
+ * file, but they are not offered: the picker shows one card and the API refuses the rest.
+ */
+export const OFFERED_INDUSTRY_IDS: readonly IndustryId[] = ['restaurant'];
+const ALL_CARDS: IndustryCard[] = [
+  { id: 'restaurant', label: 'Independent restaurants', pickLabel: 'Restaurants', tags: ['Tips', 'Shift hours', 'Tip pool'] },
   { id: 'hotel_lodging', label: 'Hotels and venues', pickLabel: 'Hotels and venues', tags: ['Departments', 'Seasonal staff', 'Service charge'] },
   { id: 'construction_trades', label: 'Trades and construction', pickLabel: 'Trades', tags: ['Job costing', 'Crews', 'Workers’ comp classes'] },
   { id: 'office_studios', label: 'Office and studios', pickLabel: 'Office and studios', tags: ['Salaried and hourly', 'Time off', 'Multi-state'] },
   { id: 'delivery_couriers', label: 'Delivery and couriers', pickLabel: 'Delivery', tags: ['Trips', 'Mileage', 'Contractor drivers'] },
 ];
+export const INDUSTRY_CARDS: IndustryCard[] = ALL_CARDS.filter((c) => OFFERED_INDUSTRY_IDS.includes(c.id));
 
 export type QuestionKind = 'state' | 'locations' | 'team' | 'tips' | 'frequency' | 'contractors' | 'yesno' | 'departments' | 'paytypes';
 
@@ -529,5 +535,6 @@ export function questionsFor(industry: IndustryId): Question[] {
 
 export function assertIndustry(v: unknown): IndustryId {
   if (typeof v !== 'string' || !INDUSTRY_IDS.includes(v as IndustryId)) throw badRequest('Choose an industry.');
+  if (!OFFERED_INDUSTRY_IDS.includes(v as IndustryId)) throw badRequest('Totali is for independent restaurants. It isn’t set up for other kinds of business yet.');
   return v as IndustryId;
 }

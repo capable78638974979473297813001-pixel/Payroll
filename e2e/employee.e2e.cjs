@@ -180,6 +180,29 @@ const { startServer, openBrowser, signUpAndVerify, buildCompany } = require('./h
     await p2.click('[data-testid=emp-signin]');
     await p2.waitForURL('**/me');
     await p2.waitForSelector('h1:has-text("Priya")');
+
+    // ---- a forgotten password: nothing is emailed, so the owner allows it in the app
+    await p2.click('[data-testid=emp-sign-out]');
+    await p2.waitForURL('**/employee');
+    await p2.click('[data-testid=emp-switch]');
+    await p2.click('[data-testid=emp-forgot]');
+    await p2.fill('input[name=email]', 'nobody@harbor.test');
+    await p2.click('[data-testid=emp-reset-go]');
+    await p2.waitForSelector('.alert:has-text("no login with that email")');
+    await p2.fill('input[name=email]', 'priya@harbor.test');
+    await p2.click('[data-testid=emp-reset-go]');
+    await p2.waitForSelector('.alert:has-text("Your manager has been asked")');
+    assert.equal((await outbox()).length, mailBefore + 1, 'only the owner\'s bank-change notice was sent; the employee gets no email');
+    await page.goto(`${server.base}/app/onboarding`);
+    await page.waitForSelector('[data-reset]:has-text("Priya Raman")');
+    await page.click('[data-testid=allow-reset]');
+    await page.waitForSelector('.toasts .alert:has-text("Allowed")');
+    await p2.click('[data-testid=emp-reset-go]');
+    await p2.waitForSelector('input[name=password]:visible');
+    await p2.fill('input[name=password]', 'a brand new passphrase');
+    await p2.click('[data-testid=emp-reset-go]');
+    await p2.waitForURL('**/me');
+    await p2.waitForSelector('h1:has-text("Priya")');
     await phone.close();
     console.log('employee dashboard: ok');
   } finally {

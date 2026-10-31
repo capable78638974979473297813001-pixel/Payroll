@@ -234,3 +234,40 @@ test('a change of bank account is only a request until the owner approves it', a
   svc.cancelDeposit(fresh());
   assert.equal(fresh().pendingDeposit, undefined);
 });
+
+test('a forgotten password: free before the owner approves the login, and the owner has to allow it afterwards', async () => {
+  const { svc, company, advance, store } = make();
+  const { code } = svc.access(company.id);
+  const first = await svc.signUp(code, 'priya@harbor.test', PW);
+  const account = () => store.portalAccounts.where((a) => a.email === 'priya@harbor.test')[0]!;
+  assert.deepEqual(svc.resetStart('nobody@harbor.test'), { state: 'none' });
+  // not approved yet: nothing worth protecting, so they can choose a new password straight away
+  assert.deepEqual(svc.resetStart('Priya@Harbor.test'), { state: 'ready' });
+  await refusedAsync(svc.resetFinish('priya@harbor.test', 'short'), /at least 10/);
+  const again = await svc.resetFinish('priya@harbor.test', 'a brand new passphrase');
+  assert.equal(svc.resolve(first.token), null, 'the old sessions are signed out');
+  assert.ok(svc.resolve(again.token));
+  await refusedAsync(svc.signIn('priya@harbor.test', PW), /sign_in_failed/);
+  assert.ok(await svc.signIn('priya@harbor.test', 'a brand new passphrase'));
+  // after approval the login holds pay stubs: the owner must allow a reset
+  svc.submitRequest(account(), REQUEST);
+  svc.approve(company.id, account().id, { roleKey: 'server', rateCents: 1500 });
+  assert.deepEqual(svc.resetStart('priya@harbor.test'), { state: 'waiting' });
+  await refusedAsync(svc.resetFinish('priya@harbor.test', 'yet another passphrase'), /reset_not_allowed/);
+  const asked = svc.requests(company.id).resets;
+  assert.deepEqual(asked.map((r) => [r.name, r.email]), [['Priya Raman', 'priya@harbor.test']]);
+  assert.equal(svc.access(company.id).resets, 1);
+  refused(() => svc.allowReset('cmp_other', account().id), /not found|Login/i);
+  svc.allowReset(company.id, account().id);
+  assert.equal(svc.requests(company.id).resets.length, 0, 'once allowed it is no longer waiting on the owner');
+  assert.deepEqual(svc.resetStart('priya@harbor.test'), { state: 'ready' });
+  const done = await svc.resetFinish('priya@harbor.test', 'yet another passphrase');
+  assert.equal(svc.resolve(done.token)!.employee!.firstName, 'Priya');
+  assert.deepEqual(svc.resetStart('priya@harbor.test'), { state: 'waiting' }, 'the permission was used up');
+  // an allowance lapses after a day, and the owner can say no
+  svc.allowReset(company.id, account().id);
+  advance(25 * 3_600_000);
+  await refusedAsync(svc.resetFinish('priya@harbor.test', 'one more passphrase!'), /reset_not_allowed/);
+  svc.dismissReset(company.id, account().id);
+  assert.equal(svc.requests(company.id).resets.length, 0);
+});

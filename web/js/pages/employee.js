@@ -71,12 +71,42 @@ export function employeeSignIn(ctx) {
     } }, email.el, pw.el, err, go);
   }
 
+  function reset() {
+    const email = Field({ label: 'Your email', name: 'email', type: 'email', autocomplete: 'email', autofocus: true });
+    const pw = Field({ label: 'Choose a new password', name: 'password', type: 'password', autocomplete: 'new-password', rightSlot: 'Show', hint: 'At least 10 characters.' });
+    pw.el.hidden = true;
+    const msg = h('div', {});
+    const go = Button({ size: 'lg', full: true, type: 'submit', 'data-testid': 'emp-reset-go' }, 'Continue');
+    let ready = false;
+    return h('form', { class: 'f', novalidate: true, onSubmit: async (e) => {
+      e.preventDefault(); err.replaceChildren(); msg.replaceChildren();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.value.trim())) return email.setError('Enter your email address.');
+      setLoading(go, true);
+      try {
+        if (!ready) {
+          const r = await api.post('/v1/portal/reset/start', { email: email.value });
+          if (r.state === 'none') err.replaceChildren(Alert('error', 'There’s no login with that email.'));
+          else if (r.state === 'waiting') msg.replaceChildren(Alert('info', 'Your manager has been asked.', 'Nothing is emailed. Once they allow it in Totali, come back here, enter your email again and choose a new password.'));
+          else { ready = true; pw.el.hidden = false; email.input.readOnly = true; go.firstChild.textContent = 'Save new password'; pw.input.focus(); }
+        } else { await api.post('/v1/portal/reset/finish', { email: email.value, password: pw.value }); await done(); return; }
+      } catch (e2) { if (e2.details && e2.details.field === 'password') pw.setError(e2.message); else err.replaceChildren(Alert('error', e2.message)); }
+      setLoading(go, false);
+    } }, email.el, pw.el, msg, err, go);
+  }
+
   const draw = () => {
     err.replaceChildren();
+    if (mode === 'reset') {
+      card.replaceChildren(h('h1', {}, 'Reset your password'), h('p', {}, 'Before your manager has approved you, you can choose a new one right away. After that, your manager has to allow it first, since nothing is sent to your email.'), reset(),
+        h('p', { class: 'fine', style: { marginTop: '18px' } }, h('button', { class: 'link as-button', type: 'button', onClick: () => { mode = 'signin'; draw(); } }, 'Back to sign in')));
+      const f = card.querySelector('input'); if (f) f.focus();
+      return;
+    }
     card.replaceChildren(
       h('h1', {}, mode === 'signup' ? 'Create your login' : 'Welcome back'),
       h('p', {}, mode === 'signup' ? 'Use the code from your manager once to make your account. Then you’ll fill in your details and send them to be approved.' : 'See your pay stubs, hours and tax forms.'),
       mode === 'signup' ? signup() : signin(),
+      mode === 'signin' ? h('p', { class: 'fine', style: { marginTop: '14px' } }, h('button', { class: 'link as-button', type: 'button', 'data-testid': 'emp-forgot', onClick: () => { mode = 'reset'; draw(); } }, 'Forgot your password?')) : null,
       h('p', { class: 'fine', style: { marginTop: '18px' } }, mode === 'signup' ? 'Already have a login? ' : 'First time here? ', h('button', { class: 'link as-button', type: 'button', 'data-testid': 'emp-switch', onClick: () => { mode = mode === 'signup' ? 'signin' : 'signup'; draw(); } }, mode === 'signup' ? 'Sign in' : 'Create account')));
     const first = card.querySelector('input'); if (first) first.focus();
   };

@@ -192,6 +192,8 @@ export function dashboardData(store: Store, company: Company, today: string) {
   if (waiting && !noW4.length) add({ id: 'paperwork', severity: 'info', title: `${waiting} ${waiting === 1 ? 'person has' : 'people have'} paperwork to finish`, detail: 'Send a reminder from Onboarding.', to: '/app/onboarding' });
   const asking = store.portalAccounts.where((x) => x.companyId === company.id && x.status === 'pending').length;
   if (asking) add({ id: 'join_requests', severity: 'urgent', title: `${asking === 1 ? 'Someone asked' : `${asking} people asked`} to join your team`, detail: 'They filled in their details. Check them and approve.', to: '/app/onboarding' });
+  const resets = store.portalAccounts.where((x) => x.companyId === company.id && x.status === 'approved' && !!x.resetAskedAt && !(x.resetAllowedAt && x.resetAllowedAt.slice(0, 10) >= addDays(today, -1))).length;
+  if (resets) add({ id: 'pw_resets', severity: 'soon', title: `${resets === 1 ? 'Someone' : `${resets} people`} asked to reset their password`, detail: 'Allow it in Requests so they can choose a new one.', to: '/app/onboarding' });
   if (!active.length && !asking) add({ id: 'first', severity: 'soon', title: 'Add your employees', detail: 'Give your team the code. They make an account and send you their details.', to: '/app/onboarding' });
   if (company.setup && !company.profile?.submittedAt && company.ein) add({ id: 'profile', severity: 'info', title: 'Finish company setup', detail: 'Owners, address and documents.', to: '/app/settings/company' });
   const noW9 = store.contractors.where((x) => x.companyId === company.id && !x.archivedAt && !x.w9At).length;
