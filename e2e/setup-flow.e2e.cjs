@@ -14,11 +14,14 @@ const counter = async (page) => ({
   const shots = process.env.SHOTS;
   const shot = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
   try {
-    // the legal pages the signup checkbox links to exist, and say they are drafts
-    for (const [path, heading] of [['/terms', 'Terms of'], ['/privacy', 'Privacy']]) {
+    // the legal pages the signup checkbox links to are real documents with the real price
+    for (const [path, heading, mention] of [['/terms', 'Terms of Service', '$20 every three months'], ['/privacy', 'Privacy Policy', 'We do not sell your information']]) {
       await page.goto(`${server.base}${path}`);
       await page.waitForSelector(`h1:has-text("${heading}")`);
-      assert.ok((await page.locator('.legal-page').textContent()).includes('not been reviewed by a lawyer'));
+      const text = await page.locator('.legal-body').textContent();
+      assert.ok(text.includes(mention), path);
+      assert.ok(text.includes('Effective October 31, 2026') && !/draft|not been reviewed/i.test(text), 'no draft banner');
+      assert.ok(await page.locator('.legal-toc a').count() >= 8, 'a table of contents');
     }
     await signUpAndVerify(page, server.base);
     await page.waitForSelector('.indgrid .it');

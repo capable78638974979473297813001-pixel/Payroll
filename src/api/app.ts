@@ -188,7 +188,7 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
       mail: mailer.kind,
       devTools: !!config.devTools,
       stripePublishableKey: (process.env.STRIPE_PUBLISHABLE_KEY ?? '').trim() || null,
-      termsVersion: '2026-10-terms-v1',
+      termsVersion: '2026-10-31-v2',
     })),
     route('GET', '/v1/auth/me', 'none', (c) => ({ user: c.user ? publicUser(c.user) : null })),
     route('POST', '/v1/auth/signup', 'none', async (c) => {

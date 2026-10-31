@@ -112,7 +112,18 @@ a.it { color: inherit; text-decoration: none; cursor: pointer; }
 .avmenu a, .avmenu button { text-align: left; background: none; border: 0; padding: 8px 10px; border-radius: 7px; color: var(--ink); cursor: pointer; font: inherit; text-decoration: none; }
 .avmenu a:hover, .avmenu button:hover { background: var(--blush, #F8DAD3); color: var(--berry); }
 
-.legal-page { max-width: 780px; margin: 10px auto 90px; padding: 0 24px; }
+.legal-page { max-width: 1020px; margin: 24px auto 100px; padding: 0 24px; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 64px; align-items: start; }
+.legal-toc { position: sticky; top: 24px; display: grid; gap: 8px; font-size: 14px; }
+.legal-toc b { font-weight: 600; margin-bottom: 4px; }
+.legal-toc a { color: var(--mut); text-decoration: none; line-height: 1.35; }
+.legal-toc a:hover { color: var(--berry); }
+.legal-body h1 { font-size: 34px; margin: 0 0 6px; letter-spacing: -.01em; }
+.legal-meta { color: var(--mut); font-size: 14px; margin-bottom: 28px; }
+.legal-body h2 { font: 600 17px/1.3 "Instrument Sans", system-ui, sans-serif; color: var(--ink); margin: 32px 0 10px; scroll-margin-top: 24px; }
+.legal-body p, .legal-body li { line-height: 1.7; max-width: 70ch; margin: 0 0 12px; }
+.legal-body ul { margin: 0 0 14px 1.2em; display: grid; gap: 6px; max-width: 70ch; }
+.legal-foot { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--mut); }
+@media (max-width: 860px) { .legal-page { grid-template-columns: 1fr; gap: 24px; } .legal-toc { position: static; } }
 
 
 /* beside the signup steps: what happens next */
