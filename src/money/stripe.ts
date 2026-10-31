@@ -1,6 +1,7 @@
 /**
- * Stripe, used for two things: connecting to people's banks, and saving the owner's card so Totali can invoice them
- * (a SetupIntent: nothing is charged here). It never moves payroll money.
+ * Stripe, used for two things: connecting to people's banks, and Totali's own subscription (a hosted Checkout page
+ * that bills the restaurant $20 every three months, and a billing portal to change the card or cancel). It never moves
+ * payroll money.
  *
  * Bank linking:
  *
@@ -76,6 +77,58 @@ export function formEncode(obj: Record<string, unknown>, prefix = ''): string[] 
   }
   return parts;
 }
+
+/** What Totali costs: $20 every three months, however many people are on payroll. */
+export const PRICE = { cents: 2000, months: 3, label: '$20 every 3 months' } as const;
+
+export interface StripePaymentMethodCard { id: string; card?: { brand?: string; last4?: string; exp_month?: number; exp_year?: number } }
+export interface StripeSubscription {
+  id: string;
+  status: string;
+  customer?: string | { id: string };
+  current_period_end?: number;
+  cancel_at_period_end?: boolean;
+  cancel_at?: number | null;
+  items?: { data?: Array<{ current_period_end?: number }> };
+  default_payment_method?: string | StripePaymentMethodCard | null;
+}
+export interface StripeCheckoutSession {
+  id: string;
+  mode?: string;
+  status?: string;
+  customer?: string | null;
+  client_reference_id?: string | null;
+  metadata?: Record<string, string>;
+  subscription?: string | StripeSubscription | null;
+}
+
+const isLocalHost = (host: string) => { const h = host.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, ''); return h === 'localhost' || h.endsWith('.localhost') || h === '::1' || h === '0.0.0.0' || /^127(?:\.\d{1,3}){3}$/.test(h); };
+
+/** A return URL Stripe will send a customer back to: https and not localhost. */
+export function isPublicHttpsUrl(value: string): boolean {
+  try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password && !!u.hostname && !isLocalHost(u.hostname); } catch { return false; }
+}
+
+/** In production a checkout or portal never returns to http or localhost. Ported from the Omnia Tax billing. */
+export function assertProductionCheckoutUrls(...urls: string[]): void {
+  const production = process.env.NODE_ENV === 'production' || Boolean((process.env.RENDER ?? '').trim());
+  if (!production) return;
+  if (urls.every(isPublicHttpsUrl)) return;
+  throw new StripeError('Checkout return links must be https and public in production. Set PUBLIC_BASE_URL to your https address.', 0, { type: 'checkout_origin_invalid', definitive: true });
+}
+
+/** Only Stripe's own hosted pages are ever handed to a browser (a test stub's own host is allowed when STRIPE_API_BASE points at one). */
+export function isAllowedStripeUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const stub = (process.env.STRIPE_API_BASE ?? '').trim();
+    if (stub && stub !== 'https://api.stripe.com') { try { if (new URL(stub).host === u.host) return true; } catch { /* a bad stub base */ } }
+    return u.protocol === 'https:' && !u.username && !u.password && (u.hostname === 'checkout.stripe.com' || u.hostname === 'billing.stripe.com');
+  } catch { return false; }
+}
+
+/** The order Stripe's events happened in, whatever order they arrive. */
+export const eventTime = (e: { created?: number }) => (typeof e.created === 'number' ? e.created * 1000 : 0);
 
 export type FcPermission = 'balances' | 'ownership' | 'payment_method' | 'transactions';
 
@@ -171,20 +224,36 @@ export class StripeClient implements StripeApi {
     return this.call<{ id: string }>('POST', '/v1/customers', p, key);
   }
 
-  updateCustomer(id: string, p: { email?: string; name?: string; invoice_settings?: { default_payment_method: string } }) {
+  updateCustomer(id: string, p: { email?: string; name?: string }) {
     return this.call<{ id: string }>('POST', `/v1/customers/${encodeURIComponent(id)}`, p);
   }
 
-  createSetupIntent(p: { customer: string; metadata?: Record<string, string> }, key: string) {
-    return this.call<{ id: string; client_secret: string }>('POST', '/v1/setup_intents', { customer: p.customer, usage: 'off_session', automatic_payment_methods: { enabled: true, allow_redirects: 'never' }, ...(p.metadata ? { metadata: p.metadata } : {}) }, key);
+  /** A hosted Checkout page that starts the subscription. The price is built here, so there is nothing to set up in the Dashboard. */
+  createSubscriptionCheckout(p: { customer: string; successUrl: string; cancelUrl: string; companyId: string }, key: string) {
+    assertProductionCheckoutUrls(p.successUrl, p.cancelUrl);
+    const priceId = (process.env.STRIPE_PRICE_ID ?? '').trim();
+    const line = priceId
+      ? { price: priceId, quantity: 1 }
+      : { quantity: 1, price_data: { currency: 'usd', unit_amount: PRICE.cents, recurring: { interval: 'month', interval_count: PRICE.months }, product_data: { name: 'Totali payroll', description: 'Every employee included. Billed every three months.' } } };
+    return this.call<{ id: string; url: string | null }>('POST', '/v1/checkout/sessions', {
+      mode: 'subscription', customer: p.customer, line_items: [line], payment_method_collection: 'always',
+      success_url: p.successUrl, cancel_url: p.cancelUrl, client_reference_id: p.companyId,
+      metadata: { companyId: p.companyId }, subscription_data: { metadata: { companyId: p.companyId } },
+    }, key);
   }
 
-  retrieveSetupIntent(id: string) {
-    return this.call<{ id: string; status: string; customer: string | null; payment_method: { id: string; card?: { brand: string; last4: string; exp_month: number; exp_year: number } } | null }>('GET', `/v1/setup_intents/${encodeURIComponent(id)}`, { expand: ['payment_method'] });
+  retrieveCheckoutSession(id: string) {
+    return this.call<StripeCheckoutSession>('GET', `/v1/checkout/sessions/${encodeURIComponent(id)}`, { expand: ['subscription.default_payment_method'] });
   }
 
-  detachPaymentMethod(id: string) {
-    return this.call<{ id: string }>('POST', `/v1/payment_methods/${encodeURIComponent(id)}/detach`, {});
+  retrieveSubscription(id: string) {
+    return this.call<StripeSubscription>('GET', `/v1/subscriptions/${encodeURIComponent(id)}`, { expand: ['default_payment_method'] });
+  }
+
+  /** Stripe's own page where the customer changes the card, reads invoices or cancels. */
+  createPortalSession(p: { customer: string; returnUrl: string }) {
+    assertProductionCheckoutUrls(p.returnUrl, p.returnUrl);
+    return this.call<{ id: string; url: string }>('POST', '/v1/billing_portal/sessions', { customer: p.customer, return_url: p.returnUrl });
   }
 
   createFcSession(p: { customer: string; permissions: FcPermission[]; prefetch?: Array<'balances' | 'ownership'> }, key: string) {
@@ -209,13 +278,14 @@ export class StripeClient implements StripeApi {
   }
 }
 
-/** What billing needs from Stripe: a customer, a card saved through a SetupIntent, and its brand and last four digits. */
+/** What billing needs from Stripe: a customer, a subscription started on a hosted page, and a page to manage it. */
 export interface StripeBillingApi {
   createCustomer(p: { name: string; email?: string; metadata?: Record<string, string> }, idempotencyKey: string): Promise<{ id: string }>;
-  updateCustomer(id: string, p: { email?: string; name?: string; invoice_settings?: { default_payment_method: string } }): Promise<{ id: string }>;
-  createSetupIntent(p: { customer: string; metadata?: Record<string, string> }, idempotencyKey: string): Promise<{ id: string; client_secret: string }>;
-  retrieveSetupIntent(id: string): Promise<{ id: string; status: string; customer: string | null; payment_method: { id: string; card?: { brand: string; last4: string; exp_month: number; exp_year: number } } | null }>;
-  detachPaymentMethod(id: string): Promise<{ id: string }>;
+  updateCustomer(id: string, p: { email?: string; name?: string }): Promise<{ id: string }>;
+  createSubscriptionCheckout(p: { customer: string; successUrl: string; cancelUrl: string; companyId: string }, idempotencyKey: string): Promise<{ id: string; url: string | null }>;
+  retrieveCheckoutSession(id: string): Promise<StripeCheckoutSession>;
+  retrieveSubscription(id: string): Promise<StripeSubscription>;
+  createPortalSession(p: { customer: string; returnUrl: string }): Promise<{ id: string; url: string }>;
 }
 
 export function stripeFromEnv(): StripeApi {

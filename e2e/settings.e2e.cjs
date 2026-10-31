@@ -110,14 +110,15 @@ const { startServer, openBrowser, signUpAndVerify, buildCompany } = require('./h
     await page.click('button:has-text("Change password")');
     await page.waitForSelector('.toasts .alert:has-text("Password changed")');
 
-    // ---- billing: no price anywhere, cards are honest about not being switched on here
+    // ---- billing: one flat price, and payments honestly not switched on in this test server
     await page.goto(`${server.base}/app/billing`);
-    await page.waitForSelector('h3:has-text("Your plan")');
+    await page.waitForSelector('h1:has-text("Billing")');
     await shot('billing');
     const billing = await page.locator('main').textContent();
-    assert.ok(billing.includes('Simple per-employee pricing') && billing.includes('Nothing to pay yet'));
-    assert.equal(billing.match(/\$\d/), null, 'no dollar figure');
-    assert.ok(billing.includes('aren’t switched on'));
+    assert.equal(await page.locator('[data-testid=price]').textContent(), '$20 every 3 months');
+    assert.ok(billing.includes('however big your team gets') && !/per employee|per-employee/i.test(billing), 'a flat price, not per employee');
+    assert.ok(billing.includes('Payments aren’t switched on'));
+    assert.equal(await page.locator('[data-testid=start-subscription]').count(), 0, 'no button that does nothing');
     await page.click('[data-testid=email-button]');
     await page.fill('.modal input[name=billingEmail]', 'not-an-email');
     await page.click('.modal button:has-text("Save")');

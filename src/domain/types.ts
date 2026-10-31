@@ -61,7 +61,13 @@ export interface Company {
   homeState: string;
   address?: string;
   /** Billing: the card on file (brand and last four only, held by Stripe) and who gets the invoices. */
-  billing?: { stripeCustomerId?: string; email?: string; card?: { paymentMethodId: string; brand: string; last4: string; expMonth: number; expYear: number }; updatedAt?: string };
+  billing?: {
+    stripeCustomerId?: string; email?: string; updatedAt?: string;
+    /** The card the subscription charges: brand, last four and expiry only. The number is never here. */
+    card?: { paymentMethodId: string; brand: string; last4: string; expMonth: number; expYear: number };
+    /** Totali's own subscription: $20 every three months. `eventAt` is when Stripe said it, so a late message can't undo a newer one. */
+    subscription?: { id: string; status: string; currentPeriodEnd?: string; cancelAtPeriodEnd?: boolean; eventAt: number };
+  };
   /** Business verification (Company setup): who the business is and who owns it. */
   profile?: CompanyProfile;
   paySchedule: { frequency: PayFrequency; checkDateLagDays: number; /** The weekday employees are paid, when the business pays weekly or every other week. */ payWeekday?: string };

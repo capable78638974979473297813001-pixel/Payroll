@@ -4,8 +4,9 @@
  *
  *   STRIPE_SECRET_KEY=sk_test_... TOTALI_ODFI_ROUTING=... npm run check:stripe
  *
- * Stripe is used here for bank linking only (Financial Connections). The ACH
- * settings below are what your bank gives you; Stripe has no part in them.
+ * Stripe is used for Totali's own subscription ($20 every 3 months) and for bank
+ * linking (Financial Connections). It moves no payroll money. The ACH settings
+ * below are what your bank gives you; Stripe has no part in them.
  */
 import { StripeError, stripeKeyRefused, stripeMode } from '../src/money/stripe.ts';
 import { validateRoutingNumber } from '../engine/payroll/directDeposit.ts';
@@ -26,7 +27,7 @@ async function get(path: string): Promise<any> {
   return body;
 }
 
-console.log(`Stripe (bank linking only), mode: ${stripeMode()}`);
+console.log(`Stripe (subscription and bank linking), mode: ${stripeMode()}`);
 const refused = stripeKeyRefused();
 if (stripeMode() === 'unconfigured') bad('STRIPE_SECRET_KEY is not set.');
 else if (refused) bad(refused);
@@ -47,6 +48,17 @@ else {
   if (stripeMode() === 'live') note('Live mode needs a completed Financial Connections registration in the Stripe Dashboard before balances and ownership are returned.');
   note('Stripe returns tokenized account numbers only. Full numbers for ACH outside Stripe need Stripe\'s approval; until then the account holder types the number and Totali checks its last four digits.');
 }
+
+console.log('\nSubscription ($20 every 3 months)');
+const base = (process.env.PUBLIC_BASE_URL ?? '').trim();
+if (!base) bad('PUBLIC_BASE_URL is not set; Checkout needs somewhere to send the owner back to.');
+else if (!/^https:\/\//.test(base) || /localhost|127\.0\.0\.1/.test(base)) bad('PUBLIC_BASE_URL must be a public https address in production.');
+else ok(`PUBLIC_BASE_URL is ${base}`);
+if (!process.env.STRIPE_WEBHOOK_SECRET) bad('STRIPE_WEBHOOK_SECRET is not set; renewals, failed payments and cancellations would never reach Totali.');
+else ok('STRIPE_WEBHOOK_SECRET is set');
+if (process.env.TOTALI_BILLING_REQUIRED === '0') note('TOTALI_BILLING_REQUIRED=0: payroll can be approved without a subscription.');
+else ok('approving payroll needs a live subscription');
+note('Add the webhook endpoint {PUBLIC_BASE_URL}/v1/stripe/webhook in the Stripe Dashboard for: checkout.session.completed, customer.subscription.created / updated / deleted, invoice.paid, invoice.payment_failed.');
 
 console.log('\nTotali-sent payments (only needed for companies in totali_ach mode; employer-bank mode uses each employer\'s own bank)');
 const odfi = process.env.TOTALI_ODFI_ROUTING ?? '';

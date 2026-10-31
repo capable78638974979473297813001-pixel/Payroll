@@ -95,6 +95,8 @@ export class Store {
   readonly contractors = new Collection<Contractor>(this, 'contractors');
   readonly jobs = new Collection<Job>(this, 'jobs');
   readonly posConnections = new Collection<PosConnection>(this, 'posConnections');
+  /** Stripe event ids already applied, so a retry is not applied twice. */
+  readonly stripeEvents = new Collection<{ id: string; at: string }>(this, 'stripeEvents');
 
   private readonly collections: Record<string, Collection<Doc>>;
   private db: DatabaseSync | undefined;
@@ -102,7 +104,7 @@ export class Store {
 
   constructor(path?: string) {
     this.collections = Object.fromEntries(
-      [this.companies, this.employees, this.shifts, this.houseDays, this.payRuns, this.legs, this.ledger, this.apiKeys, this.taxDeposits, this.bankAccounts, this.bankLinks, this.achFiles, this.counters, this.auditLog, this.users, this.emailCodes, this.sessions, this.dashboards, this.contractors, this.jobs, this.posConnections].map((c) => [c.name, c as unknown as Collection<Doc>]),
+      [this.companies, this.employees, this.shifts, this.houseDays, this.payRuns, this.legs, this.ledger, this.apiKeys, this.taxDeposits, this.bankAccounts, this.bankLinks, this.achFiles, this.counters, this.auditLog, this.users, this.emailCodes, this.sessions, this.dashboards, this.contractors, this.jobs, this.posConnections, this.stripeEvents].map((c) => [c.name, c as unknown as Collection<Doc>]),
     );
     if (path) this.open(path);
   }

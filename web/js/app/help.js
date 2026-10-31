@@ -26,7 +26,7 @@ const FAQ = [
   ['payroll', 'Can I fix a pay run after I approve it?', 'Before anything is paid you can void it from the run’s page and run it again. The hours go back to open. After it’s paid, the run is locked.'],
   ['tips', 'How is overtime worked out?', 'From the hours. Anything over 40 in a workweek is paid at time and a half, whichever box you typed it in. Some states add daily overtime; the engine applies your state’s rules.'],
   ['tips', 'How do tips work?', 'Enter tips for each person in Run payroll. If you pool tips, Time and tips shows the split by hours or by role. Tips count as pay for tax, and each stub shows them separately.'],
-  ['billing', 'How much does Totali cost?', 'One price per employee who is on a pay run that month. We confirm your price before your first invoice, and nothing is charged until then.'],
+  ['billing', 'How much does Totali cost?', 'It’s $20 every three months, with every employee included, however many people you pay. You’re billed in advance by Stripe. You can change your card or cancel any time from Billing, and you keep access until the period you paid for ends.'],
   ['billing', 'How do I sign out?', 'Press your initials at the top right and choose Sign out. You stay signed in on a device until you do. “Sign out everywhere” is in Settings, under Your dashboard.'],
 ];
 

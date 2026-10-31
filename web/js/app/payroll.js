@@ -359,6 +359,7 @@ function reviewView(run, info) {
     } catch (e) {
       setLoading(approve, false);
       if (e.code === 'company_not_verified') err.replaceChildren(Alert('error', 'Add your EIN before you approve.', 'It goes on every pay stub and tax filing.'), h('div', { style: { marginTop: '8px' } }, Button({ variant: 'ghost', size: 'sm', href: '/app/settings/company' }, 'Open Company setup')));
+      else if (e.code === 'subscription_required') err.replaceChildren(Alert('error', 'Start your subscription to approve payroll.', e.message), h('div', { style: { marginTop: '8px' } }, Button({ size: 'sm', href: '/app/billing' }, 'Start your subscription')));
       else err.replaceChildren(Alert('error', e.message));
     }
   }

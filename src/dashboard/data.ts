@@ -227,12 +227,15 @@ export function dashboardData(store: Store, company: Company, today: string) {
   if (posConn?.lastSummary?.unmapped.length) add({ id: 'pos_unmapped', severity: 'soon', title: `${posConn.lastSummary.unmapped.length} ${posConn.lastSummary.unmapped.length === 1 ? 'person' : 'people'} on ${posConn.label.split(':')[0]} ${posConn.lastSummary.unmapped.length === 1 ? 'isn’t' : 'aren’t'} matched`, detail: 'Their hours were left out until you match them to your team.', to: '/app/settings/pos' });
   // the guided setup, in the order a new restaurant does it. Each step is done from what the account really has.
   const stateName = (() => { try { return stateFacts(company.homeState, today).name; } catch { return company.homeState; } })();
+  const billingOn = !!(process.env.STRIPE_SECRET_KEY ?? '').trim() && process.env.TOTALI_BILLING_REQUIRED !== '0';
+  const billingExempt = (process.env.TOTALI_BILLING_EXEMPT ?? '').split(',').map((x) => x.trim()).includes(company.id);
   const setupSteps = [
     { id: 'company', title: 'Add your company details', detail: 'Your EIN, owners and address. Payroll can’t be approved without the EIN.', done: !!company.ein && !!company.profile?.submittedAt, to: '/app/settings/company', minutes: 10 },
     ...(a.has('unemployment_account') ? [{ id: 'state', title: `Add your ${stateName} unemployment account number`, detail: 'It goes on your state filings.', done: !!company.taxAccounts?.state?.[company.homeState]?.account, to: '/app/settings/state', minutes: 3 }] : []),
     { id: 'bank', title: 'Set up how you pay your team', detail: 'Tell Totali your bank so it can write the payment file.', done: !!company.payment.employerBank, to: '/app/settings/payments', minutes: 5 },
     { id: 'team', title: 'Add your team', detail: 'Invite them by email. They fill in their own W-4, I-9 and direct deposit.', done: active.length > 0, to: '/app/onboarding', minutes: 5 },
     { id: 'hours', title: 'Connect where hours and tips come from', detail: 'Your point of sale or time clock, or an exported report.', done: !!posConn || store.shifts.where((x) => x.companyId === company.id).length > 0, to: '/app/settings/pos', minutes: 5 },
+    ...(billingOn && !billingExempt ? [{ id: 'billing', title: 'Start your subscription', detail: 'It’s $20 every 3 months, with every employee included. You need it to approve payroll.', done: !!company.billing?.subscription && ['active', 'trialing', 'past_due'].includes(company.billing.subscription.status), to: '/app/billing', minutes: 3 }] : []),
     { id: 'first', title: 'Run your first payroll', detail: 'Review the hours, check the taxes, approve.', done: runs.some((r) => r.status !== 'draft'), to: '/app/payroll/run', minutes: 10 },
   ];
   const setup = { steps: setupSteps, done: setupSteps.filter((x) => x.done).length, total: setupSteps.length, minutes: setupSteps.filter((x) => !x.done).reduce((n, x) => n + x.minutes, 0) };
