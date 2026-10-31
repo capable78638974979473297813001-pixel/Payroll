@@ -18,9 +18,15 @@ export function nextPath(user) {
 
 /** The design's frame for every pre-account screen: slim top bar, a card on the left, a photo or sample on the right. */
 function frame({ aside, card, nudge }) {
-  return h('div', { class: 'authpage' },
-    h('header', { class: 'authtop ui' }, Logo(), h('span', {}, nudge[0], link(nudge[1], { class: 'l2' }, nudge[2]))),
-    h('main', { class: 'auth' }, h('div', { class: 'acard ui' }, ...[card].flat()), h('div', { class: 'avis' }, aside)));
+  return h('div', { class: 'authpage restaurant-auth' },
+    h('aside', { class: 'restaurant-auth-story' },
+      h('div', { class: 'restaurant-auth-brand' }, Logo(), h('span', {}, 'FOR RESTAURANTS')),
+      h('div', { class: 'restaurant-auth-story-copy' }, h('span', { class: 'restaurant-eyebrow' }, 'FOR THE PEOPLE BEHIND THE SERVICE'), h('h2', {}, 'Good service.', h('br'), 'Great people.', h('br'), h('em', {}, 'A better payday.')), h('p', {}, 'A calmer corner for the business of running your restaurant.'), aside),
+      h('small', {}, 'Your people. Your place. Your next chapter.')),
+    h('div', { class: 'restaurant-auth-main' },
+      h('header', { class: 'authtop ui' }, Logo(), h('span', {}, nudge[0], link(nudge[1], { class: 'l2' }, nudge[2]))),
+      h('main', { class: 'restaurant-auth-form' }, h('div', { class: 'acard ui' }, h('div', { class: 'restaurant-eyebrow' }, 'YOUR RESTAURANT WORKSPACE'), ...[card].flat())),
+      h('footer', { class: 'restaurant-auth-footer' }, link('/terms', {}, 'Terms'), link('/privacy', {}, 'Privacy'), h('span', {}, 'Totali · OMNIA TAX LLC'))));
 }
 
 /** What happens next, with where you are marked. Shown beside the signup steps so nobody wonders how long this is. */
@@ -33,7 +39,7 @@ function nextSteps(at) {
 }
 
 /** A short, plain note beside a form that has nothing to count down. */
-const note = (title, lines) => h('div', { class: 'nextsteps' }, h('h2', {}, title), h('ul', { class: 'quiet' }, ...lines.map((l) => h('li', {}, l))), h('p', { class: 'trust' }, 'Social Security numbers and bank details are encrypted. Totali never holds your money.'));
+const note = (title, lines) => h('div', { class: 'nextsteps' }, h('h2', {}, title), h('ul', { class: 'quiet' }, ...lines.map((l) => h('li', {}, l))), h('p', { class: 'trust' }, 'Social Security numbers and bank details are encrypted. Bank payments require a separate approval.'));
 
 
 const googleOn = () => !!(session.config && session.config.google);
@@ -54,7 +60,7 @@ export function signup(ctx) {
   const biz = Field({ label: 'Business name', name: 'businessName', placeholder: 'Harbor Street Kitchen', autocomplete: 'organization' });
   const email = Field({ label: 'Work email', name: 'email', type: 'email', placeholder: 'you@company.com', autocomplete: 'email', value: ctx && ctx.query.get('email') ? ctx.query.get('email') : '' });
   const bar = h('div', {}, PwBar(0));
-  const pw = Field({ label: 'Password', name: 'password', type: 'password', autocomplete: 'new-password', hint: `At least ${MIN_PASSWORD} characters. A phrase works well.`, rightSlot: 'Show', onInput: (v) => { bar.replaceChildren(PwBar(pwScore(v))); update(); } });
+  const pw = Field({ label: 'Password', name: 'password', type: 'password', autocomplete: 'new-password', maxlength: 200, hint: `At least ${MIN_PASSWORD} characters. A phrase works well.`, rightSlot: 'Show', onInput: (v) => { bar.replaceChildren(PwBar(pwScore(v))); update(); } });
   pw.el.querySelector('.inwrap').after(bar);
   const terms = Checkbox({ name: 'terms', onChange: () => update(), label: h('span', {}, 'I agree to the ', h('a', { href: '/terms', target: '_blank', rel: 'noopener' }, 'Terms'), ' and ', h('a', { href: '/privacy', target: '_blank', rel: 'noopener' }, 'Privacy Policy'), ' of OMNIA TAX LLC.') });
   const formError = h('div', {});
@@ -207,8 +213,8 @@ export async function verify() {
 export function login(ctx) {
   const googleError = ctx && ctx.query.get('google_error');
   const email = Field({ label: 'Work email', name: 'email', type: 'email', autocomplete: 'email', placeholder: 'you@company.com', autofocus: true });
-  const pw = Field({ label: h('span', {}, 'Password', h('small', { style: { float: 'right' } }, link('/forgot', { class: 'link', style: 'font-size:12.5px' }, 'Forgot it?'))), name: 'password', type: 'password', autocomplete: 'current-password', rightSlot: 'Show' });
-  const keep = Checkbox({ label: 'Keep me signed in on this device', name: 'remember', checked: true });
+  const pw = Field({ label: h('span', {}, 'Password', h('small', { style: { float: 'right' } }, link('/forgot', { class: 'link', style: 'font-size:12.5px' }, 'Forgot it?'))), name: 'password', type: 'password', autocomplete: 'current-password', maxlength: 200, rightSlot: 'Show' });
+  const keep = Checkbox({ label: 'Keep me signed in on this device', name: 'remember', checked: false });
   const err = h('div', {});
   const btn = Button({ size: 'lg', full: true, type: 'submit' }, 'Log in');
   const form = h('form', { class: 'f', novalidate: true, onSubmit: async (e) => {
@@ -226,8 +232,7 @@ export function login(ctx) {
     }
   } }, googleButton(), orRule(), googleError ? Alert('error', googleError) : null, email.el, pw.el, keep.el, err, btn);
   const card = [h('h1', {}, 'Welcome ', h('em', {}, 'back')), h('p', {}, 'Log in to your Totali account.'), form,
-    h('p', { class: 'fine', style: { marginTop: '20px' } }, 'Staying signed in lasts until you choose ', h('b', {}, 'Sign out'), ' in the top menu.'),
-    h('p', { class: 'fine', style: { marginTop: '8px' } }, 'On a team that uses Totali? ', link('/employee', { class: 'link' }, 'Employee sign in'), '.')];
+    h('p', { class: 'fine', style: { marginTop: '20px' } }, 'Using a shared restaurant computer? Leave “Keep me signed in” off, and sign out when you finish.')];
   const aside = note('Pick up where you left off', ['Your next payroll, who still owes paperwork, and what is due this week are on your home screen.', 'Hours and tips come in from your POS when you connect it.']);
   return { title: 'Log in | Totali', el: frame({ card, aside, nudge: ['New here?', '/signup', 'Create account'] }) };
 }
@@ -236,7 +241,7 @@ export function login(ctx) {
 export function forgot() {
   const email = Field({ label: 'Work email', name: 'email', type: 'email', autocomplete: 'email', placeholder: 'you@company.com', autofocus: true });
   const code = Field({ label: '6-digit code', name: 'code', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: 7 });
-  const pw = Field({ label: 'New password', name: 'password', type: 'password', autocomplete: 'new-password', hint: `At least ${MIN_PASSWORD} characters.`, rightSlot: 'Show' });
+  const pw = Field({ label: 'New password', name: 'password', type: 'password', autocomplete: 'new-password', maxlength: 200, hint: `At least ${MIN_PASSWORD} characters.`, rightSlot: 'Show' });
   const err = h('div', {});
   const ask = Button({ size: 'lg', full: true, type: 'submit' }, 'Email me a code');
   const set = Button({ size: 'lg', full: true, type: 'submit' }, 'Set new password');

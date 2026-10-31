@@ -23,15 +23,17 @@ Everything else (the niches, tip and wage rules, pay runs, API) is Totali's own,
 
 **What you can do in it:** create an account (email code, or Google), pick an industry, answer a few questions and watch the dashboard build, then run payroll: enter hours and tips (or import a spreadsheet), review every paycheck, approve, open pay stubs, and download the payment file for your own bank. Invite new hires by email; they fill in their W-4, state form, I-9 section 1 and direct deposit on their phone from a private link. Time and tips by day, the tip pool, contractors with W-9s and a year-end export, job costing, crews and workers' comp classes, settings (including editing your setup answers), company setup, billing (card on file through Stripe) and help.
 
-**The look.** One design system, set in tokens at the top of `web/assets/style.css` and overridden last by `web/css/revamp.css`: a warm paper background, deep green accent, one type scale, hairline rules instead of boxed cards. The public pages (landing, sign up, sign in, Terms, Privacy) use `web/css/landing.css`; the landing page markup is `web/js/pages/landing.markup.js`. Change the colors and radius in `web/js/theme.js` and `src/dashboard/defaults.ts` together (the first is the browser's copy of the second).
+**The restaurant experience.** The landing page, login/recovery screens and signed-in app share a restaurant-focused design in `web/css/restaurant.css`. The app uses sidebar navigation and a focused home with the next payroll, run-by date, setup tasks, weekly hours, reported tips, labor by role and POS status. Everything comes from the existing company-scoped dashboard API. The detailed customizable dashboard is still available through *Customize view*; *Simple overview* returns to the focused home. Saved dashboard documents and themes are retained.
 
-**Customizable.** Every dashboard is a saved document: cards, sizes, order, tabs, colors, fonts, corners, density, navigation and the owner's own words are all settable (press *Customize*). There are no templates; two businesses start from what they said and diverge from there.
+**Payroll flow.** Run payroll opens directly on the next available period’s hours. Change periods beside the grid; valid edits save before switching. Paycheck tips and cash tips already received have separate fields and CSV columns. Review shows gross, employee tax and the amount still owed in the paycheck; expand any person’s breakdown for details. The total to set aside comes from the backend’s `fundingRequiredCents`, so cash already received is not funded twice. Every approval requires a final acknowledgement. Bank-file preparation and bank release remain separate from payroll approval.
+
+**Sign-in.** The redesigned screens retain the existing scrypt, verified-email, Google, password-recovery and session-revocation services. “Keep me signed in” is off initially for shared restaurant computers. Google appears only when configured. There is no employee sign-in link until employee accounts are supported.
 
 ### Run it locally
 
 ```bash
 cp .env.example .env
-TOTALI_DEV=1 npm start     # with no RESEND_API_KEY, emailed codes and links appear in the app instead of being sent
+npm run dev              # development email outbox; temporary data-encryption key if none is set
 ```
 
 ### Browser tests

@@ -1,0 +1,41 @@
+import { h, money, shortDate, longDate, hoursFromMinutes, plural } from '../dom.js';
+import { link } from '../router.js';
+import { Button, Chip } from '../ui.js';
+import { session } from '../session.js';
+
+/** A focused operational view; every number comes from dashboard/data. */
+export function restaurantOverview(data, { customize }) {
+  const next = data.nextPayroll;
+  const period = next.period;
+  const runPath = next.runId ? `/app/payroll/runs/${next.runId}` : '/app/payroll/run';
+  const remaining = data.guide.steps.filter(s => !s.done);
+  const readiness = [
+    { title: 'Hours gathered', detail: `${next.people.hourlyWithHours} of ${next.people.hourly} hourly people have time recorded`, ready: next.people.hourly > 0 && next.people.hourlyWithHours === next.people.hourly, to: '/app/time' },
+    { title: 'Team paperwork', detail: next.people.missingW4 ? plural(next.people.missingW4, 'person needs', 'people need') + ' a W-4' : 'W-4s are on file for your team', ready: data.team.active > 0 && !next.people.missingW4, to: '/app/onboarding' },
+    { title: 'Payment setup', detail: data.company.paymentSetUp ? 'Your employer-bank details are saved' : 'Add your bank’s payment-file details', ready: data.company.paymentSetUp, to: '/app/settings/payments' },
+  ];
+  const metric = (label, value, detail, symbol) => h('div', { class: 'restaurant-metric' }, h('div', { class: 'restaurant-metric-label' }, label, h('span', { 'aria-hidden': 'true' }, symbol)), h('b', {}, value), h('small', {}, detail));
+  const sectionTitle = (title, href, text) => h('div', { class: 'restaurant-section-heading' }, h('h2', {}, title), href ? link(href, {}, text || 'View all ↗') : null);
+  const todo = data.todos;
+  return h('div', { class: 'restaurant-overview', 'data-testid': 'restaurant-overview' },
+    h('div', { class: 'restaurant-page-head' }, h('div', {}, h('div', { class: 'restaurant-eyebrow' }, 'YOUR RESTAURANT, IN GOOD ORDER'), h('h1', {}, `Good to see you, ${session.user.firstName}.`), h('p', {}, 'A little less admin. A little more room for your people.')), Button({ variant: 'ghost', size: 'sm', onClick: customize, 'data-testid': 'customize' }, 'Customize view')),
+    h('section', { class: 'restaurant-payday', 'aria-label': 'Next payroll' },
+      h('div', { class: 'restaurant-payday-main' }, h('div', { class: 'restaurant-eyebrow' }, next.stage === 'approved' ? 'PAYROLL APPROVED · PAYMENT NEXT' : 'YOUR NEXT PAYROLL'), h('h2', {}, `${shortDate(period.periodStart)} – ${shortDate(period.periodEnd)}`), h('p', {}, `Pay date ${longDate(period.checkDate)} · ${plural(data.team.active, 'person', 'people')}`), h('p', { class: next.runByPassed ? 'restaurant-runby passed' : 'restaurant-runby' }, `${next.runByPassed ? 'Run-by date passed: ' : 'Run it by '}${longDate(next.runBy)}${next.runByPassed ? ' · Check bank timing before payment' : ''}`),
+        h('div', { class: 'restaurant-payday-actions' }, Button({ href: runPath }, next.stage === 'approved' ? 'Open payment steps →' : next.runId ? 'Continue payroll →' : 'Prepare payroll →'), Chip(next.stage === 'approved' ? 'Approved' : next.stage === 'draft' ? 'Draft in progress' : 'Not started', next.stage === 'approved' ? 'ok' : 'line'))),
+      h('div', { class: 'restaurant-payday-checks' }, ...readiness.map(item => link(item.to, { class: 'restaurant-readiness' }, h('span', { class: item.ready ? 'ready' : 'waiting', 'aria-hidden': 'true' }, item.ready ? '✓' : '○'), h('span', {}, h('b', {}, item.title), h('small', {}, item.detail)), h('span', { 'aria-hidden': 'true' }, '↗'))))),
+    h('div', { class: 'restaurant-section-heading' }, h('h2', {}, 'This week at your restaurant'), h('span', {}, `${shortDate(data.hours.weekStart)} – ${shortDate(data.hours.weekEnd)}`)),
+    h('div', { class: 'restaurant-metrics' }, metric('Hours recorded', hoursFromMinutes(data.hours.totalMinutes), `${hoursFromMinutes(data.hours.overtimeMinutes)} overtime hours`, '◷'), metric('Estimated wages', money(data.week.wagesCents), 'Hourly estimate, before taxes & tips', '↗'), metric('Reported tips', money(data.tips.chargedCents + data.tips.cashCents), 'Card + reported cash tips', '◇'), metric('Your team', String(data.team.active), `${data.onboarding.complete} paperwork complete`, '♧')),
+    h('div', { class: 'restaurant-home-grid', 'data-testid': 'grid' },
+      h('section', { class: 'restaurant-panel' }, sectionTitle(remaining.length ? 'Make yourself at home' : 'What needs your attention', remaining.length ? null : '/app/onboarding'),
+        remaining.length ? [h('p', { class: 'restaurant-panel-note' }, `${data.guide.done} of ${data.guide.total} setup steps complete. Pick up one thing at a time.`), h('progress', { class: 'restaurant-progress', value: data.guide.done, max: data.guide.total, 'aria-label': 'Restaurant setup progress' }), ...remaining.slice(0, 4).map((task, i) => link(task.to, { class: 'restaurant-task' }, h('span', { class: 'restaurant-task-number' }, String(i + 1)), h('span', {}, h('b', {}, task.title), h('small', {}, task.detail)), h('span', { 'aria-hidden': 'true' }, '→')))] : todo.length ? todo.slice(0, 5).map(task => link(task.to, { class: 'restaurant-task' }, h('span', { class: `restaurant-task-number ${task.severity}` }, task.severity === 'urgent' ? '!' : '○'), h('span', {}, h('b', {}, task.title), h('small', {}, task.detail)), h('span', { 'aria-hidden': 'true' }, '→'))) : h('div', { class: 'restaurant-calm' }, '✓ Nothing outstanding right now. Your next payroll is above.'),
+        remaining.length && todo.length ? h('div', { class: 'restaurant-attention' }, h('b', {}, 'Also needs attention'), ...todo.slice(0, 3).map(t => link(t.to, {}, t.title, ' ↗'))) : null),
+      h('section', { class: 'restaurant-panel' }, sectionTitle('Your hours, connected', '/app/settings/pos', 'Manage ↗'),
+        h('div', { class: 'restaurant-pos-status' }, h('span', { class: 'restaurant-pos-mark', 'aria-hidden': 'true' }, '⊞'), h('div', {}, h('h3', {}, data.pos.connected ? data.pos.label : 'Keep your familiar tools'), h('p', {}, data.pos.connected ? (data.pos.lastSyncAt ? `Last import ${new Date(data.pos.lastSyncAt).toLocaleString()}` : 'Connected · Ready for your first import') : 'Square, Toast, 7shifts or a time-clock report.'))),
+        data.pos.lastError ? h('p', { class: 'restaurant-inline-warning', role: 'status' }, 'The last import needs attention. Open connections to review it.') : null,
+        data.pos.summary?.unmapped ? link('/app/settings/pos', { class: 'restaurant-inline-warning' }, `${plural(data.pos.summary.unmapped, 'person', 'people')} still need matching →`) : null,
+        Button({ href: data.pos.connected ? '/app/payroll/run' : '/app/settings/pos', variant: 'secondary', full: true }, data.pos.connected ? 'Review imported time →' : 'Connect your point of sale →'),
+        h('div', { class: 'restaurant-provider-names' }, h('b', {}, 'Square'), h('b', {}, 'toast'), h('b', {}, '7shifts'), h('span', {}, '+ CSV')),
+        h('hr'), sectionTitle('Labor by role', '/app/time'),
+        data.week.byRole.length ? data.week.byRole.slice(0, 4).map(r => h('div', { class: 'restaurant-role' }, h('div', {}, h('span', {}, r.label), h('b', {}, `${hoursFromMinutes(r.minutes)} h`)), h('progress', { max: Math.max(data.hours.totalMinutes, 1), value: r.minutes, 'aria-label': `${r.label} share of recorded hours` }))) : h('p', { class: 'restaurant-panel-note' }, 'Your role breakdown will appear when hours are recorded.'))),
+    h('section', { class: 'restaurant-panel restaurant-recent' }, sectionTitle('Recent payroll', '/app/payroll', 'Payroll history ↗'), data.runs.length ? h('div', { class: 'restaurant-run-list' }, ...data.runs.slice(0, 3).map(r => link(`/app/payroll/runs/${r.id}`, { class: 'restaurant-run-row' }, h('div', {}, h('b', {}, `${shortDate(r.periodStart)} – ${shortDate(r.periodEnd)}`), h('small', {}, `Pay date ${longDate(r.checkDate)}`)), h('span', {}, plural(r.employees, 'person', 'people')), h('b', {}, money(r.grossCents)), Chip(r.status === 'completed' ? 'Paid' : r.status === 'approved' ? 'Approved · payment next' : r.status.replaceAll('_', ' '), r.status === 'completed' ? 'ok' : 'line')))) : h('div', { class: 'restaurant-calm' }, 'Your first approved payroll will appear here.')));
+}

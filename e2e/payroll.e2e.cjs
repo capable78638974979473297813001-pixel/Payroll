@@ -24,9 +24,8 @@ const { startServer, openBrowser, signUpAndVerify, buildCompany } = require('./h
 
     // the dashboard's Run payroll button starts at the period picker
     await page.goto(`${server.base}/app/payroll/run`);
-    await page.waitForSelector('[data-period]');
-    await shot('pay-pick');
-    await page.click('.card .btn:has-text("Continue")');
+    await page.waitForSelector('[data-testid=pay-period]');
+    await shot('pay-period-with-hours');
     await page.waitForSelector('table.tbl input');
     await shot('pay-hours');
     assert.equal(await page.locator('tbody tr').count(), 3);
@@ -34,7 +33,7 @@ const { startServer, openBrowser, signUpAndVerify, buildCompany } = require('./h
     // a bad cell is refused with the person's name, not a crash
     const row = (name) => page.locator('tbody tr', { hasText: name });
     await row('Priya').locator('input[data-key=reg]').fill('abc');
-    await page.click('.btn:has-text("Continue to review")');
+    await page.click('.btn:has-text("Review payroll")');
     assert.ok((await page.locator('.alert').first().textContent()).includes('Priya'), 'the error names the person');
     await row('Priya').locator('input[data-key=reg]').fill('40');
     await row('Marcus').locator('input[data-key=reg]').fill('46');
@@ -44,6 +43,7 @@ const { startServer, openBrowser, signUpAndVerify, buildCompany } = require('./h
     assert.ok((await row('Marcus').textContent()).includes('6 hrs overtime'));
     await row('Elena').locator('input[data-key=reg]').fill('32.5');
     await row('Elena').locator('input[data-key=tips]').fill('412.30');
+    await row('Elena').locator('input[data-key=cash]').fill('25.00');
 
     // spreadsheet import
     const csv = 'Employee,Regular hrs,Overtime hrs,Tips\n"Priya Raman",38,0,0\nNobody Here,10,0,0\n';
@@ -58,9 +58,10 @@ const { startServer, openBrowser, signUpAndVerify, buildCompany } = require('./h
     await page.reload();
     await page.waitForSelector('table.tbl input');
     assert.equal(await row('Elena').locator('input[data-key=tips]').inputValue(), '412.30');
+    assert.equal(await row('Elena').locator('input[data-key=cash]').inputValue(), '25.00');
 
     // review
-    await page.click('.btn:has-text("Continue to review")');
+    await page.click('.btn:has-text("Review payroll")');
     await page.waitForURL('**/app/payroll/runs/**');
     await page.waitForSelector('h3:has-text("Every paycheck")');
     await shot('pay-review');

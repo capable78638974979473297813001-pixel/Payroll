@@ -43,6 +43,8 @@ export function weekSummary(store: Store, company: Company, from: string, to: st
       regularMinutes: regular,
       overtimeMinutes: total - regular,
       tipsCents: mine.reduce((n, s) => n + s.chargedTipsCents + s.cashTipsCents, 0),
+      chargedTipsCents: mine.reduce((n, s) => n + s.chargedTipsCents, 0),
+      cashTipsCents: mine.reduce((n, s) => n + s.cashTipsCents, 0),
       shiftByShift: mine.some((s) => !isWeekEntry(s.externalId)),
       locked: mine.some((s) => !!s.lockedByRunId),
       w4Missing: !formsOf(e, wantsStateForm).w4,
@@ -71,6 +73,7 @@ export function saveWeek(store: Store, company: Company, body: unknown) {
       const regular = e.regularMinutes === undefined ? 0 : v.int(e, 'regularMinutes', 0, 44_640);
       const overtime = e.overtimeMinutes === undefined ? 0 : v.int(e, 'overtimeMinutes', 0, 44_640);
       const tips = e.tipsCents === undefined ? 0 : v.cents(e, 'tipsCents');
+      const cashTips = e.cashTipsCents === undefined ? 0 : v.cents(e, 'cashTipsCents');
       const total = regular + overtime;
 
       const mine = store.shifts.where((s) => s.companyId === company.id && s.employeeId === emp.id && s.workDate >= from && s.workDate <= to);
@@ -79,11 +82,11 @@ export function saveWeek(store: Store, company: Company, body: unknown) {
         // Shift-by-shift time (a POS sync, or entered shift by shift) is never overwritten by a weekly box.
         const sum = mine.reduce((n, s) => n + s.minutes, 0);
         const tipSum = mine.reduce((n, s) => n + s.chargedTipsCents + s.cashTipsCents, 0);
-        if (sum !== total || tipSum !== tips) throw conflict('detailed_time_exists', `${name} has shift-by-shift time in this period. Change it on the shifts, not here.`);
+        if (sum !== total || tipSum !== tips + cashTips) throw conflict('detailed_time_exists', `${name} has shift-by-shift time in this period. Change it on the shifts, not here.`);
         continue;
       }
       for (const s of mine) store.shifts.delete(s.id);
-      if (total === 0 && tips === 0) continue;
+      if (total === 0 && tips === 0 && cashTips === 0) continue;
 
       const start = emp.hireDate > from ? emp.hireDate : from;
       const end = emp.terminationDate && emp.terminationDate < to ? emp.terminationDate : to;
@@ -93,6 +96,7 @@ export function saveWeek(store: Store, company: Company, body: unknown) {
       const perWeek = splitEven(total, nWeeks);
       let n = 0;
       let tipsLeft = tips;
+      let cashLeft = cashTips;
       for (let w = 0; w < nWeeks; w++) {
         let left = perWeek[w]!;
         const weekDays = days.slice(w * 7, w * 7 + 7);
@@ -103,14 +107,14 @@ export function saveWeek(store: Store, company: Company, body: unknown) {
           const minutes = perDay[d]!;
           if (minutes <= 0) continue;
           left -= minutes;
-          const first = tipsLeft > 0;
-          recordShift(store, company.id, { employeeId: emp.id, workDate: date, minutes, externalId: `week:${emp.id}:${from}:${n++}`, ...(first ? { chargedTipsCents: tipsLeft } : {}) });
-          if (first) tipsLeft = 0;
+          const first = tipsLeft > 0 || cashLeft > 0;
+          recordShift(store, company.id, { employeeId: emp.id, workDate: date, minutes, externalId: `week:${emp.id}:${from}:${n++}`, ...(first ? { chargedTipsCents: tipsLeft, cashTipsCents: cashLeft } : {}) });
+          if (first) { tipsLeft = 0; cashLeft = 0; }
         }
       }
-      if (tipsLeft > 0) {
+      if (tipsLeft > 0 || cashLeft > 0) {
         // Tips with no hours: they still belong to a day.
-        recordShift(store, company.id, { employeeId: emp.id, workDate: start, minutes: 1, externalId: `week:${emp.id}:${from}:${n++}`, chargedTipsCents: tipsLeft });
+        recordShift(store, company.id, { employeeId: emp.id, workDate: start, minutes: 1, externalId: `week:${emp.id}:${from}:${n++}`, chargedTipsCents: tipsLeft, cashTipsCents: cashLeft });
       }
     }
   });

@@ -1,158 +1,38 @@
-// The front page. Static and trusted: no user text goes in. Every claim is something the app does today, and the
-// figures in the pictures are made up and say so.
+// Trusted, shipped markup. All preview amounts are explicitly illustrative.
 export default `
-<div class="lp">
+<div class="lp restaurant-landing">
 <header class="lp-top">
-  <a class="logo" href="/" aria-label="Totali">totali</a>
-  <nav aria-label="Page"><a href="#how">How it works</a><a href="#restaurants">For restaurants</a><a href="#pos">Your POS</a><a href="#pricing">Pricing</a><a href="#faq">Questions</a></nav>
-  <span class="lp-acct"><a class="lp-login" href="/login">Log in</a><a class="btn sm" href="/signup">Get started</a></span>
+  <a class="logo" href="/" aria-label="Totali">totali<span class="rest-logo-dot">✳</span></a>
+  <nav aria-label="Page"><a href="#how">How it works</a><a href="#restaurants">Made for restaurants</a><a href="#pos">Connections</a><a href="#pricing">Pricing</a></nav>
+  <span class="lp-acct"><a class="lp-login" href="/login">Log in</a><a class="btn sm" href="/signup">Get started <span aria-hidden="true">↗</span></a></span>
 </header>
-
-<section class="lp-hero">
-  <div class="lp-hero-text">
-    <h1>Payroll that understands restaurants.</h1>
-    <p class="lp-sub">Tips, overtime and taxes worked out, with every line explained. Hours come straight from your point of sale. New hires fill in their own paperwork. <b>$20 every three months</b>, however many people you pay.</p>
-    <form class="lp-join" data-signup><input type="email" placeholder="Work email" aria-label="Work email"><button class="btn" type="submit">Get started</button></form>
-    <p class="lp-fine">Takes about ten minutes to set up. Cancel any time.</p>
+<main>
+<section class="rest-hero">
+  <div class="rest-hero-copy">
+    <div class="restaurant-eyebrow"><span class="rest-status-dot"></span> FOR THE PEOPLE BEHIND THE SERVICE</div>
+    <h1>Full tables.<br>Happy people.<br><em>Simpler payroll.</em></h1>
+    <p>You make people feel welcome. We make looking after your team feel a little easier. Hours, tips and payroll, together in one thoughtful workspace.</p>
+    <div class="rest-hero-cta"><a class="btn" href="/signup">Set up your restaurant <span aria-hidden="true">↗</span></a><a href="#how" class="rest-text-link">Take a look ↓</a></div>
+    <p class="rest-small">$20 every 3 months. Every employee included.</p>
+    <div class="rest-hero-signoff"><span class="rest-handdrawn" aria-hidden="true">✳</span><span>Independent restaurants.<br>People at the heart.</span></div>
   </div>
-  <div class="lp-shot" role="img" aria-label="Totali's home screen for a restaurant, with sample figures">
-    <div class="lp-shot-bar"><span class="lp-dot"></span><b>Harbor Street Kitchen</b><span>Full-service restaurant · 2 locations · Michigan</span></div>
-    <div class="lp-shot-grid">
-      <div class="lp-shot-main">
-        <i>Next payroll</i><b class="lp-big">Fri, Nov 6</b><span>Run it by Thu, Nov 5 · 14 people</span>
-        <div class="lp-checks"><span class="ok">Hours pulled from Toast today</span><span class="ok">Every W-4 is on file</span><span class="warn">1 person without direct deposit</span></div>
-        <span class="lp-fake-btn">Review and approve</span>
-      </div>
-      <div class="lp-shot-side">
-        <i>This week</i>
-        <div class="lp-kv"><span>Hours</span><b>412</b></div>
-        <div class="lp-kv"><span>Estimated wages</span><b>$7,846</b></div>
-        <div class="lp-kv"><span>Tips</span><b>$5,120</b></div>
-        <div class="lp-kv"><span>Overtime</span><b>3.4%</b></div>
-      </div>
-    </div>
-    <div class="lp-shot-roles">
-      <div><span>Servers</span><b>186 h</b><i>$3,720 tips</i></div>
-      <div><span>Line cooks</span><b>112 h</b><i></i></div>
-      <div><span>Bartenders</span><b>64 h</b><i>$1,400 tips</i></div>
-      <div><span>Hosts</span><b>50 h</b><i></i></div>
-    </div>
-    <p class="lp-sample">Sample data</p>
-  </div>
-</section>
-
-<section class="lp-sec" id="how">
-  <h2>From signup to first payroll</h2>
-  <ol class="lp-steps">
-    <li><b>Answer a few questions.</b><span>Your state, locations, whether you have tipped staff, how often you pay. Your dashboard is built from the answers, not from a template.</span></li>
-    <li><b>Connect where hours come from.</b><span>Toast, Square or 7shifts, or import the hours report from any other POS. Hours and tips come in without anyone typing them.</span></li>
-    <li><b>Review and approve.</b><span>Check the hours, see how each tax was worked out, approve. Totali writes the payment file for your bank.</span></li>
-  </ol>
-</section>
-
-<section class="lp-sec lp-alt" id="restaurants">
-  <h2>Built around how a restaurant pays people</h2>
-  <dl class="lp-grid">
-    <div><dt>Tips and tip pools</dt><dd>Card and cash tips, split by hours or by role, shown on each stub and counted toward taxable pay.</dd></div>
-    <div><dt>The tip credit</dt><dd>Tipped cash wage, the written notice you need, and the minimum wage your state expects, checked before you approve.</dd></div>
-    <div><dt>Overtime and split shifts</dt><dd>Overtime is worked out from the week and flagged before you approve, so there are no surprises on payday.</dd></div>
-    <div><dt>Different pay by position</dt><dd>A server, a line cook and a dishwasher are each paid the way their job is paid, and your labor is shown by position.</dd></div>
-    <div><dt>State and city rules</dt><dd>Your state’s withholding and unemployment, and city income taxes where they apply, set up from your answers.</dd></div>
-    <div><dt>More than one location</dt><dd>Add each place. People are paid, and taxed, by where they work.</dd></div>
-  </dl>
-</section>
-
-<section class="lp-sec" id="pos">
-  <div class="lp-two">
-    <div>
-      <h2>Your hours and tips come from your POS</h2>
-      <p>You shouldn’t type the same shifts twice. Connect your system and Totali reads your staff, their hours and their tips. It only reads: it never changes anything in your POS.</p>
-      <ul class="lp-list">
-        <li><b>Toast</b> Connect with your restaurant’s API credentials.</li>
-        <li><b>Square</b> Sign in with Square and approve.</li>
-        <li><b>7shifts</b> Connect with an access token.</li>
-        <li><b>Anything else</b> Export your hours report as a spreadsheet and import it. Totali finds the columns, and you check them before anything is saved.</li>
-      </ul>
-    </div>
-    <div class="lp-card" role="img" aria-label="An imported hours report, with sample data">
-      <div class="lp-card-h"><b>Hours report</b><span>labor.csv</span></div>
-      <table><thead><tr><th>Employee</th><th>Date</th><th>Paid hours</th><th>Card tips</th></tr></thead><tbody>
-        <tr><td>Dana Okafor</td><td>Oct 20</td><td>6.5</td><td>$84.50</td></tr>
-        <tr><td>Tom Whitaker</td><td>Oct 20</td><td>5.0</td><td>$61.75</td></tr>
-        <tr><td>Lucia Ferrante</td><td>Oct 21</td><td>4.0</td><td>$22.00</td></tr>
-      </tbody></table>
-      <p>Columns found: Employee, Date, Paid hours, Card tips. <b>3 shifts ready to import.</b></p>
-      <p class="lp-sample">Sample data</p>
+  <div class="rest-hero-visual">
+    <div class="rest-photo"><img src="/assets/restaurant-chef.jpg" width="700" height="900" alt="A chef at work in a restaurant kitchen" fetchpriority="high"><span>GOOD SERVICE STARTS WITH YOUR PEOPLE.</span></div>
+    <div class="rest-floating-payroll" aria-label="Illustrative payroll review">
+      <div class="rest-preview-top"><span class="rest-preview-mark">H</span><span><b>Harbor Street Kitchen</b><small>Weekly payroll</small></span><span class="rest-preview-pill">For review</span></div>
+      <div class="rest-preview-heading"><small>YOUR NEXT PAYDAY</small><h3>Looking after your people.</h3><b>$8,426<span>.50</span></b><p>12 people · Oct 19–25</p></div>
+      <div class="rest-preview-check"><span>✓</span><div><b>Hours, together</b><small>Imported time, ready for your review</small></div></div>
+      <div class="rest-preview-check"><span>✓</span><div><b>Every paycheck explained</b><small>Wages, tips and taxes in one view</small></div></div>
+      <a class="btn" href="/signup">See your next payday <span aria-hidden="true">→</span></a>
+      <small class="rest-preview-caption">Illustrative preview · Sample data</small>
     </div>
   </div>
 </section>
-
-<section class="lp-sec lp-alt" id="taxes">
-  <div class="lp-two lp-rev">
-    <div class="lp-receipt" role="img" aria-label="A sample pay stub with each tax line, illustrative figures">
-      <div class="lp-card-h"><b>Elena Ruiz, Server</b><span>Oct 19 to 25</span></div>
-      <div class="lp-row"><span>Wages, 32.5 h</span><b>$503.75</b></div>
-      <div class="lp-row"><span>Tips reported</span><b>$412.30</b></div>
-      <div class="lp-row lp-total"><span>Gross pay</span><b>$916.05</b></div>
-      <div class="lp-row"><span>Federal income tax</span><b>-$77.86</b></div>
-      <div class="lp-row"><span>Social Security</span><b>-$56.80</b></div>
-      <div class="lp-row"><span>Medicare</span><b>-$13.28</b></div>
-      <div class="lp-row"><span>State income tax</span><b>-$21.99</b></div>
-      <div class="lp-row lp-total"><span>Net pay</span><b>$746.12</b></div>
-      <p class="lp-sample">Illustrative figures</p>
-    </div>
-    <div>
-      <h2>See how every tax was worked out</h2>
-      <p>Open any paycheck and see federal, Social Security, Medicare and state, line by line, and what each was based on. After a run is approved, a separate check recalculates every tax from the payroll register and reports any difference.</p>
-      <p>New hires fill in their own W-4, I-9 and direct deposit on their phone from a link you send. You see who is still missing something.</p>
-    </div>
-  </div>
-</section>
-
-<section class="lp-sec" id="control">
-  <h2>You stay in control of your money</h2>
-  <div class="lp-cols">
-    <div><b>Totali never holds your money.</b><span>When you approve a run, Totali writes the payment file. You download it, upload it at your own bank and release it there.</span></div>
-    <div><b>Sensitive details are encrypted.</b><span>Social Security numbers, bank account numbers and tax IDs are encrypted before they are stored. Card numbers never reach us: payment is handled by Stripe.</span></div>
-    <div><b>You approve everything.</b><span>Nothing is paid until you review the run and approve it. Anything unusual is flagged first.</span></div>
-  </div>
-</section>
-
-<section class="lp-sec lp-alt" id="pricing">
-  <div class="lp-price">
-    <div>
-      <h2>One price</h2>
-      <p>No per-employee fee, no setup fee, no tiers. Cancel any time and keep access until the period you paid for ends.</p>
-    </div>
-    <div class="lp-plan">
-      <div class="lp-amount"><b>$20</b><span>every 3 months</span></div>
-      <ul>
-        <li>Every employee, however many</li>
-        <li>Every pay run</li>
-        <li>Tax calculations explained</li>
-        <li>POS connection and report import</li>
-        <li>New-hire paperwork and reports</li>
-      </ul>
-      <form class="lp-join" data-signup><input type="email" placeholder="Work email" aria-label="Work email"><button class="btn" type="submit">Get started</button></form>
-    </div>
-  </div>
-</section>
-
-<section class="lp-sec" id="faq">
-  <h2>Questions</h2>
-  <div class="lp-faq">
-    <details><summary>Does Totali pay my employees?</summary><p>No. Totali works out the pay and writes the payment file. You upload it to your own bank, which sends the money. Totali never holds or moves your money.</p></details>
-    <details><summary>Does Totali file my taxes?</summary><p>Totali calculates your payroll taxes, shows what is due and when, and prepares the figures for your filings. It does not file returns or send tax payments for you, so you or your accountant still do that.</p></details>
-    <details><summary>Which POS systems work?</summary><p>You can connect Toast, Square or 7shifts. Any other system that can export an hours report as a spreadsheet works through the report import. Clover sign-in is coming.</p></details>
-    <details><summary>Does it work in my state?</summary><p>Totali sets up your state’s withholding, unemployment and new-hire form from your answers, and city income taxes where they apply. Where a rule is not modeled, the app tells you and asks you to decide it.</p></details>
-    <details><summary>What if I have a lot of employees?</summary><p>The price does not change. It is $20 every three months for the whole restaurant.</p></details>
-    <details><summary>Can I cancel?</summary><p>Any time, from Billing. You keep access until the three months you paid for are up.</p></details>
-  </div>
-</section>
-
-<footer class="lp-foot">
-  <a class="logo sm" href="/">totali</a>
-  <p>Totali is a product of OMNIA TAX LLC. Sample data on this page is made up. <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · hello@omnia.tax</p>
-</footer>
-</div>
-`;
+<section class="rest-connection-strip" id="pos"><div class="restaurant-eyebrow">KEEP THE TOOLS YOUR TEAM ALREADY KNOWS</div><div class="rest-pos-logos"><span>◩ Square</span><span>toast</span><span>7shifts</span><span>Clover</span><span>+ your time-clock report</span></div><p>Connect supported APIs with approved access, or import a CSV from your POS. Live access depends on your provider.</p></section>
+<section class="rest-section" id="how"><div class="rest-section-intro"><div><div class="restaurant-eyebrow">A BETTER RHYTHM, FROM SHIFT TO PAYDAY</div><h2>Less busywork.<br><em>More hospitality.</em></h2></div><p>A clear path through payroll. Bring in the details, check what matters, and get back to the floor.</p></div><div class="rest-three-steps"><article><span>01 / GATHER</span><div class="rest-step-art"><span>◷</span><div>Hours & tips<b>One place. Your whole team.</b></div></div><h3>Your shifts, together.</h3><p>Read time and tips from Square, Toast or 7shifts. Import an exported report from other tools. Match your people before hours enter payroll.</p></article><article><span>02 / REVIEW</span><div class="rest-step-art"><span>≡</span><div>Every paycheck<b>Know where every dollar goes.</b></div></div><h3>A clear view of payday.</h3><p>Check regular hours, overtime and tips, then see the gross-to-net calculation for each person. Anything that needs attention stays visible.</p></article><article><span>03 / APPROVE</span><div class="rest-step-art"><span>✓</span><div>Ready for the next step<b>Approved. Recorded. In order.</b></div></div><h3>One less thing on your list.</h3><p>Approve the run, prepare pay stubs and get the payment file for your bank. Your bank releases the payment; you stay in control.</p></article></div></section>
+<section class="rest-people-section" id="restaurants"><div class="rest-people-photo"><img src="/assets/restaurant-team.jpg" width="700" height="800" alt="A restaurant team member preparing for service" loading="lazy"></div><div class="rest-people-copy"><div class="restaurant-eyebrow">BUILT AROUND RESTAURANT LIFE</div><h2>The people who make<br><em>your place, your place.</em></h2><p>From your first line cook to your busiest Friday night. A workspace that understands the details behind a restaurant payday.</p><div class="rest-feature-line"><b>Tips that stay accounted for.</b><p>Card tips, reported cash tips, tip pools and tip-credit notes. Cash already received is taxed without being paid twice.</p></div><div class="rest-feature-line"><b>A warmer welcome for new hires.</b><p>Send an invitation. They complete their W-4, I-9 section 1 and direct-deposit details on their phone.</p></div><div class="rest-feature-line"><b>The numbers, with context.</b><p>Hours, estimated wages and labor by role. Payroll history and pay stubs are a click away.</p></div><a href="/signup" class="rest-text-link">Make room for a better payday ↗</a></div></section>
+<section class="rest-section rest-price-section" id="pricing"><div><div class="restaurant-eyebrow">ONE RESTAURANT. ONE SIMPLE PRICE.</div><h2>A little less admin.<br><em>A lot more breathing room.</em></h2><p>Your whole team included. Your payroll records in one place.</p><a class="rest-text-link" href="#faq">A few things to know ↓</a></div><div class="rest-price-card"><div class="rest-price-amount">$20<span>every 3 months</span></div><p>For the whole restaurant. No per-person fee.</p><ul><li>Every employee and pay run</li><li>Hours, tips and overtime review</li><li>POS connections and report imports</li><li>Tax calculations and pay stubs</li><li>New-hire paperwork and payroll history</li></ul><a class="btn" href="/signup">Get your restaurant set up ↗</a><small>Cancel from Billing. Access continues through your paid period.</small></div></section>
+<section class="rest-section rest-faq" id="faq"><div class="restaurant-eyebrow">GOOD QUESTIONS</div><h2>A few things to know.</h2><div class="lp-faq"><details><summary>Does Totali send the money?</summary><p>In the default employer-bank flow, Totali prepares a payment file. You release it at your bank. Approving payroll does not release a bank payment.</p></details><details><summary>What about payroll taxes?</summary><p>Totali calculates payroll taxes, explains the amounts and prepares records. Agency filing and tax remittance still require you or your provider.</p></details><details><summary>Which POS systems can I connect?</summary><p>Square, Toast and 7shifts have API adapters. Access and permissions depend on the provider. Clover requires approved app access. Other systems use a CSV report import; partner access and live-account testing are still required for some connectors.</p></details><details><summary>What if something isn’t supported?</summary><p>The review shows blocking issues and review notes. Unsupported rules are surfaced for a person to review rather than silently treated as zero.</p></details><details><summary>Is this only for full-service restaurants?</summary><p>No. Setup covers cafés, bars, quick service, fine dining, food trucks, catering, pizzerias and more.</p></details></div></section>
+<section class="rest-last-call"><div class="restaurant-eyebrow">HERE’S TO YOUR NEXT CHAPTER</div><h2>Great service.<br><em>A better payday.</em></h2><a class="btn" href="/signup">Start your restaurant workspace ↗</a></section>
+</main><footer class="lp-foot"><a class="logo sm" href="/">totali<span class="rest-logo-dot">✳</span></a><p>A product of OMNIA TAX LLC.<br>Illustrative preview uses sample data. <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/login">Workspace login</a></p></footer>
+</div>`;
