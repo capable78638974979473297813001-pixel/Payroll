@@ -168,15 +168,6 @@ export function resetEmail(a: { to: string; firstName: string; code: string; exp
   return { to: a.to, subject: 'Your password reset code', html, text: `Hi ${a.firstName}, your Totali password reset code is ${a.code}. It expires in ${minutes} minute(s). If you didn’t ask for it, ignore this email.` };
 }
 
-export function depositChangeEmail(a: { to: string; ownerName: string; employeeName: string; link: string }): Message {
-  const html = wrap(
-    `${escapeHtml(a.employeeName)} asked to change their bank account`,
-    `${para(`Hi ${escapeHtml(a.ownerName)}, ${escapeHtml(a.employeeName)} entered a new account for their direct deposit. Nothing changes until you approve it. If you don’t recognize this, decline it and ask them in person.`)}${button(a.link, 'Review the change')}`,
-    'OMNIA TAX LLC',
-  );
-  return { to: a.to, subject: `${a.employeeName} asked to change their direct deposit`, html, text: `${a.employeeName} entered a new bank account. Nothing changes until you approve it: ${a.link}` };
-}
-
 export function inviteEmail(a: { to: string; firstName: string; businessName: string; link: string; forms: string[] }): Message {
   const forms = a.forms.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
   const html = wrap(

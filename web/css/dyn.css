@@ -114,18 +114,3 @@ a.it { color: inherit; text-decoration: none; cursor: pointer; }
 
 .legal-page { max-width: 780px; margin: 10px auto 90px; padding: 0 24px; }
 
-/* the employee code, and the card you print for the break room */
-.joincode { font: 500 34px/1.1 "IBM Plex Mono", ui-monospace, monospace; letter-spacing: .14em; color: var(--berry); background: color-mix(in srgb, var(--berry) 7%, var(--paper, #fff)); border: 1px dashed color-mix(in srgb, var(--berry) 40%, transparent); border-radius: 10px; padding: 16px 18px; text-align: center; user-select: all; }
-.flyer { display: none; }
-@media print {
-  body.printing-flyer #app, body.printing-flyer .toasts, body.printing-flyer .modal-overlay { display: none !important; }
-  body.printing-flyer { background: #fff !important; }
-  body.printing-flyer .flyer { display: block; max-width: 520px; margin: 60px auto; font-family: "Instrument Sans", system-ui, sans-serif; color: #222; text-align: center; }
-  .flyer h1 { font: 400 40px Fraunces, serif; color: #8E1F4E; margin-bottom: 8px; }
-  .flyer .lead { font-size: 20px; margin-bottom: 28px; }
-  .flyer ol { text-align: left; font-size: 19px; line-height: 1.8; margin: 0 auto 28px; max-width: 420px; }
-  .flyer .code { font: 500 54px "IBM Plex Mono", monospace; letter-spacing: .16em; border: 3px dashed #8E1F4E; padding: 20px; margin-bottom: 18px; color: #8E1F4E; }
-  .flyer .small { color: #666; }
-}
-.emp .rt2 .who-name { color: var(--d-muted); }
-.emp .nav .signout { font: inherit; }

@@ -40,7 +40,7 @@ test('the design\'s restaurant gets cards for what it said: tips, a tip pool, Mi
   const mods = c.tabs.find((t) => t.id === 'overview')!.widgets.filter((w) => w.type === 'module');
   assert.deepEqual(mods.map((w) => w.settings.module), ['pay_run', 'team', 'hours_tips', 'federal_taxes', 'new_hire_forms', 'state_mi', 'locations', 'contractors']);
   assert.deepEqual(mods.map((w) => w.span), [8, 4, 4, 4, 4, 4, 4, 4]);
-  for (const t of ['time_week', 'tips_panel']) assert.ok(types(c, 'time').includes(t), t);
+  for (const t of ['pos_status', 'tips_panel']) assert.ok(types(c, 'time').includes(t), t);
   for (const t of ['locations_card', 'contractors_card']) assert.ok(types(c, 'people').includes(t), t);
 });
 

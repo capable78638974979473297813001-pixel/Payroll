@@ -18,11 +18,6 @@ export function brandMark(brand) {
 
 const initials = (u) => `${(u.firstName || '')[0] || ''}${(u.lastName || '')[0] || ''}`.toUpperCase() || 'T';
 
-/** The "add your employees" prompt is shown once, the first time the new dashboard opens. */
-function takeWelcome() {
-  try { if (sessionStorage.getItem('totali_welcome') !== '1') return false; sessionStorage.removeItem('totali_welcome'); return true; } catch { return false; }
-}
-
 /**
  * Wraps every page of the signed-in app: the company's own theme, name and tabs around whatever the page draws.
  * `config` is the saved dashboard, or the editor's draft, so a theme change shows at once while editing.
@@ -51,7 +46,6 @@ export async function appPage(ctx, { active, title, render, config: override, ed
   root.append(frame);
   const out = await render({ root, main, config, t, data: app.data, dash: app.dash });
   if (out) main.append(out);
-  if (!editbar && active === firstPage(config).id && takeWelcome()) setTimeout(() => import('./access.js').then((m) => m.welcomeModal()), 250);
   return { title: `${title} | ${config.brand.name}`, el: root };
 }
 

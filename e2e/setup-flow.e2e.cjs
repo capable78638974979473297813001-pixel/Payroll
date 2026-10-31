@@ -24,12 +24,10 @@ const counter = async (page) => ({
     await page.waitForSelector('.indgrid .it');
     await shot('industry');
 
-    // Totali is for independent restaurants: one card, and you say yours is one before going on
+    // Totali is payroll for restaurants: one card
     assert.equal(await page.locator('.indgrid .it').count(), 1);
     assert.deepEqual(await page.locator('.indgrid .it').first().locator('.tags .chip').allTextContents(), ['Tips', 'Shift hours', 'Tip pool']);
-    assert.ok((await page.locator('.indhead').textContent()).includes('franchises or fast food chains'));
-    assert.equal(await page.locator('.indfoot .btn').isDisabled(), true, 'it waits for the owner to say the restaurant is independent');
-    await page.check('[data-testid=independent]', { force: true });
+    assert.ok((await page.locator('.indhead').textContent()).includes('payroll for restaurants'));
     await page.click('.indfoot .btn');
     await page.waitForURL('**/setup/builder');
     await page.waitForSelector('[data-testid=counter]');
@@ -136,16 +134,6 @@ const counter = async (page) => ({
 
     await page.click('.qfoot .btn:has-text("Build my dashboard")');
     await page.waitForURL('**/app');
-    // the first thing the new dashboard says: add your employees, and here is the code
-    await page.waitForSelector('[data-testid=welcome]');
-    assert.match((await page.locator('[data-testid=welcome] [data-testid=join-code]').textContent()).trim(), /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
-    assert.match(await page.locator('[data-testid=welcome] [data-testid=code-life]').textContent(), /3 days left/);
-    await shot('welcome');
-    await page.click('[data-testid=welcome-done]');
-    await page.waitForFunction(() => !document.querySelector('[data-testid=welcome]'));
-    await page.reload();
-    await page.waitForSelector('[data-testid=grid]');
-    assert.equal(await page.locator('[data-testid=welcome]').count(), 0, 'it is shown once');
     console.log('setup flow: ok');
   } finally {
     if (problems.length) console.log('browser problems:\n' + problems.join('\n'));

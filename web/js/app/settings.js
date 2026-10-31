@@ -6,10 +6,9 @@ import { session, signOut } from '../session.js';
 import { appPage } from './shell.js';
 import { app, base, loadApp, refreshData } from './state.js';
 import { bodyFor, summarize } from '../pages/setup.js';
-import { accessCard } from './access.js';
 import { posSection } from './pos.js';
 
-const SECTIONS = [['dashboard', 'Your dashboard'], ['company', 'Company'], ['schedule', 'Pay schedule'], ['state', 'State accounts'], ['people', 'People and roles'], ['pos', 'Point of sale'], ['access', 'Employee access'], ['payments', 'Paying your team'], ['account', 'Account']];
+const SECTIONS = [['dashboard', 'Your dashboard'], ['company', 'Company'], ['schedule', 'Pay schedule'], ['state', 'State accounts'], ['people', 'People and roles'], ['pos', 'Point of sale'], ['payments', 'Paying your team'], ['account', 'Account']];
 const italic = { fontFamily: 'Fraunces, serif', fontStyle: 'italic', color: 'var(--berry)' };
 
 export function settingsPage() {
@@ -17,7 +16,7 @@ export function settingsPage() {
     await refreshData();
     const section = ctx.params.section && SECTIONS.some(([id]) => id === ctx.params.section) ? ctx.params.section : 'dashboard';
     const nav = h('div', { class: 'subnav' }, ...SECTIONS.map(([id, label]) => link(id === 'dashboard' ? '/app/settings' : `/app/settings/${id}`, { class: id === section ? 'on' : '', 'data-section': id }, label)), link('/app/billing', { 'data-section': 'billing' }, 'Billing'));
-    const content = await ({ dashboard, company, schedule, state, people, pos: posSection, access, payments, account })[section]();
+    const content = await ({ dashboard, company, schedule, state, people, pos: posSection, payments, account })[section]();
     return h('div', {}, h('div', { class: 'ph2' }, h('div', {}, h('h1', { class: 'pt' }, h('em', {}, 'Settings')), h('p', {}, 'Company, taxes and who has access'))),
       h('div', { class: 'grid', style: { gridTemplateColumns: '200px minmax(0,1fr)', alignItems: 'start' } }, h('div', {}, nav), content));
   } });
@@ -129,11 +128,6 @@ async function people() {
   return h('div', { class: 'card', style: { maxWidth: '640px' } }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Roles at your business')),
     ...roles.map((r) => h('div', { class: 'row' }, h('span', { class: 'l1' }, h('b', {}, r.label), h('i', {}, `${r.pay === 'hourly' ? 'Paid by the hour' : 'Salaried'}${r.tipped !== 'never' ? ', earns tips' : ''}`)), h('span', { class: 'cap' }, plural(counts.get(r.label) || 0, 'person', 'people')))),
     h('p', { class: 'cap', style: { marginTop: '10px' } }, 'These come from your industry’s starting setup and decide who can be tipped, who is salaried and who shares a tip pool.'));
-}
-
-// ---------------------------------------------------------------- employee access: the code your team signs in with
-async function access() {
-  return h('div', { class: 'card', style: { maxWidth: '640px' } }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Employee sign-in code')), await accessCard());
 }
 
 // ---------------------------------------------------------------- paying your team: the employer's own bank

@@ -5,7 +5,6 @@ import { Button, Alert, Chip, Field, modal, setLoading, toast } from '../ui.js';
 import { appPage } from './shell.js';
 import { app, base, refreshData } from './state.js';
 import { who, dollarsToCents, parseCsv, rangeLabel } from './payroll.js';
-import { accessCard } from './access.js';
 
 // ---------------------------------------------------------------- a tiny bus, so the cards on a page stay in step
 const bus = new EventTarget();
@@ -96,79 +95,13 @@ export const peopleCards = {
           h('tbody', {}, ...r.people.map((p) => {
             const remind = p.canRemind ? (() => { const b = h('button', { class: 'link as-button', type: 'button', 'data-remind': p.employeeId }, p.linkExpired ? 'Send a new link' : 'Send reminder'); b.addEventListener('click', () => sendReminder(p, b)); return b; })() : null;
             const s2 = p.i9NeedsSection2 ? h('button', { class: 'link as-button', type: 'button', 'data-i9': p.employeeId, onClick: () => i9Section2Modal(p) }, 'I-9 section 2') : null;
-            const bank = p.pendingDeposit ? h('span', { class: 'bank-change' }, Chip('Bank change', 'warn'), ' ', h('button', { class: 'link as-button', type: 'button', 'data-approve-bank': p.employeeId, onClick: async () => { try { await api.post(`${base()}/employees/${p.employeeId}/deposit-change`, { approve: true }); toast('success', `${p.name.split(' ')[0]}’s new account is approved. It’s verified before it’s used.`); peopleChanged(); } catch (e) { toast('error', e.message); } } }, 'Approve'), ' · ', h('button', { class: 'link as-button', type: 'button', 'data-decline-bank': p.employeeId, onClick: async () => { try { await api.post(`${base()}/employees/${p.employeeId}/deposit-change`, { approve: false }); toast('success', 'Declined.'); peopleChanged(); } catch (e) { toast('error', e.message); } } }, 'Decline')) : null;
             return h('tr', { 'data-employee': p.employeeId }, h('td', {}, link(`/app/people/${p.employeeId}`, { class: 'who-link' }, who(p.name, `${p.role}${p.location ? `, ${p.location}` : ''}`))),
-              h('td', { class: 'l hm' }, p.invited ? `Invited ${shortDate(p.invitedAt.slice(0, 10))}${p.startDate ? ` · starts ${shortDate(p.startDate)}` : ''}` : 'On payroll'), h('td', { class: 'l' }, paperwork(p)), h('td', { class: 'l' }, statusChip(p)), h('td', { class: 'l hm' }, bank, bank && (remind || s2) ? ' · ' : null, remind, remind && s2 ? ' · ' : null, s2));
+              h('td', { class: 'l hm' }, p.invited ? `Invited ${shortDate(p.invitedAt.slice(0, 10))}${p.startDate ? ` · starts ${shortDate(p.startDate)}` : ''}` : 'On payroll'), h('td', { class: 'l' }, paperwork(p)), h('td', { class: 'l' }, statusChip(p)), h('td', { class: 'l hm' }, remind, remind && s2 ? ' · ' : null, s2));
           }))) : h('div', { class: 'empty' }, 'Nobody to onboard yet. Invite a new hire on the right.'));
       } catch (e) { body.replaceChildren(Alert('error', e.message)); }
     };
     load(); onChange(load);
     return { title: null, head: h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Who’s finished'), cap), body };
-  },
-
-  join_requests({ data }) {
-    const body = h('div', {}, h('div', { class: 'empty' }, 'Loading…'));
-    const cap = h('span', { class: 'cap' });
-    const c = data.company;
-    const when = (iso) => shortDate(iso.slice(0, 10));
-    function approveModal(r, list) {
-      const roleSel = Field({ label: 'Role', name: 'roleKey', select: true, value: c.roles[0] && c.roles[0].key, options: c.roles.map((x) => ({ value: x.key, label: x.label })) });
-      const locSel = c.locations.length ? Field({ label: 'Location', name: 'location', select: true, value: c.locations[0].name, options: c.locations.map((l) => ({ value: l.name, label: l.name })) }) : null;
-      const salaried = () => (c.roles.find((x) => x.key === roleSel.value) || {}).pay === 'salary';
-      const rate = Field({ label: 'Hourly rate', name: 'rate', placeholder: '15.50', inputmode: 'decimal' });
-      const start = Field({ label: 'Start date', name: 'startDate', type: 'date', value: new Date().toISOString().slice(0, 10) });
-      const hasTipCredit = app.data.built.modules.some((x) => x.items.some((i) => i.id === 'tip_credit'));
-      const tippedRole = () => (c.roles.find((x) => x.key === roleSel.value) || {}).tipped !== 'never';
-      const notice = hasTipCredit ? h('label', { class: 'ck2', hidden: true }, h('input', { type: 'checkbox', name: 'tipCreditNotice', 'data-testid': 'approve-tip-notice' }), h('span', {}, 'I gave them the tip credit notice in writing')) : null;
-      const sync = () => { rate.el.querySelector('label').firstChild.textContent = salaried() ? 'Annual salary' : 'Hourly rate'; if (notice) notice.hidden = !tippedRole(); };
-      roleSel.input.addEventListener('change', sync); sync();
-      const link2 = Field({ label: 'Already on your team?', name: 'link', select: true, value: r.sameEmail || '', options: [{ value: '', label: 'No, add them as a new person' }, ...list.unlinked.map((e) => ({ value: e.id, label: `Yes, this is ${e.name} (${e.role})` }))] });
-      const newBits = h('div', { class: 'f' }, h('div', { class: 'r2' }, roleSel.el, locSel ? locSel.el : h('div')), h('div', { class: 'r2' }, rate.el, start.el), notice);
-      const showBits = () => { newBits.hidden = !!link2.value; };
-      link2.input.addEventListener('change', showBits); showBits();
-      const err = h('div', {}); const go = Button({ type: 'button', 'data-testid': 'approve-go' }, 'Approve');
-      const m = modal({ title: `Approve ${r.name}`, body: h('div', { class: 'f' }, h('p', { class: 'fine', style: { margin: 0 } }, `Their W-4, I-9 section 1${r.forms.deposit ? ' and bank details' : ''} come across with them. You set the job and the pay.`), list.unlinked.length ? link2.el : null, newBits, err), actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Cancel'), go] });
-      go.addEventListener('click', async () => {
-        err.replaceChildren();
-        const linking = list.unlinked.length && link2.value;
-        const cents = dollarsToCents(rate.value);
-        if (!linking && !cents) return rate.setError(salaried() ? 'Enter their yearly pay, like 52000.' : 'Enter their hourly rate, like 15.50.');
-        setLoading(go, true);
-        try {
-          await api.post(`${base()}/portal/requests/${r.accountId}/approve`, linking ? { linkEmployeeId: link2.value } : { roleKey: roleSel.value, rateCents: cents, ...(locSel ? { location: locSel.value } : {}), startDate: start.value, ...(notice && tippedRole() ? { tipCreditNotice: notice.querySelector('input').checked } : {}) });
-          m.close(); toast('success', `${r.firstName} is on your team.`); await refreshData(); peopleChanged(); load();
-        } catch (e) { err.replaceChildren(Alert('error', e.message)); setLoading(go, false); }
-      });
-    }
-    function declineModal(r) {
-      const why = Field({ label: 'Reason (they will see it)', name: 'reason', optional: true, placeholder: 'We aren’t hiring right now.' });
-      const go = Button({ type: 'button', 'data-testid': 'decline-go' }, 'Decline');
-      const m = modal({ title: `Decline ${r.name}?`, body: h('div', { class: 'f' }, h('p', { class: 'fine', style: { margin: 0 } }, 'Their details are deleted. They can fix something and send it again.'), why.el), actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Cancel'), go] });
-      go.addEventListener('click', async () => { setLoading(go, true); try { await api.post(`${base()}/portal/requests/${r.accountId}/decline`, { reason: why.value }); m.close(); toast('success', 'Declined.'); await refreshData(); load(); } catch (e) { toast('error', e.message); setLoading(go, false); } });
-    }
-    async function load() {
-      try {
-        const list = await api.get(`${base()}/portal/requests`);
-        const total = list.requests.length + list.resets.length;
-        cap.textContent = total ? String(total) : '';
-        const act = (path, ok) => async () => { try { await api.post(`${base()}/portal/resets/${path}`); toast('success', ok); await refreshData(); load(); } catch (e) { toast('error', e.message); } };
-        const resetRows = list.resets.map((r) => h('div', { class: 'row', 'data-reset': r.accountId },
-          h('span', { class: 'l1' }, h('b', {}, r.name), h('i', {}, `Asked to reset their password · ${when(r.askedAt)}`)),
-          h('span', { class: 'acts' }, Button({ size: 'sm', type: 'button', 'data-testid': 'allow-reset', onClick: act(`${r.accountId}/allow`, 'Allowed. They have a day to choose a new password.') }, 'Allow'), h('button', { class: 'link as-button', type: 'button', onClick: act(`${r.accountId}/dismiss`, 'Ignored.') }, 'Ignore'))));
-        body.replaceChildren(total ? h('div', {}, ...list.requests.map((r) => h('div', { class: 'row', 'data-request': r.accountId },
-          h('span', { class: 'l1' }, h('b', {}, r.name), h('i', {}, `${r.email} · sent ${when(r.submittedAt)}${r.sameEmail ? ' · matches someone you added' : ''}`)),
-          h('span', { class: 'acts' }, Button({ size: 'sm', type: 'button', 'data-testid': 'review-request', onClick: () => approveModal(r, list) }, 'Review'), h('button', { class: 'link as-button', type: 'button', onClick: () => declineModal(r) }, 'Decline')))), ...resetRows)
-          : h('div', { class: 'empty' }, 'Nobody is waiting. When someone makes an account with your code and sends their details, or forgets their password, they show up here.'));
-      } catch (e) { body.replaceChildren(Alert('error', e.message)); }
-    }
-    load(); onChange(load);
-    return { title: null, head: h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Requests'), cap), body };
-  },
-
-  employee_access() {
-    const body = h('div', {}, h('div', { class: 'empty' }, 'Loading…'));
-    accessCard().then((el) => body.replaceChildren(el)).catch((e) => body.replaceChildren(Alert('error', e.message)));
-    return { title: 'Employee code', body };
   },
 
   invite_form({ data }) {

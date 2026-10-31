@@ -48,12 +48,12 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   if (has('contractors')) people.push(w('contractors_card', 6));
   tabs.push({ id: 'people', label: 'People', kind: 'page', widgets: people });
 
-  const time: DashboardWidget[] = has('tip_reporting') ? [w('pos_status', 12), w('time_week', 8), w('tips_panel', 4), w('overtime_watch', 6)] : [w('pos_status', 12), w('time_week', 12), w('overtime_watch', 6)];
+  const time: DashboardWidget[] = has('tip_reporting') ? [w('pos_status', 8), w('tips_panel', 4), w('overtime_watch', 6)] : [w('pos_status', 12), w('overtime_watch', 6)];
   const group = has('dept_costs') ? 'department' : has('crew_hours') ? 'crew' : has('job_costs') ? 'job' : has('wc_payroll') ? 'wc' : null;
   if (group) time.push(w('group_cost', 12, { groupBy: group }));
   tabs.push({ id: 'time', label: restaurant ? 'Time and tips' : 'Time', kind: 'page', widgets: time });
 
-  tabs.push({ id: 'onboarding', label: 'Onboarding', kind: 'page', widgets: [w('join_requests', 8), w('employee_access', 4), w('onboarding_board', 8), w('invite_form', 4), w('forms_status', 6), w('onboarding_progress', 6)] });
+  tabs.push({ id: 'onboarding', label: 'Onboarding', kind: 'page', widgets: [w('onboarding_board', 8), w('invite_form', 4), w('forms_status', 6), w('onboarding_progress', 6)] });
   const taxTab: DashboardWidget[] = [w('tax_due', 12, { count: 20 }), w('compliance', 6)];
   for (const st of a.states) taxTab.push(w('state_card', 6, { state: st }));
   tabs.push({ id: 'taxes', label: 'Taxes', kind: 'page', widgets: taxTab });

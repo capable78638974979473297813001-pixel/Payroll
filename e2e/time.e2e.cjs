@@ -1,4 +1,4 @@
-// Time and tips: edit hours by day, see tips and the pool split, move between weeks.
+// Hours and tips: the week's tips and how the pool splits them. Hours themselves come from the point of sale.
 const assert = require('node:assert/strict');
 const { startServer, openBrowser, signUpAndVerify, buildCompany } = require('./helpers.cjs');
 
@@ -23,39 +23,17 @@ const { startServer, openBrowser, signUpAndVerify, buildCompany } = require('./h
       return { weekStart: d, ids: [a.id, b.id, c.id] };
     });
     await page.goto(`${server.base}/app/time`);
-    await page.waitForSelector('[data-type=time_week] input[data-employee]');
     await page.waitForSelector('[data-type=tips_panel] .stats');
+    assert.equal(await page.locator('[data-type=time_week]').count(), 0, 'hours are not typed in here: they come from the point of sale');
+    assert.ok((await page.locator('[data-type=pos_status]').textContent()).includes('Hours and tips'));
     if (shots) await page.screenshot({ path: `${shots}/time-tips.png`, fullPage: true });
     const tips = await page.locator('[data-type=tips_panel]').textContent();
     assert.ok(tips.includes('$400.00') && tips.includes('$25.00') && tips.includes('$425.00'), 'card, cash and total');
     // the pool splits the card tips by hours: Elena 8h, Tom 4h -> $266.67 / $133.33
     assert.ok(tips.includes('$266.67') && tips.includes('$133.33'), tips);
-
-    // edit a day: the total and the pool move
-    const cook = page.locator(`input[data-employee="${ids[2]}"]`);
-    await cook.nth(0).fill('8');
-    await cook.nth(0).dispatchEvent('change');
-    await page.waitForSelector('tr[data-employee] b:text-is("8")');
-    const date1 = await page.locator(`input[data-employee="${ids[1]}"]`).nth(1).getAttribute('data-date');
-    await page.locator(`input[data-employee="${ids[1]}"][data-date="${date1}"]`).fill('8');
-    await page.locator(`input[data-employee="${ids[1]}"][data-date="${date1}"]`).dispatchEvent('change');
-    await page.waitForFunction(() => document.querySelector('[data-type=tips_panel]').textContent.includes('$200.00'));
-    // a bad value is refused and put back
-    await cook.nth(1).fill('abc'); await cook.nth(1).dispatchEvent('change');
-    await page.waitForSelector('.toasts .alert:has-text("from 0 to 24")');
-    assert.equal(await cook.nth(1).inputValue(), '');
-    // split by role
+    // split by role instead
     await page.click('[data-testid=toggle-split]');
     await page.waitForSelector('text=by role');
-    // previous week is empty of hours, and next returns
-    await page.click('[data-testid=prev-week]');
-    await page.waitForFunction(() => document.querySelector('[data-type=tips_panel]').textContent.includes('No tips entered'));
-    await page.click('[data-testid=next-week]');
-    await page.waitForSelector('[data-type=tips_panel] .stats b:text-is("$400.00")');
-    // it all persisted
-    await page.reload();
-    await page.waitForSelector('[data-type=time_week] input[data-employee]');
-    assert.equal(await page.locator(`input[data-employee="${ids[2]}"]`).nth(0).inputValue(), '8');
     console.log('time and tips: ok');
   } finally {
     if (problems.length) console.log('browser problems:\n' + problems.join('\n'));

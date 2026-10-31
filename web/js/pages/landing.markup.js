@@ -3,14 +3,14 @@ export default `
 
 <header class="top">
   <a class="logo" href="#" aria-label="Totali">totali<svg viewBox="0 0 120 10" preserveAspectRatio="none"><path d="M2 6 C 22 1, 40 9, 62 5 S 100 2, 118 6" fill="none" stroke="#F0613A" stroke-width="2.6" stroke-linecap="round"/></svg></a>
-  <nav><a href="#taxes">Taxes</a><a href="#onboarding">Onboarding</a><a href="#roles">Roles</a><a href="#industries">Industries</a><a href="#pricing">Pricing</a></nav>
-  <a class="link" style="margin-right:6px" href="/employee">Employee sign in</a><a class="link" style="margin-right:6px" href="/login">Log in</a><a class="btn sm" href="/signup">Create account</a>
+  <nav><a href="#taxes">Taxes</a><a href="#onboarding">Onboarding</a><a href="#pos">Your POS</a><a href="#industries">Industries</a><a href="#pricing">Pricing</a></nav>
+  <a class="link" style="margin-right:6px" href="/login">Log in</a><a class="btn sm" href="/signup">Create account</a>
 </header>
 
 <section class="hero">
   <div class="hero-copy">
     <h1>Payroll for the <em>whole crew</em>, in one place.</h1>
-    <p>Hours, tips and taxes in one pay run. New hires finish their W-4, I-9 and direct deposit setup on their phone. Built for independent restaurants. It isn’t made for franchises or fast food chains.</p>
+    <p>Hours, tips and taxes in one pay run. New hires finish their W-4, I-9 and direct deposit setup on their phone. Hours and tips come straight from your point of sale. Built for restaurants.</p>
     <form class="join" data-signup><input type="email" placeholder="Work email" aria-label="Work email"><button class="btn" type="submit">Create account</button></form>
     <small>Taxes are calculated by the Omnia.tax engine.</small>
     <div class="hand h1n"><span>Missing paperwork gets flagged before payday</span>
@@ -114,32 +114,32 @@ export default `
   </div>
 </section>
 
-<section class="band teal" id="roles">
-  <h2>Three people, three <em>views</em> of the same week.</h2>
+<section class="band teal" id="pos">
+  <h2>Hours and tips from the system you <em>already use</em>.</h2>
   <div class="rrows">
     <div class="rr">
-      <div class="rt"><b>Owner</b><p>The whole run and the totals. You approve it.</p></div>
+      <div class="rt"><b>Toast</b><p>Connect with your restaurant’s API credentials. Staff, hours and card and cash tips come in with one click, and you review them before you run payroll.</p></div>
       <div class="mu mu-o">
-        <div class="mh"><b>Weekly pay run</b><span>Draft</span></div>
-        <div class="big"><i>Net pay</i><b>$5,360.62</b></div>
-        <div class="mf"><span>2 items to review</span><span class="abtn">Review and approve</span></div>
+        <div class="mh"><b>Toast</b><span>Pulled today</span></div>
+        <div class="big"><i>This pay period</i><b>312 hours</b></div>
+        <div class="mf"><span>41 shifts · $4,106 in tips</span><span class="abtn">Pull again</span></div>
       </div>
     </div>
     <div class="rr">
-      <div class="rt"><b>Manager</b><p>Hours for their own team, confirmed before payroll closes. Coming soon.</p></div>
+      <div class="rt"><b>Square</b><p>Sign in with Square and approve Totali. Team timecards, declared cash tips and card tips by team member.</p></div>
       <div class="mu mu-m">
-        <div class="mh"><b>Thursday dinner</b><span>6 on shift</span></div>
-        <div class="ln"><span>Dana Okafor</span><i>5:00 to 11:30</i><u>Confirm</u></div>
-        <div class="ln"><span>Tom Whitaker</span><i>5:00 to 10:00</i><u>Confirm</u></div>
-        <div class="ln"><span>Lucia Ferrante</span><i>5:30 to 9:30</i><u class="done">Confirmed</u></div>
+        <div class="mh"><b>Square</b><span>Connected</span></div>
+        <div class="ln"><span>Dana Okafor</span><i>5:00 to 11:30</i><u class="done">Matched</u></div>
+        <div class="ln"><span>Tom Whitaker</span><i>5:00 to 10:00</i><u class="done">Matched</u></div>
+        <div class="ln"><span>Pat Lowry</span><i>4:00 to 9:00</i><u>Match</u></div>
       </div>
     </div>
     <div class="rr">
-      <div class="rt"><b>Employee</b><p>Their own pay stubs and details. Nothing about anyone else.</p></div>
+      <div class="rt"><b>7shifts and everything else</b><p>Using 7shifts, connect it with a token. Using anything else, export your hours report and import it. Totali finds the columns and you check them before anything is saved.</p></div>
       <div class="mu mu-e">
-        <div class="mh"><b>Pay stub</b><span>Fri, Oct 30</span></div>
-        <div class="big"><i>Net pay</i><b>$746.12</b></div>
-        <div class="mf"><span>32.5 hours, $412.30 tips</span><u>Update deposit details</u></div>
+        <div class="mh"><b>Hours report</b><span>labor.csv</span></div>
+        <div class="big"><i>Found</i><b>18 shifts</b></div>
+        <div class="mf"><span>Employee, Date, Clock in, Paid hours</span><u>Import</u></div>
       </div>
     </div>
   </div>
@@ -150,13 +150,13 @@ export default `
   <div class="two ind">
     <figure class="photo p3"><img src="/assets/img/chef.jpg" alt="Cooks plating dishes at the pass"></figure>
     <div>
-      <h2>Made for <em>independent restaurants</em>.</h2>
-      <p class="sub">Totali does one kind of business: a restaurant you own and run, with one location or a few. It is not built for franchises or fast food chains, so it doesn't try to be.</p>
+      <h2>Made for <em>restaurants</em>.</h2>
+      <p class="sub">Totali does one kind of business, so everything in it is built around how a restaurant pays people.</p>
       <dl class="defs">
         <div><dt>Tips and tip pools</dt><dd>Card and cash tips, split by hours or points, with the tip credit your state allows.</dd></div>
         <div><dt>Different rates by role</dt><dd>A server, a line cook and a dishwasher are each paid the way their job is paid.</dd></div>
         <div><dt>Split shifts and overtime</dt><dd>Overtime over 40 hours is worked out for you and flagged before you approve.</dd></div>
-        <div><dt>A few locations</dt><dd>Add each location. A city with its own income tax is picked up automatically.</dd></div>
+        <div><dt>More than one location</dt><dd>Add each location. A city with its own income tax is picked up automatically.</dd></div>
       </dl>
     </div>
   </div>
@@ -179,7 +179,7 @@ export default `
 
 <footer>
   <a class="logo sm" href="/">totali</a>
-  <p>Totali is a product of OMNIA TAX LLC. Sample data on this page is made up. Photos from Unsplash: Madeline Liu, Kate Townsend. Totali is for independent restaurants, not franchises or fast food chains.</p>
+  <p>Totali is a product of OMNIA TAX LLC. Sample data on this page is made up. Photos from Unsplash: Madeline Liu, Kate Townsend.</p>
 </footer>
 
 `;

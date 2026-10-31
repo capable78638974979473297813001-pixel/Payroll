@@ -6,10 +6,8 @@ import type { Store } from '../store/store.ts';
 import { assertAdmin, assertCompanyAccess, authenticate, type Principal } from '../domain/auth.ts';
 import { companyView, createCompany, updateCompany } from '../domain/companies.ts';
 import type { Employee } from '../domain/types.ts';
-import { PortalService } from '../portal/service.ts';
 import { PosService } from '../pos/service.ts';
 import type { PosProviderId } from '../pos/types.ts';
-import type { PortalAccount } from '../portal/types.ts';
 import { addEmployee, employeeView, importYtd, requireEmployee, setPayoutAccounts, terminateEmployee, updateEmployee } from '../domain/employees.ts';
 import { deleteShift, listShifts, recordHouseDay, recordShift, recordShifts } from '../domain/timekeeping.ts';
 import { approvePayRun, draftPayRun, getRun, recalculatePayRun, voidPayRun } from '../payroll/payRuns.ts';
@@ -93,8 +91,6 @@ function cookieValue(header: string | undefined, name: string): string | undefin
 interface Ctx {
   req: IncomingMessage;
   user: User | null;
-  employee: Employee | null;
-  account: PortalAccount | null;
   params: Record<string, string>;
   query: URLSearchParams;
   raw: string;
@@ -108,7 +104,7 @@ interface Route {
   method: string;
   re: RegExp;
   keys: string[];
-  auth: 'none' | 'admin' | 'company' | 'user' | 'employee' | 'portal';
+  auth: 'none' | 'admin' | 'company' | 'user';
   handler: Handler;
   status: number;
 }
@@ -157,9 +153,6 @@ export function createApp(deps: { clover?: { appId: string; secret: string } | n
   const OAUTH_COOKIE = 'totali_oauth';
   const clover = deps.clover !== undefined ? deps.clover : (process.env.CLOVER_APP_ID && process.env.CLOVER_APP_SECRET ? { appId: process.env.CLOVER_APP_ID, secret: process.env.CLOVER_APP_SECRET } : null);
   const pos = new PosService(store, now, deps.posFetch ?? globalThis.fetch, config.devTools ? deps.posHosts ?? {} : {}, clover);
-  const portal = new PortalService(store, mailer, deps.banks, dashboards, now, deps.log);
-  const EMP_COOKIE = 'totali_emp';
-  const empCookie = (req: IncomingMessage, token: string, clear = false) => `${EMP_COOKIE}=${clear ? '' : token}; Path=/; HttpOnly; SameSite=Lax${clear ? '; Max-Age=0' : `; Max-Age=${30 * 86_400}`}${secureCookies(req) ? '; Secure' : ''}`;
   const taxCache = new Map<string, { at: number; value: unknown }>();
   const contractors = new ContractorService(store, mailer, now);
   const jobs = new JobService(store, now);
@@ -197,11 +190,7 @@ export function createApp(deps: { clover?: { appId: string; secret: string } | n
       stripePublishableKey: (process.env.STRIPE_PUBLISHABLE_KEY ?? '').trim() || null,
       termsVersion: '2026-10-terms-v1',
     })),
-    route('GET', '/v1/auth/me', 'none', (c) => {
-      const et = cookieValue(c.req.headers.cookie, EMP_COOKIE);
-      const who = et ? portal.resolve(et) : null;
-      return { user: c.user ? publicUser(c.user) : null, portal: who ? portal.accountView(who.account, who.ended) : null };
-    }),
+    route('GET', '/v1/auth/me', 'none', (c) => ({ user: c.user ? publicUser(c.user) : null })),
     route('POST', '/v1/auth/signup', 'none', async (c) => {
       requireCsrf(c.req);
       const wait = signups.hit(`signup:${c.ip}`, 20, now().getTime());
@@ -452,8 +441,6 @@ export function createApp(deps: { clover?: { appId: string; secret: string } | n
     route('GET', `${C}/reports/hours`, 'company', (c) => { const [a, b] = range(c); const f = hoursReport(store, c.params.cid, a, b); return new Text(f.content, f.fileName); }),
     route('GET', `${C}/reports/roster`, 'company', (c) => { const f = roster(store, c.params.cid); return new Text(f.content, f.fileName); }),
     route('GET', `${C}/reports/wc`, 'company', (c) => { const r = wcReport(store, store.companies.require(c.params.cid, 'Company'), Number(c.query.get('year') ?? now().getUTCFullYear())); return c.query.get('format') === 'csv' ? new Text(r.csv, r.fileName) : { year: r.year, rows: r.rows, note: r.note }; }),
-    route('GET', `${C}/portal/access`, 'company', (c) => portal.access(c.params.cid)),
-    route('POST', `${C}/portal/rotate`, 'company', (c) => portal.rotate(c.params.cid)),
     route('GET', `${C}/pos`, 'company', (c) => pos.catalog(c.params.cid)),
     route('POST', `${C}/pos/connect`, 'company', async (c) => pos.connect(c.params.cid, c.json()), 201),
     route('DELETE', `${C}/pos`, 'company', (c) => pos.disconnect(c.params.cid)),
@@ -467,63 +454,6 @@ export function createApp(deps: { clover?: { appId: string; secret: string } | n
     route('POST', `${C}/pos/report`, 'company', (c) => pos.importReport(c.params.cid, c.json())),
     route('PUT', `${C}/pos/links`, 'company', (c) => pos.link(c.params.cid, c.json())),
     route('POST', `${C}/pos/sync`, 'company', async (c) => pos.sync(c.params.cid, c.json())),
-    route('GET', `${C}/portal/requests`, 'company', (c) => portal.requests(c.params.cid)),
-    route('POST', `${C}/portal/requests/:aid/approve`, 'company', (c) => portal.approve(c.params.cid, c.params.aid, c.json())),
-    route('POST', `${C}/portal/requests/:aid/decline`, 'company', (c) => portal.decline(c.params.cid, c.params.aid, c.json().reason)),
-    route('POST', `${C}/employees/:eid/deposit-change`, 'company', (c) => portal.decideDeposit(c.params.cid, c.params.eid, c.json().approve)),
-    route('POST', '/v1/portal/signup', 'none', async (c) => {
-      requireCsrf(c.req);
-      const wait = logins.hit(`portalsu:${c.ip}`, 20, now().getTime());
-      if (wait) throw new ApiError(429, 'rate_limited', `Too many tries from here. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
-      const o = c.json();
-      const r = await portal.signUp(o.code, o.email, o.password, c.req.headers['user-agent']);
-      return new Reply({ ok: true }, { 'set-cookie': empCookie(c.req, r.token) });
-    }),
-    route('POST', '/v1/portal/signin', 'none', async (c) => {
-      requireCsrf(c.req);
-      const o = c.json();
-      const email = typeof o.email === 'string' ? o.email.trim().toLowerCase().slice(0, 200) : '';
-      const wait = Math.max(logins.hit(`portalsi:${c.ip}`, 60, now().getTime()), logins.hit(`portalui:${email}`, 12, now().getTime()));
-      if (wait) throw new ApiError(429, 'rate_limited', `Too many tries. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
-      const r = await portal.signIn(email, o.password, c.req.headers['user-agent']);
-      return new Reply({ ok: true }, { 'set-cookie': empCookie(c.req, r.token) });
-    }),
-    route('POST', `${C}/portal/resets/:aid/allow`, 'company', (c) => portal.allowReset(c.params.cid, c.params.aid)),
-    route('POST', `${C}/portal/resets/:aid/dismiss`, 'company', (c) => portal.dismissReset(c.params.cid, c.params.aid)),
-    route('POST', '/v1/portal/reset/start', 'none', (c) => {
-      requireCsrf(c.req);
-      const o = c.json();
-      const email = typeof o.email === 'string' ? o.email.trim().toLowerCase().slice(0, 200) : '';
-      const wait = Math.max(logins.hit(`portalrs:${c.ip}`, 30, now().getTime()), logins.hit(`portalrse:${email}`, 20, now().getTime()));
-      if (wait) throw new ApiError(429, 'rate_limited', `Too many tries. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
-      return portal.resetStart(email);
-    }),
-    route('POST', '/v1/portal/reset/finish', 'none', async (c) => {
-      requireCsrf(c.req);
-      const o = c.json();
-      const email = typeof o.email === 'string' ? o.email.trim().toLowerCase().slice(0, 200) : '';
-      const wait = Math.max(logins.hit(`portalrf:${c.ip}`, 30, now().getTime()), logins.hit(`portalrfe:${email}`, 20, now().getTime()));
-      if (wait) throw new ApiError(429, 'rate_limited', `Too many tries. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
-      const r = await portal.resetFinish(email, o.password, c.req.headers['user-agent']);
-      return new Reply({ ok: true }, { 'set-cookie': empCookie(c.req, r.token) });
-    }),
-    route('GET', '/v1/portal/account', 'portal', (c) => portal.accountView(c.account!, !c.employee && !!c.account!.employeeId)),
-    route('POST', '/v1/portal/request', 'portal', (c) => portal.submitRequest(c.account!, c.json())),
-    route('POST', '/v1/portal/reopen', 'portal', (c) => portal.reopen(c.account!)),
-    route('POST', '/v1/portal/logout', 'none', (c) => {
-      requireCsrf(c.req);
-      const t = cookieValue(c.req.headers.cookie, EMP_COOKIE);
-      if (t) portal.logout(t);
-      return new Reply({ ok: true }, { 'set-cookie': empCookie(c.req, '', true) });
-    }),
-    route('GET', '/v1/portal/me', 'employee', (c) => portal.me(c.employee!)),
-    route('GET', '/v1/portal/stubs', 'employee', (c) => portal.stubs(c.employee!)),
-    route('GET', '/v1/portal/stubs/:rid', 'employee', (c) => portal.stub(c.employee!, c.params.rid)),
-    route('GET', '/v1/portal/hours', 'employee', (c) => { const a = c.query.get('start'); const b = c.query.get('end'); if (!isIsoDate(a) || !isIsoDate(b)) throw badRequest('start and end must be YYYY-MM-DD'); return portal.hours(c.employee!, a, b); }),
-    route('GET', '/v1/portal/w4', 'employee', (c) => portal.w4(c.employee!)),
-    route('PUT', '/v1/portal/w4', 'employee', (c) => portal.updateW4(c.employee!, c.json())),
-    route('POST', '/v1/portal/deposit', 'employee', async (c) => portal.requestDeposit(c.employee!, siteBase(c.req), c.json())),
-    route('DELETE', '/v1/portal/deposit', 'employee', (c) => portal.cancelDeposit(c.employee!)),
     route('GET', `${C}/profile`, 'company', (c) => profileView(store.companies.require(c.params.cid, 'Company'))),
     route('PUT', `${C}/profile`, 'company', (c) => saveProfile(store, c.params.cid, c.json())),
     route('POST', `${C}/profile/documents`, 'company', (c) => addDocument(store, c.params.cid, c.json()), 201),
@@ -779,15 +709,6 @@ export function createApp(deps: { clover?: { appId: string; secret: string } | n
           if (method !== 'GET' && method !== 'HEAD' && r.auth !== 'none') requireCsrf(req);
         }
       }
-      let employee: Employee | null = null; let account: PortalAccount | null = null;
-      if (r.auth === 'employee' || r.auth === 'portal') {
-        const et = cookieValue(req.headers.cookie, EMP_COOKIE);
-        const who = et ? portal.resolve(et) : null;
-        if (!who) throw unauthorized('Sign in to continue.');
-        account = who.account; employee = who.employee;
-        if (r.auth === 'employee' && !employee) throw new ApiError(403, 'not_approved', who.ended ? 'Your access has ended.' : 'Your manager hasn’t approved you yet.');
-        if (method !== 'GET' && method !== 'HEAD') requireCsrf(req);
-      }
       if (r.auth === 'user') {
         if (!user) throw unauthorized('Sign in to continue.');
       } else if (r.auth === 'admin' || r.auth === 'company' || (r.auth === 'none' && req.headers.authorization)) {
@@ -808,8 +729,6 @@ export function createApp(deps: { clover?: { appId: string; secret: string } | n
       const ctx: Ctx = {
         req,
         user,
-        employee,
-        account,
         params,
         query: url.searchParams,
         raw,

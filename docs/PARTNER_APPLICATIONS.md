@@ -30,7 +30,7 @@ Every system above can still be used today through *Import a time clock report*.
 
 ## Say this (all applications)
 
-> **Totali** (a product of OMNIA TAX LLC) is payroll software for independent restaurants. We are asking for **read-only** access to a restaurant's employee list, its time clock entries and the tips recorded on them, so the restaurant's hours and tips flow into payroll without anyone typing them twice.
+> **Totali** (a product of OMNIA TAX LLC) is payroll software for restaurants. We are asking for **read-only** access to a restaurant's employee list, its time clock entries and the tips recorded on them, so the restaurant's hours and tips flow into payroll without anyone typing them twice.
 >
 > We do not take payments, change menus, edit orders, or write anything back. We read: employees (name, email), shifts or time entries (clock in, clock out, breaks, job), and tips (card and cash) attached to those shifts. We do not read card numbers or customer data.
 >

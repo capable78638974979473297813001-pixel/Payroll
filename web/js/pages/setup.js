@@ -242,10 +242,8 @@ export async function industry() {
   const user = session.user;
   let pick = (user.setup && user.setup.industry) || 'restaurant';
   const grid = h('div', { class: 'indgrid ui', role: 'radiogroup', 'aria-label': 'Industry' });
-  const go = Button({ size: 'lg', type: 'button', disabled: true }, 'Continue');
+  const go = Button({ size: 'lg', type: 'button' }, 'Continue');
   const labelFor = () => 'Continue';
-  const own = h('input', { type: 'checkbox', name: 'independent', 'data-testid': 'independent' });
-  own.addEventListener('change', () => { go.disabled = !own.checked; });
   const draw = () => {
     grid.replaceChildren(...m.industries.map((i) => {
       const d = IND[i.id] || IND.restaurant;
@@ -271,10 +269,10 @@ export async function industry() {
   return { title: 'Your restaurant | Totali', el: h('div', {},
     h('header', { class: 'authtop ui' }, Logo(), h('span', {}, `Signed in as ${user.email}`)),
     h('div', { class: 'indhead ui' }, Steps3(2),
-      h('h1', { class: 'pt', style: { fontSize: '30px' } }, 'Totali is for ', h('em', {}, 'independent restaurants'), '.'),
-      h('p', { class: 'cap', style: { marginTop: '8px', maxWidth: '560px', fontSize: '15px' } }, 'A restaurant you own and run, with one location or a few. It isn’t built for franchises or fast food chains. A few questions from now, the dashboard is yours.')),
+      h('h1', { class: 'pt', style: { fontSize: '30px' } }, 'Totali is payroll for ', h('em', {}, 'restaurants'), '.'),
+      h('p', { class: 'cap', style: { marginTop: '8px', maxWidth: '560px', fontSize: '15px' } }, 'Answer a few questions about your restaurant and your dashboard is built around it: your state’s tax rules, tips, locations and pay schedule.')),
     grid,
-    h('div', { class: 'indfoot ui' }, h('label', { class: 'ck2' }, own, h('span', { class: 'cb' }), h('span', {}, 'My restaurant is independently owned. It isn’t a franchise or a fast food chain.')), h('div', { class: 'acts' }, out, go)),
+    h('div', { class: 'indfoot ui' }, h('span'), h('div', { class: 'acts' }, out, go)),
     h('div', { style: { height: '70px' } })) };
 }
 
@@ -417,7 +415,6 @@ export async function builder() {
         await persist('review');
         await api.post('/v1/builder/finish');
         await refreshUser();
-        try { sessionStorage.setItem('totali_welcome', '1'); } catch { /* the prompt is a convenience */ }
         navigate('/app');
       } catch (e) { err.replaceChildren(Alert('error', e.message)); setLoading(finish, false); }
     });

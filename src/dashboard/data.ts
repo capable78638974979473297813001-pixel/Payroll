@@ -186,15 +186,9 @@ export function dashboardData(store: Store, company: Company, today: string) {
   if (noW4.length) add({ id: 'w4', severity: 'soon', title: `${noW4.length === 1 ? `${noW4[0]!.name} has` : `${names(noW4)} have`} no W-4`, detail: 'They’re left out of pay runs until it’s on file.', to: '/app/onboarding' });
   const i9 = active.filter((e) => e.onboarding?.i9?.section1At && !e.onboarding.i9.section2At).map((e) => ({ name: `${e.firstName} ${e.lastName}` }));
   if (i9.length) add({ id: 'i9', severity: 'soon', title: `I-9 section 2 for ${names(i9)}`, detail: 'Look at their documents in person. It’s due within 3 business days of their start.', to: '/app/onboarding' });
-  const bank = active.filter((e) => e.pendingDeposit).map((e) => ({ name: `${e.firstName} ${e.lastName}` }));
-  if (bank.length) add({ id: 'bank_change', severity: 'soon', title: `${names(bank)} asked to change ${bank.length === 1 ? 'their' : 'a'} bank account`, detail: 'Nothing changes until you approve it.', to: '/app/onboarding' });
   const waiting = forms.filter((f) => f.w4 && !f.done).length;
   if (waiting && !noW4.length) add({ id: 'paperwork', severity: 'info', title: `${waiting} ${waiting === 1 ? 'person has' : 'people have'} paperwork to finish`, detail: 'Send a reminder from Onboarding.', to: '/app/onboarding' });
-  const asking = store.portalAccounts.where((x) => x.companyId === company.id && x.status === 'pending').length;
-  if (asking) add({ id: 'join_requests', severity: 'urgent', title: `${asking === 1 ? 'Someone asked' : `${asking} people asked`} to join your team`, detail: 'They filled in their details. Check them and approve.', to: '/app/onboarding' });
-  const resets = store.portalAccounts.where((x) => x.companyId === company.id && x.status === 'approved' && !!x.resetAskedAt && !(x.resetAllowedAt && x.resetAllowedAt.slice(0, 10) >= addDays(today, -1))).length;
-  if (resets) add({ id: 'pw_resets', severity: 'soon', title: `${resets === 1 ? 'Someone' : `${resets} people`} asked to reset their password`, detail: 'Allow it in Requests so they can choose a new one.', to: '/app/onboarding' });
-  if (!active.length && !asking) add({ id: 'first', severity: 'soon', title: 'Add your employees', detail: 'Give your team the code. They make an account and send you their details.', to: '/app/onboarding' });
+  if (!active.length) add({ id: 'first', severity: 'soon', title: 'Add your team', detail: 'Invite them by email and they fill in their own forms on their phone.', to: '/app/onboarding' });
   if (company.setup && !company.profile?.submittedAt && company.ein) add({ id: 'profile', severity: 'info', title: 'Finish company setup', detail: 'Owners, address and documents.', to: '/app/settings/company' });
   const noW9 = store.contractors.where((x) => x.companyId === company.id && !x.archivedAt && !x.w9At).length;
   if (noW9) add({ id: 'w9', severity: 'info', title: `${noW9} ${noW9 === 1 ? 'contractor has' : 'contractors have'} no W-9`, detail: 'Request one so you can report what you paid them.', to: '/app/contractors' });
