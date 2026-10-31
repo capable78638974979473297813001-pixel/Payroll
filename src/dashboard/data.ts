@@ -239,6 +239,9 @@ export function dashboardData(store: Store, company: Company, today: string) {
     onboarding,
     stateCards,
     nextPayroll,
+    pos: posConn
+      ? { connected: true, provider: posConn.provider, label: posConn.label, lastSyncAt: posConn.lastSyncAt ?? null, lastError: posConn.lastError ?? null, summary: posConn.lastSummary ? { from: posConn.lastSummary.from, to: posConn.lastSummary.to, shifts: posConn.lastSummary.shifts, people: posConn.lastSummary.people, minutes: posConn.lastSummary.minutes, tipsCents: posConn.lastSummary.tipsCents, unmapped: posConn.lastSummary.unmapped.length, problems: posConn.lastSummary.problems.length } : null }
+      : { connected: false, provider: null, label: null, lastSyncAt: null, lastError: null, summary: null },
     todos: todos.slice(0, 8),
     groups,
     seasonal: { ending: seasonal, count: seasonalCount },

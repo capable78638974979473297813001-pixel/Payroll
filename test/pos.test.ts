@@ -212,3 +212,33 @@ test('a period over two months, or pulling twice in a breath, is refused; so is 
   advance(9_000);
   await svc.sync(company.id, PERIOD);
 });
+
+test('Clover: staff, shifts in epoch milliseconds and card tips by employee, read as Clover documents them', async () => {
+  const at = (iso: string) => Date.parse(iso);
+  const f = fake([
+    [/GET .*\/v3\/merchants\/M1\/employees/, () => ({ elements: [{ id: 'c1', name: 'Ana Cruz', email: 'Ana@Harbor.test', role: 'EMPLOYEE' }, { id: 'c2', name: 'Ben Ode' }, { id: 'c3', name: 'Gone Person', deletedTime: 1700000000000 }] })],
+    [/GET .*\/v3\/merchants\/M1\/shifts/, () => ({ elements: [
+      { id: 's1', employee: { id: 'c1', name: 'Ana Cruz' }, inTime: at('2026-10-21T00:00:00Z'), outTime: at('2026-10-21T06:30:00Z'), cashTipsCollected: 1800 },
+      { id: 's2', employee: { id: 'c1' }, inTime: at('2026-10-22T21:00:00Z'), outTime: at('2026-10-22T22:00:00Z'), overrideInTime: at('2026-10-22T20:00:00Z'), overrideOutTime: at('2026-10-22T23:00:00Z') },
+      { id: 's3', employee: { id: 'c2' }, inTime: at('2026-10-22T21:00:00Z') },
+    ] })],
+    [/GET .*\/v3\/merchants\/M1\/payments/, () => ({ elements: [
+      { id: 'p1', result: 'SUCCESS', tipAmount: 900, employee: { id: 'c1' }, createdTime: at('2026-10-21T02:00:00Z') },
+      { id: 'p2', result: 'VOIDED', tipAmount: 777, employee: { id: 'c1' }, createdTime: at('2026-10-21T02:00:00Z') },
+      { id: 'p3', result: 'SUCCESS', tipAmount: 300, createdTime: at('2026-10-21T02:00:00Z') },
+      { id: 'p4', result: 'SUCCESS', tipAmount: 150, employee: { id: 'c1' }, createdTime: at('2026-10-24T02:00:00Z') },
+    ] })],
+  ]);
+  const { svc, store, company, mk } = make(f.f);
+  const ana = mk('Ana', 'Cruz', 'ana@harbor.test');
+  await svc.connect(company.id, { provider: 'clover', merchantId: 'M1', accessToken: 'cl-token' });
+  const first = f.calls[0]!;
+  assert.match(first.url, /^https:\/\/api\.clover\.com\/v3\/merchants\/M1\/employees/); assert.equal(first.headers.authorization, 'Bearer cl-token'); assert.ok(first.headers['user-agent']);
+  const people = await svc.people(company.id);
+  assert.deepEqual(people.people.map((p) => p.name), ['Ana Cruz', 'Ben Ode'], 'a deleted employee is not offered');
+  const r = await svc.sync(company.id, PERIOD);
+  assert.deepEqual(mine(store, ana.id).map((x) => [x.workDate, x.minutes, x.chargedTipsCents, x.cashTipsCents]), [['2026-10-20', 390, 900, 1800], ['2026-10-22', 180, 0, 0]], 'an override replaces the punched time; a void is not a tip; the open shift waits');
+  assert.ok(r.notes.some((n) => /3\.00/.test(n)) && r.notes.some((n) => /1\.50/.test(n)));
+  const shifts = f.calls.find((x) => /\/shifts/.test(x.url))!;
+  assert.match(decodeURIComponent(shifts.url), /filter=in_time>=\d+&filter=in_time<=\d+&limit=1000&offset=0/);
+});

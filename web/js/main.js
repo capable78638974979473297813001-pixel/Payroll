@@ -10,6 +10,7 @@ import { billingPage } from './app/billing.js';
 import { settingsPage } from './app/settings.js';
 import { runPayrollPage, runPage, stubPage } from './app/payroll.js';
 import { profilePage, peopleCards } from './app/people.js';
+import { posCards } from './app/pos.js';
 import { RENDERERS } from './widgets.js';
 import { joinPage } from './pages/join.js';
 import { w9Page } from './pages/w9.js';
@@ -19,7 +20,7 @@ import { contractorsPage } from './app/contractors.js';
 import { jobsPage } from './app/jobs.js';
 
 import { timeCards } from './app/time.js';
-Object.assign(RENDERERS, peopleCards, timeCards);
+Object.assign(RENDERERS, peopleCards, timeCards, posCards);
 
 const root = document.getElementById('app');
 mount(root, h('div', { class: 'loading-screen' }, h('div', { class: 'spinner', role: 'status', 'aria-label': 'Loading' })));

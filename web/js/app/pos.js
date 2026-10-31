@@ -1,6 +1,6 @@
 import { h, plural, money, longDate } from '../dom.js';
 import { api } from '../api.js';
-import { navigate } from '../router.js';
+import { link, navigate } from '../router.js';
 import { Button, Alert, Field, modal, setLoading, toast } from '../ui.js';
 import { base, refreshData } from './state.js';
 import { rangeLabel, parseCsv } from './payroll.js';
@@ -97,6 +97,7 @@ function connectForm(cat, after) {
     host.replaceChildren(
       h('div', { class: 'opts', role: 'radiogroup', 'aria-label': 'Your system' }, ...cat.providers.map((p) => h('button', { type: 'button', class: `opt ${p.id === pick ? 'on' : ''}`, role: 'radio', 'aria-checked': String(p.id === pick), 'data-provider': p.id, onClick: () => { pick = p.id; draw(); } }, h('span', { class: 'rd' }), h('span', {}, p.name, h('small', {}, p.brings.join(', ')))))),
       h('p', { class: 'cap', style: { margin: 0 } }, info.where),
+      info.caution ? Alert('info', info.caution) : null,
       h('form', { class: 'f', novalidate: true, onSubmit: async (e) => {
         e.preventDefault(); err.replaceChildren();
         const body = { provider: pick };
@@ -193,3 +194,29 @@ export function pullCard(conn, period) {
   });
   return h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, conn.label)), h('p', { class: 'cap', style: { marginTop: 0 } }, 'Read this period’s hours and tips from your point of sale.'), h('div', { class: 'acts' }, go), result);
 }
+
+const ago = (iso) => {
+  const d = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
+  return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
+};
+
+/** The dashboard card that says where hours and tips come from, and whether that is up to date. */
+export const posCards = {
+  pos_status({ data }) {
+    const p = data.pos;
+    if (!p.connected) {
+      return { title: 'Hours and tips', body: h('div', { class: 'stack', style: { '--gap': '10px' }, 'data-testid': 'pos-none' },
+        h('p', { class: 'cap', style: { margin: 0 } }, 'Hours and tips are entered by hand. If you use Toast, Square, Clover or 7shifts, Totali can pull them for you. Any other system can export a report.'),
+        h('div', { class: 'acts' }, link('/app/settings/pos', { class: 'btn sm' }, 'Connect your point of sale'), link('/app/settings/pos', { class: 'link' }, 'Import a report'))) };
+    }
+    const s = p.summary;
+    const file = p.provider === 'file';
+    return { title: 'Hours and tips', body: h('div', { class: 'stack', style: { '--gap': '10px' }, 'data-testid': 'pos-live' },
+      h('p', { style: { margin: 0 } }, h('b', {}, p.label), p.lastSyncAt ? ` · ${file ? 'last imported' : 'last pulled'} ${ago(p.lastSyncAt)}` : ' · nothing pulled yet'),
+      s ? h('p', { class: 'cap', style: { margin: 0 } }, `${plural(s.shifts, 'shift')} for ${plural(s.people, 'person', 'people')}, ${hours(s.minutes)}${s.tipsCents ? `, ${money(s.tipsCents)} in tips` : ''}. ${rangeLabel(s.from, s.to)}.`) : null,
+      p.lastError ? Alert('error', p.lastError) : null,
+      s && s.unmapped ? Alert('warn', `${plural(s.unmapped, 'person', 'people')} left out: not matched to your team.`, 'Match them so their hours count.') : null,
+      s && s.problems ? Alert('warn', `${plural(s.problems, 'shift')} couldn’t be saved.`) : null,
+      h('div', { class: 'acts' }, link('/app/payroll/run', { class: 'btn sm' }, file ? 'Import for this pay run' : 'Pull for this pay run'), link('/app/settings/pos', { class: 'link' }, 'Point of sale settings'))) };
+  },
+};

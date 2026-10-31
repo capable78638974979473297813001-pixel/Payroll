@@ -61,6 +61,8 @@ export const WIDGETS: WidgetDef[] = [
     settings: [{ key: 'showLocation', label: 'Show work location', type: 'toggle', default: true }] },
   { type: 'tips_panel', label: 'Tips and tip pool', description: 'The week\'s card and cash tips, and how the pool splits.', category: 'Time', spans: [4, 6, 8, 12], defaultSpan: 4, needs: ['tip_reporting'], needsLabel: 'tips',
     settings: [] },
+  { type: 'pos_status', label: 'Hours and tips source', description: 'Where hours and tips come from: your point of sale or time clock, when they were last pulled, and who is not matched yet.', category: 'Time', spans: [6, 8, 12], defaultSpan: 12,
+    settings: [] },
   { type: 'employee_access', label: 'Employee code', description: 'The code you give new hires so they can make their own account. It works for three days.', category: 'People', spans: [4, 6, 8, 12], defaultSpan: 4,
     settings: [] },
   { type: 'join_requests', label: 'Requests to join', description: 'People who made an account with your code and sent their details, waiting for you to approve.', category: 'People', spans: [6, 8, 12], defaultSpan: 8,

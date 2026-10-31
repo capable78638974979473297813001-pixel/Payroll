@@ -10,6 +10,7 @@ import type { Fetch } from './http.ts';
 import { toastAdapter } from './toast.ts';
 import { squareAdapter } from './square.ts';
 import { sevenShiftsAdapter } from './sevenshifts.ts';
+import { cloverAdapter } from './clover.ts';
 import { zoneFor } from './zone.ts';
 import { detectColumns, parseReport, readName, FIELDS, type Mapping } from './report.ts';
 import type { PosAdapter, PosConnection, PosProviderId, PosProviderInfo, PosSummary } from './types.ts';
@@ -23,6 +24,10 @@ export const PROVIDERS: PosProviderInfo[] = [
   { id: 'square', name: 'Square', brings: ['Your staff', 'Hours from Square Team timecards', 'Declared cash tips and card tips'],
     where: 'In the Square Developer Dashboard, open your application and copy its access token. It needs permission to read employees, timecards and payments. Card tips only come through when the sale was rung under a team member.',
     fields: [{ name: 'accessToken', label: 'Access token', secret: true }, { name: 'locationId', label: 'Location ID', optional: true, hint: 'Only if you have more than one location.' }, { ...ENV, label: 'Which Square' }] },
+  { id: 'clover', name: 'Clover', brings: ['Your staff', 'Hours from Clover shifts', 'Card tips from payments and cash tips entered at clock out'],
+    where: 'Clover gives a merchant ID and an access token to an app the restaurant has installed. The app needs permission to read employees and payments.',
+    caution: 'Clover only issues production tokens through apps it has approved, so most restaurants can’t get one yet. If you can’t, import Clover’s hours report below.',
+    fields: [{ name: 'merchantId', label: 'Merchant ID' }, { name: 'accessToken', label: 'Access token', secret: true }, { name: 'region', label: 'Where is the restaurant', optional: true, options: [{ value: 'na', label: 'United States or Canada' }, { value: 'eu', label: 'Europe' }, { value: 'la', label: 'Latin America' }] }] },
   { id: 'sevenshifts', name: '7shifts', brings: ['Your staff', 'Hours from the time clock', 'Tips on each punch'],
     where: 'In 7shifts, go to Company Settings, Developer Tools, and choose Create Access Token. 7shifts works with most point of sale systems, so this is the way in if yours isn’t listed.',
     fields: [{ name: 'accessToken', label: 'Access token', secret: true }, { name: 'companyId', label: 'Company ID', optional: true, hint: 'Only if the token reaches more than one company.' }] },
@@ -47,6 +52,7 @@ export class PosService {
     if (provider === 'file') throw conflict('file_source', 'This restaurant brings hours in from spreadsheets. Import a report instead of pulling.');
     if (provider === 'toast') return toastAdapter(creds, this.f, this.hosts.toast);
     if (provider === 'square') return squareAdapter(creds, this.f, this.hosts.square);
+    if (provider === 'clover') return cloverAdapter(creds, this.f, this.hosts.clover);
     return sevenShiftsAdapter(creds, this.f, this.hosts.sevenshifts);
   }
   private connectionOf(companyId: string): PosConnection | undefined { return this.store.posConnections.where((c) => c.companyId === companyId)[0]; }

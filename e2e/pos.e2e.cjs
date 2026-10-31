@@ -42,9 +42,10 @@ const fake = http.createServer((req, res) => {
     await page.goto(`${server.base}/app`);
     await page.waitForSelector('[data-type=todo_list]');
     assert.ok((await page.locator('[data-type=todo_list]').textContent()).includes('Connect your point of sale'));
+    assert.ok((await page.locator('[data-testid=pos-none]').textContent()).includes('entered by hand'), 'the dashboard says hours are typed in until a system is connected');
     await page.goto(`${server.base}/app/settings/pos`);
     await page.waitForSelector('[data-provider=toast]');
-    assert.deepEqual(await page.locator('[data-provider]').evaluateAll((x) => x.map((y) => y.dataset.provider)), ['toast', 'square', 'sevenshifts']);
+    assert.deepEqual(await page.locator('[data-provider]').evaluateAll((x) => x.map((y) => y.dataset.provider)), ['toast', 'square', 'clover', 'sevenshifts']);
     assert.ok((await page.locator('main').textContent()).includes('doesn’t ring up sales'));
     if (shots) await page.screenshot({ path: `${shots}/pos-connect.png`, fullPage: true });
 
@@ -78,6 +79,14 @@ const fake = http.createServer((req, res) => {
     await page.click('[data-testid=pos-pull]');
     await page.waitForFunction(() => /2 shifts for 2 people/.test((document.querySelector('[data-testid=pos-summary]') || {}).textContent || ''));
     assert.ok(!(await page.locator('[data-testid=pos-summary]').textContent()).includes('left out'));
+
+    // the dashboard now says where hours come from, and the Time and tips list says they are automatic
+    await page.goto(`${server.base}/app`);
+    await page.waitForSelector('[data-testid=pos-live]');
+    const live = await page.locator('[data-testid=pos-live]').textContent();
+    assert.ok(live.includes('7shifts') && live.includes('last pulled today') && live.includes('2 shifts for 2 people'), live);
+    assert.ok((await page.locator('[data-module=hours_tips] [data-item=hours_entry]').textContent()).includes('From 7shifts'));
+    if (shots) await page.screenshot({ path: `${shots}/pos-dashboard.png`, fullPage: true });
 
     // Run payroll reads the same hours, and has its own button
     await page.goto(`${server.base}/app/payroll/run`);

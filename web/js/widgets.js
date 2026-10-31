@@ -137,8 +137,11 @@ const RICH = {
   },
 };
 
+const posItem = (i, data) => ((i.id === 'hours_entry' || i.id === 'tip_entry') && data.pos && data.pos.connected ? { ...i, status: 'auto' } : i);
+
 /** An item's note, kept live where the data knows better than the setup did. */
 function itemNote(i, data) {
+  if ((i.id === 'hours_entry' || i.id === 'tip_entry') && data.pos && data.pos.connected) return `From ${data.pos.label}${data.pos.lastSyncAt ? `, ${data.pos.provider === 'file' ? 'imported' : 'pulled'} ${new Date(data.pos.lastSyncAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}`;
   if (i.id === 'pay_schedule' && i.status !== 'toset' && data.nextPayday) return `${i.note.replace(/\.$/, '')}. Next pay date ${shortDate(data.nextPayday.period.checkDate)}`;
   return i.note || i.detail || '';
 }
@@ -148,7 +151,7 @@ export const RENDERERS = {
     const m = data.built.modules.find((x) => x.id === settings.module);
     if (!m) return { title: 'Section', body: empty('This section is not part of your setup any more. Remove this card, or pick another section.') };
     const rich = RICH[m.id] ? RICH[m.id](data) : m.id.startsWith('state_') ? null : null;
-    return { className: 'modcard', title: m.id === 'team' ? t('team') : m.label, body: h('div', {}, rich, settings.items === false ? null : h('ul', { class: 'ml' }, ...m.items.map((i) => h('li', { 'data-item': i.id }, h('span', { class: 'lt' }, h('b', {}, i.label), h('i', {}, itemNote(i, data))), StatusChip(i))))) };
+    return { className: 'modcard', title: m.id === 'team' ? t('team') : m.label, body: h('div', {}, rich, settings.items === false ? null : h('ul', { class: 'ml' }, ...m.items.map((i) => h('li', { 'data-item': i.id }, h('span', { class: 'lt' }, h('b', {}, i.label), h('i', {}, itemNote(i, data))), StatusChip(posItem(i, data)))))) };
   },
   built_from({ data }) {
     const b = data.built;
