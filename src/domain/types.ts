@@ -6,6 +6,18 @@ import type { EmployerContext, FederalW4, StateWithholding, TaxLine } from '../.
 
 export type PayFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
 
+/** A job the business tracks labor against: a budget, cost codes inside it, and whether prevailing wage applies. */
+export interface Job {
+  id: string;
+  companyId: string;
+  name: string;
+  budgetCents: number;
+  prevailingWage: boolean;
+  costCodes: Array<{ code: string; label: string; budgetCents: number }>;
+  archivedAt?: string;
+  createdAt: string;
+}
+
 /** Someone paid by invoice, not on payroll: tracked for the 1099, with a W-9 collected from them. */
 export interface Contractor {
   id: string;
@@ -322,6 +334,8 @@ export interface Employee {
   location?: string;
   /** Free tags that group people: a department, a crew, a workers' comp class. */
   tags?: { department?: string; crew?: string; wcClass?: string };
+  /** For seasonal staff: when the season starts and ends. */
+  season?: { start: string; end: string };
   ytd: ExtendedYearToDate;
   ytdYear: number;
   /** Set when opening balances were loaded from a previous provider. */
@@ -366,6 +380,9 @@ export interface Shift {
   mealBreakViolation: boolean;
   restBreakViolation: boolean;
   lockedByRunId?: string;
+  /** The job (and cost code inside it) this time is charged to. */
+  jobId?: string;
+  costCode?: string;
   createdAt: string;
 }
 

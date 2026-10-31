@@ -46,7 +46,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 const HEX = /^#[0-9a-f]{6}$/;
 const ID = /^[a-z0-9_-]{1,40}$/;
 /** Tab ids become part of the address (/app/<id>), so they cannot collide with pages that live there. */
-const RESERVED_TAB_IDS = new Set(['contractors', 'login', 'signup', 'setup', 'join', 'app', 'api', 'run', 'new']);
+const RESERVED_TAB_IDS = new Set(['contractors', 'login', 'signup', 'setup', 'join', 'app', 'api', 'run', 'new', 'billing', 'job-costing', 'w9']);
 
 /** Printable text with no markup characters. Everything a person can type into a dashboard goes through this. */
 function plain(v: unknown, path: string, max: number, { allowEmpty = false, freeText = false }: { allowEmpty?: boolean; freeText?: boolean } = {}): string {

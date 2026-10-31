@@ -1,6 +1,7 @@
 import { h, money, hoursFromMinutes, longDate, shortDate, plural } from './dom.js';
 import { link } from './router.js';
-import { Button, Chip, StatusChip } from './ui.js';
+import { Button, Chip, StatusChip, toast } from './ui.js';
+import { api } from './api.js';
 import { session } from './session.js';
 
 const svgNs = 'http://www.w3.org/2000/svg';
@@ -64,6 +65,12 @@ const statusChip = (s) => { const [l, c] = STATUS[s] || [s, 'muted']; return h('
  * set `title` (the small heading) and `className`. A card with nothing to show says so and says what to do.
  */
 // ---------------------------------------------------------------- modules: the sections the setup built
+function groupRich(groups, noun, empty) {
+  if (!groups.length) return h('div', { class: 'rich' }, h('p', { class: 'cap' }, empty));
+  const max = Math.max(...groups.map((g) => g.minutes), 1);
+  return h('div', { class: 'rich' }, h('ul', { class: 'row-list' }, ...groups.slice(0, 6).map((g) => h('li', {}, h('span', {}, g.label, h('span', { class: 'sub' }, ` · ${plural(g.count, 'person', 'people')}`)), h('span', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, h('span', { class: 'bar-track', style: { width: '60px' } }, h('span', { class: 'bar-seg', style: { width: `${(g.minutes / max) * 100}%` } })), h('b', { class: 'amt' }, `${hoursFromMinutes(g.minutes) || 0} h`))))), h('p', { class: 'cap' }, `Hours this week by ${noun}.`));
+}
+
 const initial = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'narrow', timeZone: 'UTC' });
 
 /** The live part of a module, above its checklist. A module with nothing live to show has none. */
@@ -106,6 +113,21 @@ const RICH = {
   locations(data) {
     const locs = data.company.locations; const counts = new Map(data.team.byLocation.map((x) => [x.label, x.count]));
     return locs.length ? h('div', { class: 'rich' }, h('table', {}, h('tbody', {}, ...locs.map((l) => h('tr', {}, h('td', {}, l.name, h('i', {}, ` · ${l.city}, ${l.state}`)), h('td', {}, plural(counts.get(l.name) || 0, 'person', 'people'))))))) : null;
+  },
+  job_costing(data) {
+    const jobs = data.groups.job;
+    const over = jobs.filter((j) => j.over).length;
+    return h('div', { class: 'rich' }, jobs.length ? h('div', { class: 'big2' }, h('div', {}, h('i', {}, 'Open jobs'), h('span', { class: 'n' }, plural(jobs.length, 'job'))), h('div', { class: 'cap' }, over ? `${over} over budget` : 'All within budget')) : h('p', { class: 'cap' }, 'No jobs yet. Add one and log hours to it.'), h('div', { style: { marginTop: '8px' } }, link('/app/job-costing', { class: 'link' }, jobs.length ? 'Open job costing' : 'Add your first job')));
+  },
+  crews(data) { return groupRich(data.groups.crew, 'crew', 'Tag each person to a crew in their profile.'); },
+  departments(data) { return groupRich(data.groups.department, 'department', 'Tag each person to a department in their profile.'); },
+  workers_comp(data) {
+    const b = h('button', { class: 'link as-button', type: 'button', onClick: async () => { try { await api.download(`/v1/companies/${data.company.id}/reports/wc?year=${new Date().getFullYear()}&format=csv`, `payroll-by-class-${new Date().getFullYear()}.csv`); } catch (e) { toast('error', e.message); } } }, `Download payroll by class, ${new Date().getFullYear()}`);
+    return h('div', { class: 'rich' }, data.groups.wc.length ? groupRich(data.groups.wc, 'class', '') : h('p', { class: 'cap' }, 'Give each person a class code in their profile. Your insurer assigns the classes.'), b);
+  },
+  seasonal(data) {
+    const s = data.seasonal;
+    return h('div', { class: 'rich' }, s.count === 0 ? h('p', { class: 'cap' }, 'Set a season start and end on each seasonal person in their profile.') : s.ending.length ? h('table', {}, h('tbody', {}, ...s.ending.slice(0, 5).map((p) => h('tr', {}, h('td', {}, link(`/app/people/${p.id}`, { class: 'pl-name' }, p.name)), h('td', {}, p.daysLeft === 0 ? 'Ends today' : `Ends ${shortDate(p.end)} · ${plural(p.daysLeft, 'day')}`))))) : h('p', { class: 'cap' }, `${plural(s.count, 'seasonal person', 'seasonal people')}. Nobody finishes in the next 30 days.`));
   },
   contractors(data) {
     const c = data.contractors;
@@ -253,9 +275,12 @@ export const RENDERERS = {
     return { title: `Tip pool · by ${p.basis === 'points' ? 'role' : 'hours'}`, body: h('div', { class: 'stack', style: { '--gap': '10px' } }, h('div', { class: 'sub' }, `An estimate of ${money(p.totalCents)} across ${plural(p.rows.length, 'person', 'people')}. Pay runs apply tip-outs and the tip credit rules.`), h('ul', { class: 'row-list' }, ...p.rows.slice(0, settings.rows || 8).map((r) => h('li', {}, h('span', {}, r.name), h('b', { class: 'amt' }, money(r.shareCents)))))) };
   },
   group_cost({ data, settings }) {
-    const g = { department: data.team.byDepartment, crew: data.team.byCrew }[settings.groupBy];
-    if (!g || !g.length) return { title: `Cost by ${settings.groupBy}`, body: empty(`Tag people with a ${settings.groupBy} to see hours and cost grouped here.`, '/app/people', 'Open people') };
-    return { title: `By ${settings.groupBy}`, body: h('ul', { class: 'row-list' }, ...g.map((x) => h('li', {}, h('span', {}, x.label), h('b', { class: 'amt' }, plural(x.count, 'person', 'people'))))) };
+    const key = { department: 'department', crew: 'crew', job: 'job', wc: 'wc' }[settings.groupBy] || 'department';
+    const g = data.groups[key];
+    const label = { department: 'department', crew: 'crew', job: 'job', wc: 'class' }[key];
+    if (!g || !g.length) return { title: `By ${label}`, body: empty(key === 'job' ? 'No jobs yet.' : `Tag people with a ${label} in their profile to see hours grouped here.`, key === 'job' ? '/app/job-costing' : '/app/people', key === 'job' ? 'Add a job' : 'Open people') };
+    if (key === 'job') return { title: 'Cost by job, this week', body: h('ul', { class: 'row-list' }, ...g.map((x) => h('li', {}, h('span', {}, x.label, x.over ? h('span', { class: 'dchip warn', style: { marginLeft: '8px' } }, 'Over budget') : null), h('span', { class: 'amt' }, `${hoursFromMinutes(x.minutes) || 0} h · ${money(x.costCents)}`)))) };
+    return { title: `Hours by ${label}`, body: h('ul', { class: 'row-list' }, ...g.map((x) => h('li', {}, h('span', {}, x.label, h('span', { class: 'sub' }, ` · ${plural(x.count, 'person', 'people')}`)), h('b', { class: 'amt' }, `${hoursFromMinutes(x.minutes) || 0} h`)))) };
   },
   setup_progress({ data }) {
     const left = data.setup.filter((s) => !s.done);

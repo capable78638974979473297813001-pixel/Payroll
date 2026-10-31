@@ -11,7 +11,7 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 const SPAN_LABEL = { 3: '¼', 4: '⅓', 6: '½', 8: '⅔', 12: 'Full' };
 const rid = () => `w_${Math.random().toString(36).slice(2, 10).padEnd(8, 'a')}`;
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'tab';
-const RESERVED = new Set(['contractors', 'login', 'signup', 'setup', 'join', 'app', 'api', 'run', 'new', 'help', 'settings']);
+const RESERVED = new Set(['contractors', 'login', 'signup', 'setup', 'join', 'app', 'api', 'run', 'new', 'help', 'settings', 'billing', 'job-costing', 'w9']);
 
 /** A page of cards: the company's tab, drawn from its saved dashboard, or from the editor's draft while customizing. */
 export function dashboardTab() {

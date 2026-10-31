@@ -6,6 +6,7 @@ import type { Company, Employee, PayRun } from '../domain/types.ts';
 import { nextPayday } from '../payroll/schedule.ts';
 import { availabilityFor } from './defaults.ts';
 import { stateFacts } from '../builder/facts.ts';
+import { JobService, hoursByTag } from '../jobs/service.ts';
 import { STATE_FORMS } from '../onboarding/forms.ts';
 
 /** One employee's new-hire forms. A person added directly has nothing recorded, so only what is known counts as done. */
@@ -120,6 +121,19 @@ export function dashboardData(store: Store, company: Company, today: string) {
 
   const tipPool = tipPoolFor(store, company, start, end);
 
+  // ---- hours this week by the groups a business uses, and cost by job
+  const jobReport = new JobService(store).report(company.id, start, end);
+  const groups = {
+    department: hoursByTag(store, company, start, end, 'department'),
+    crew: hoursByTag(store, company, start, end, 'crew'),
+    wc: hoursByTag(store, company, start, end, 'wcClass'),
+    job: jobReport.jobs.map((j) => ({ label: j.name, minutes: j.periodMinutes, costCents: j.periodCostCents, budgetCents: j.budgetCents, pct: j.pct, over: j.over })),
+  };
+
+  // ---- seasonal staff whose season ends within the next 30 days
+  const seasonal = active.filter((e) => e.season && e.season.end >= today && daysBetween(today, e.season.end) <= 30).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`, end: e.season!.end, daysLeft: daysBetween(today, e.season!.end) })).sort((a, b) => a.daysLeft - b.daysLeft);
+  const seasonalCount = active.filter((e) => e.season).length;
+
   // ---- forms
   const forms = active.map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`, ...formsOf(e, wantsStateForm) }));
   const onboarding = {
@@ -163,7 +177,7 @@ export function dashboardData(store: Store, company: Company, today: string) {
 
   return {
     asOf: today,
-    company: { name: company.legalName, state: company.homeState, schedule: { frequency: company.paySchedule.frequency, payWeekday: company.paySchedule.payWeekday ?? null }, workweekStartDay: company.settings.workweekStartDay, industry: company.industry, niche: company.niche, hasEin: !!company.ein, stateForm: STATE_FORMS[company.homeState] ?? null, roles: company.settings.roles.map((r) => ({ key: r.key, label: r.label, pay: r.pay, tipped: r.tipped })), paymentSetUp: !!company.payment.employerBank, locations: company.locations ?? [] },
+    company: { id: company.id, name: company.legalName, state: company.homeState, schedule: { frequency: company.paySchedule.frequency, payWeekday: company.paySchedule.payWeekday ?? null }, workweekStartDay: company.settings.workweekStartDay, industry: company.industry, niche: company.niche, hasEin: !!company.ein, stateForm: STATE_FORMS[company.homeState] ?? null, roles: company.settings.roles.map((r) => ({ key: r.key, label: r.label, pay: r.pay, tipped: r.tipped })), paymentSetUp: !!company.payment.employerBank, locations: company.locations ?? [] },
     nextPayday: nextPayday(company, today, runs),
     runs: runs.slice(0, 10).map((r) => totalsOf(r)),
     latest: totalsOf(latest),
@@ -174,6 +188,8 @@ export function dashboardData(store: Store, company: Company, today: string) {
     tipPool,
     onboarding,
     stateCards,
+    groups,
+    seasonal: { ending: seasonal, count: seasonalCount },
     built,
     checklist,
     people: active.slice(0, 200).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`, role: roles.get(e.roleKey)?.label ?? e.roleKey, pay: e.payType.kind === 'hourly' ? { kind: 'hourly', cents: e.payType.rateCents } : { kind: 'salary', cents: e.payType.annualCents }, location: e.location ?? null, done: formsOf(e, wantsStateForm).done })),

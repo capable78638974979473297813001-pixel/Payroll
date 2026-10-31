@@ -18,6 +18,7 @@ import { runMasteryTax, type MasteryCommand } from '../tax/masterytax.ts';
 import { tipSplit } from '../tax/tipSplit.ts';
 import { tipReport } from '../restaurant/reports.ts';
 import { suggestPeriods } from '../payroll/schedule.ts';
+import { JobService, wcReport } from '../jobs/service.ts';
 import { ContractorService } from '../contractors/service.ts';
 import { BillingService } from '../billing/service.ts';
 import { StripeClient, stripeConfigured, stripeMode, type StripeBillingApi } from '../money/stripe.ts';
@@ -144,6 +145,8 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
   const billing = new BillingService(store, deps.billingStripe !== undefined ? deps.billingStripe : stripeConfigured() ? new StripeClient() : null, now);
   const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
   const contractors = new ContractorService(store, mailer, now);
+  const jobs = new JobService(store, now);
+  const range = (c: Ctx) => { const a = c.query.get('start'); const b = c.query.get('end'); if (!isIsoDate(a) || !isIsoDate(b)) throw badRequest('start and end must be YYYY-MM-DD'); return [a, b] as const; };
   const onboarding = new OnboardingService(store, mailer, deps.banks, now, deps.log);
   const joinLimit = (c: { ip: string }) => { const wait = logins.hit(`join:${c.ip}`, 200, now().getTime()); if (wait) throw new ApiError(429, 'rate_limited', 'Too many tries. Wait a few minutes and try again.', { retryAfterSeconds: wait }); };
   const secureCookies = (req: IncomingMessage) => (config.publicBaseUrl ?? '').startsWith('https://') || (config.trustProxy && req.headers['x-forwarded-proto'] === 'https');
@@ -392,6 +395,14 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('POST', `${C}/contractors/:xid/w9-request`, 'company', async (c) => contractors.requestW9(c.params.cid, siteBase(c.req), c.params.xid)),
     route('GET', '/v1/w9/:token', 'none', (c) => { joinLimit(c); return contractors.w9Status(c.params.token); }),
     route('POST', '/v1/w9/:token', 'none', (c) => { joinLimit(c); return contractors.submitW9(c.params.token, c.json()); }),
+    route('GET', `${C}/jobs`, 'company', (c) => ({ jobs: jobs.list(c.params.cid) })),
+    route('POST', `${C}/jobs`, 'company', (c) => jobs.add(c.params.cid, c.json()), 201),
+    route('POST', `${C}/jobs/log`, 'company', (c) => jobs.logHours(c.params.cid, c.json())),
+    route('GET', `${C}/jobs/report`, 'company', (c) => { const [a, b] = range(c); return jobs.report(c.params.cid, a, b); }),
+    route('GET', `${C}/jobs/export`, 'company', (c) => { const [a, b] = range(c); const f = jobs.exportCsv(c.params.cid, a, b); return new Text(f.content, f.fileName); }),
+    route('PATCH', `${C}/jobs/:jid`, 'company', (c) => jobs.update(c.params.cid, c.params.jid, c.json())),
+    route('DELETE', `${C}/jobs/:jid`, 'company', (c) => jobs.archive(c.params.cid, c.params.jid)),
+    route('GET', `${C}/reports/wc`, 'company', (c) => { const r = wcReport(store, store.companies.require(c.params.cid, 'Company'), Number(c.query.get('year') ?? now().getUTCFullYear())); return c.query.get('format') === 'csv' ? new Text(r.csv, r.fileName) : { year: r.year, rows: r.rows, note: r.note }; }),
     route('GET', `${C}/profile`, 'company', (c) => profileView(store.companies.require(c.params.cid, 'Company'))),
     route('PUT', `${C}/profile`, 'company', (c) => saveProfile(store, c.params.cid, c.json())),
     route('POST', `${C}/profile/documents`, 'company', (c) => addDocument(store, c.params.cid, c.json()), 201),

@@ -73,6 +73,7 @@ export function recordShift(store: Store, companyId: string, body: unknown): Shi
     ...(externalId ? { externalId } : {}),
     ...(o.rateCentsPerHour !== undefined ? { rateCentsPerHour: v.cents(o, 'rateCentsPerHour', { min: 1, max: 100_000 }) } : {}),
     ...(o.scheduledMinutes !== undefined ? { scheduledMinutes: v.int(o, 'scheduledMinutes', 1, 1440) } : {}),
+    ...jobFields(store, companyId, o),
     chargedTipsCents,
     cashTipsCents,
     salesCents: o.salesCents === undefined ? 0 : v.cents(o, 'salesCents'),
@@ -81,6 +82,16 @@ export function recordShift(store: Store, companyId: string, body: unknown): Shi
     createdAt: existing?.createdAt ?? new Date().toISOString(),
   };
   return store.tx(() => store.shifts.put(shift));
+}
+
+/** A shift charged to a job must name a job at this company, and a cost code that job has. */
+function jobFields(store: Store, companyId: string, o: Record<string, unknown>): { jobId?: string; costCode?: string } {
+  if (o.jobId === undefined || o.jobId === null || o.jobId === '') return {};
+  const job = store.jobs.get(v.str(o, 'jobId'));
+  if (!job || job.companyId !== companyId || job.archivedAt) throw badRequest('That job isn’t one of your open jobs.', { field: 'jobId' });
+  const code = o.costCode === undefined || o.costCode === '' ? undefined : v.str(o, 'costCode', { max: 30 });
+  if (code && !job.costCodes.some((c) => c.code === code)) throw badRequest(`${job.name} has no cost code '${code}'.`, { field: 'costCode' });
+  return { jobId: job.id, ...(code ? { costCode: code } : {}) };
 }
 
 export function deleteShift(store: Store, companyId: string, shiftId: string): void {

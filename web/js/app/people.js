@@ -208,7 +208,7 @@ export function profilePage() {
     const paperRows = () => forms(row).map(([name, ok, note]) => h('div', { class: 'row' }, h('span', { class: 'l1' }, h('b', {}, name), h('i', {}, note)), h('span', { class: `dt ${ok ? 'ok' : 'no'}` }, ok ? 'On file' : 'Missing')));
     const pages = {
       Overview: () => h('div', {}, h('div', { class: 'grid g3', style: { gridTemplateColumns: 'repeat(3, minmax(0,1fr))' } },
-        h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '12px' } }, 'Job and pay'), kv(['Role', roleLabel], [e.payType.kind === 'hourly' ? 'Hourly rate' : 'Salary', e.payType.kind === 'hourly' ? money(e.payType.rateCents) : `${money(e.payType.annualCents)}/yr`], ['Pay type', `${e.payType.kind === 'hourly' ? 'Hourly' : 'Salaried'}${tipped ? ', tipped' : ''}`], ['Work location', e.location || '—'], ['Pay schedule', { weekly: 'Weekly', biweekly: 'Every other week', semimonthly: 'Twice a month', monthly: 'Monthly' }[app.data.company.schedule.frequency]])),
+        h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '12px' } }, 'Job and pay'), kv(['Role', roleLabel], [e.payType.kind === 'hourly' ? 'Hourly rate' : 'Salary', e.payType.kind === 'hourly' ? money(e.payType.rateCents) : `${money(e.payType.annualCents)}/yr`], ['Pay type', `${e.payType.kind === 'hourly' ? 'Hourly' : 'Salaried'}${tipped ? ', tipped' : ''}`], ['Work location', e.location || '—'], ...(e.tags && e.tags.crew ? [['Crew', e.tags.crew]] : []), ...(e.tags && e.tags.department ? [['Department', e.tags.department]] : []), ...(e.tags && e.tags.wcClass ? [['Comp class', e.tags.wcClass]] : []), ...(e.season ? [['Season', `${shortDate(e.season.start)} to ${shortDate(e.season.end)}`]] : []), ['Pay schedule', { weekly: 'Weekly', biweekly: 'Every other week', semimonthly: 'Twice a month', monthly: 'Monthly' }[app.data.company.schedule.frequency]])),
         h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Tax setup'), Chip('Calculated by Omnia.tax', 'line')), kv(['Federal W-4', e.onboarding && !e.onboarding.w4 ? 'Not filled in yet' : FILING[e.federalW4.filingStatus] || e.federalW4.filingStatus], [`${e.workState.code} withholding`, e.workState.certificate && e.workState.certificate.allowances !== undefined ? `${plural(e.workState.certificate.allowances, 'exemption')}` : 'Standard'], ['Tips', tipped ? 'Reported each pay run' : 'None'])),
         h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Paperwork'), ...paperRows())),
       h('div', { class: 'grid', style: { gridTemplateColumns: 'minmax(0,1fr)', marginTop: '18px' } }, h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Recent pay'), paid.length ? link(`/app/payroll/runs/${paid[0].run.id}/stub/${id}`, { class: 'link' }, 'Latest stub') : null),
@@ -227,16 +227,25 @@ export function profilePage() {
       const locs = app.data.company.locations;
       const locSel = locs.length ? Field({ label: 'Location', name: 'location', select: true, value: e.location || locs[0].name, options: locs.map((l) => ({ value: l.name, label: l.name })) }) : null;
       const rate = Field({ label: e.payType.kind === 'hourly' ? 'Hourly rate' : 'Annual salary', name: 'rate', value: ((e.payType.kind === 'hourly' ? e.payType.rateCents : e.payType.annualCents) / 100).toFixed(2), inputmode: 'decimal' });
+      const has = (id) => app.data.built.modules.some((m) => m.items.some((i) => i.id === id));
+      const tagF = {
+        ...(has('crew_tags') ? { crew: Field({ label: 'Crew', name: 'crew', value: (e.tags && e.tags.crew) || '', placeholder: 'Red crew', optional: true }) } : {}),
+        ...(has('dept_tags') ? { department: Field({ label: 'Department', name: 'department', value: (e.tags && e.tags.department) || '', placeholder: 'Front desk', optional: true }) } : {}),
+        ...(has('wc_classes') ? { wcClass: Field({ label: 'Workers’ comp class code', name: 'wcClass', value: (e.tags && e.tags.wcClass) || '', placeholder: '5190', optional: true, hint: 'Your insurer assigns the classes.' }) } : {}),
+      };
+      const seasonOn = has('seasonal_dates');
+      const sStart = seasonOn ? Field({ label: 'Season starts', name: 'seasonStart', type: 'date', value: (e.season && e.season.start) || '', optional: true }) : null;
+      const sEnd = seasonOn ? Field({ label: 'Season ends', name: 'seasonEnd', type: 'date', value: (e.season && e.season.end) || '', optional: true }) : null;
       const err = h('div', {}); const save = Button({}, 'Save');
       const end = h('button', { class: 'link as-button', type: 'button', style: { color: '#B3261E' }, onClick: () => { m.close(); endModal(); } }, 'End their employment');
-      const m = modal({ title: `Edit ${e.firstName}`, body: h('div', { class: 'f' }, h('div', { class: 'r2' }, f.first.el, f.last.el), f.email.el, h('div', { class: 'r2' }, roleSel.el, locSel ? locSel.el : h('div')), rate.el, err, h('div', {}, end)), actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Cancel'), save] });
+      const m = modal({ title: `Edit ${e.firstName}`, body: h('div', { class: 'f' }, h('div', { class: 'r2' }, f.first.el, f.last.el), f.email.el, h('div', { class: 'r2' }, roleSel.el, locSel ? locSel.el : h('div')), rate.el, ...Object.values(tagF).map((x) => x.el), sStart ? h('div', { class: 'r2' }, sStart.el, sEnd.el) : null, err, h('div', {}, end)), actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Cancel'), save] });
       save.addEventListener('click', async () => {
         err.replaceChildren(); const cents = dollarsToCents(rate.value);
         if (!cents) return rate.setError('Enter a number, like 15.50.');
         const role = app.data.company.roles.find((r) => r.key === roleSel.value);
         setLoading(save, true);
         try {
-          await api.patch(`${base()}/employees/${id}`, { firstName: f.first.value, lastName: f.last.value, ...(f.email.value ? { email: f.email.value } : {}), roleKey: roleSel.value, ...(locSel ? { location: locSel.value } : {}), payType: role.pay === 'hourly' ? { kind: 'hourly', rateCents: cents } : { kind: 'salary', annualCents: cents } });
+          await api.patch(`${base()}/employees/${id}`, { firstName: f.first.value, lastName: f.last.value, ...(f.email.value ? { email: f.email.value } : {}), roleKey: roleSel.value, ...(locSel ? { location: locSel.value } : {}), payType: role.pay === 'hourly' ? { kind: 'hourly', rateCents: cents } : { kind: 'salary', annualCents: cents }, ...(Object.keys(tagF).length ? { tags: { ...(e.tags || {}), ...Object.fromEntries(Object.entries(tagF).map(([k, f]) => [k, f.value.trim()])) } } : {}), ...(seasonOn ? { season: sStart.value && sEnd.value ? { start: sStart.value, end: sEnd.value } : null } : {}) });
           m.close(); toast('success', 'Saved.'); navigate(`/app/people/${id}`);
           location.reload();
         } catch (e2) { err.replaceChildren(Alert('error', e2.message)); setLoading(save, false); }

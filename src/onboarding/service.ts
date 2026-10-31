@@ -60,7 +60,7 @@ export class OnboardingService {
     if (!role) throw badRequest('Pick their role.', { field: 'roleKey' });
     const pay = role.pay === 'hourly' ? { kind: 'hourly', rateCents: o.rateCents } : { kind: 'salary', annualCents: o.rateCents };
     let employee = addEmployee(this.store, companyId, {
-      firstName: o.firstName, lastName: o.lastName, email, roleKey: role.key, hireDate: startDate, payType: pay, location: o.location,
+      firstName: o.firstName, lastName: o.lastName, email, roleKey: role.key, hireDate: startDate, payType: pay, location: o.location, ...(o.tags !== undefined ? { tags: o.tags } : {}),
       ...(role.tipped !== 'never' ? { tipCreditNoticeDate: startDate } : {}),
     });
     const token = randomBytes(32).toString('base64url');

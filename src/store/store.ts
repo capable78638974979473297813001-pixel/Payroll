@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { notFound } from '../lib/errors.ts';
 import type { EmailCode, Session, User } from '../accounts/types.ts';
 import type { DashboardDoc } from '../dashboard/service.ts';
-import type { AchFile, ApiKey, AuditEntry, BankAccount, BankLink, Company, Contractor, Counter, Employee, HouseDay, LedgerEntry, MoneyLeg, PayRun, Shift, TaxDeposit } from '../domain/types.ts';
+import type { AchFile, ApiKey, AuditEntry, BankAccount, BankLink, Company, Contractor, Counter, Job, Employee, HouseDay, LedgerEntry, MoneyLeg, PayRun, Shift, TaxDeposit } from '../domain/types.ts';
 
 /**
  * A small transactional document store.
@@ -92,6 +92,7 @@ export class Store {
   readonly sessions = new Collection<Session>(this, 'sessions');
   readonly dashboards = new Collection<DashboardDoc>(this, 'dashboards');
   readonly contractors = new Collection<Contractor>(this, 'contractors');
+  readonly jobs = new Collection<Job>(this, 'jobs');
 
   private readonly collections: Record<string, Collection<Doc>>;
   private db: DatabaseSync | undefined;
@@ -99,7 +100,7 @@ export class Store {
 
   constructor(path?: string) {
     this.collections = Object.fromEntries(
-      [this.companies, this.employees, this.shifts, this.houseDays, this.payRuns, this.legs, this.ledger, this.apiKeys, this.taxDeposits, this.bankAccounts, this.bankLinks, this.achFiles, this.counters, this.auditLog, this.users, this.emailCodes, this.sessions, this.dashboards, this.contractors].map((c) => [c.name, c as unknown as Collection<Doc>]),
+      [this.companies, this.employees, this.shifts, this.houseDays, this.payRuns, this.legs, this.ledger, this.apiKeys, this.taxDeposits, this.bankAccounts, this.bankLinks, this.achFiles, this.counters, this.auditLog, this.users, this.emailCodes, this.sessions, this.dashboards, this.contractors, this.jobs].map((c) => [c.name, c as unknown as Collection<Doc>]),
     );
     if (path) this.open(path);
   }

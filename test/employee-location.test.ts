@@ -23,3 +23,12 @@ test('a person is placed at one of the business\'s locations, and a location in 
   assert.equal(c.location, 'Toledo');
   assert.equal(c.tags, undefined);
 });
+
+test('a seasonal person has a season, and an end before the start is refused', () => {
+  const store = new Store();
+  const { company } = newCompany(store);
+  const e = addEmployee(store, company.id, { ...base, season: { start: '2026-06-01', end: '2026-09-15' } });
+  assert.deepEqual(e.season, { start: '2026-06-01', end: '2026-09-15' });
+  assert.throws(() => addEmployee(store, company.id, { ...base, lastName: 'Two', season: { start: '2026-09-01', end: '2026-06-01' } }), ApiError);
+  assert.equal(updateEmployee(store, company.id, e.id, { season: null }).season, undefined);
+});

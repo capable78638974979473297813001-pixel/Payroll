@@ -78,6 +78,15 @@ function tagsOf(raw: unknown): Employee['tags'] | undefined {
   return out;
 }
 
+function seasonOf(raw: unknown): Employee['season'] | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === '') return null;
+  const o = v.obj(raw, 'season');
+  const start = v.date(o, 'start'); const end = v.date(o, 'end');
+  if (end < start) throw badRequest('The season ends before it starts.');
+  return { start, end };
+}
+
 export function addEmployee(store: Store, companyId: string, body: unknown): Employee {
   const o = v.obj(body);
   const company = store.companies.require(companyId, 'Company');
@@ -122,6 +131,7 @@ export function addEmployee(store: Store, companyId: string, body: unknown): Emp
     ...(o.tipCreditNoticeDate !== undefined ? { tipCreditNoticeDate: v.date(o, 'tipCreditNoticeDate') } : {}),
     ...(loc ? { location: loc.name } : {}),
     ...(tags && Object.keys(tags).length ? { tags } : {}),
+    ...(() => { const se = seasonOf(o.season); return se ? { season: se } : {}; })(),
     payoutAccounts: [],
     ytd: freshYearToDate(),
     ytdYear: Number(hireDate.slice(0, 4)),
@@ -154,6 +164,7 @@ export function updateEmployee(store: Store, companyId: string, employeeId: stri
   if (o.lastName !== undefined) e.lastName = v.str(o, 'lastName', { max: 60 });
   if (o.email !== undefined) e.email = v.str(o, 'email', { max: 200 });
   if (o.location !== undefined) { const loc = locationOf(company, o.location); if (loc) e.location = loc.name; else delete e.location; }
+  if (o.season !== undefined) { const se = seasonOf(o.season); if (se) e.season = se; else delete e.season; }
   if (o.tags !== undefined) { const t = tagsOf(o.tags); if (t && Object.keys(t).length) e.tags = t; else delete e.tags; }
   if (o.roleKey !== undefined) {
     const roleKey = v.str(o, 'roleKey');
