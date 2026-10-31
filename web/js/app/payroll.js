@@ -260,7 +260,7 @@ async function hoursStep(period, data) {
   const side = h('div', { class: 'grid' },
     h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '10px' } }, 'This pay run'), h('dl', { class: 'kv', style: { gridTemplateColumns: '110px 1fr', fontSize: '13.5px' } }, h('dt', {}, 'Period'), h('dd', {}, rangeLabel(period.periodStart, period.periodEnd)), h('dt', {}, 'Pay date'), h('dd', {}, longDate(period.checkDate)), h('dt', {}, 'Schedule'), h('dd', {}, FREQ[sched] || sched), locs.length ? [h('dt', {}, 'Locations'), h('dd', {}, locs.join(', '))] : null)),
     tipped ? h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Tips this period'), h('div', { class: 'big2' }, h('div', {}, tipsTotal)), h('p', { class: 'cap' }, 'Tips paid through payroll. Cash tips someone already kept don’t need to be entered.')) : null,
-    posConn ? pullCard(posConn, period) : null,
+    pullCard(posConn, period),
     hasExtras || adjustments.length ? h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Bonuses and reimbursements'), h('button', { class: 'link as-button', type: 'button', 'data-testid': 'add-extra', onClick: addExtra }, 'Add')), extrasList) : null,
     sideAlerts, importBtn, template, file);
 

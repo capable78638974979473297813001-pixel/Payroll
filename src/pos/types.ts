@@ -1,5 +1,5 @@
 /** The point-of-sale and time-clock systems Totali can read from. */
-export type PosProviderId = 'toast' | 'square' | 'sevenshifts';
+export type PosProviderId = 'toast' | 'square' | 'sevenshifts' | 'file';
 
 /** Someone on the other system's staff list. */
 export interface PosPerson {

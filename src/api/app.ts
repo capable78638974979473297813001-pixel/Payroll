@@ -457,6 +457,7 @@ export function createApp(deps: { posFetch?: typeof fetch; posHosts?: Partial<Re
     route('POST', `${C}/pos/connect`, 'company', async (c) => pos.connect(c.params.cid, c.json()), 201),
     route('DELETE', `${C}/pos`, 'company', (c) => pos.disconnect(c.params.cid)),
     route('GET', `${C}/pos/people`, 'company', async (c) => pos.people(c.params.cid)),
+    route('POST', `${C}/pos/report`, 'company', (c) => pos.importReport(c.params.cid, c.json())),
     route('PUT', `${C}/pos/links`, 'company', (c) => pos.link(c.params.cid, c.json())),
     route('POST', `${C}/pos/sync`, 'company', async (c) => pos.sync(c.params.cid, c.json())),
     route('GET', `${C}/portal/requests`, 'company', (c) => portal.requests(c.params.cid)),

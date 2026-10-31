@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { navigate } from '../router.js';
 import { Button, Alert, Field, modal, setLoading, toast } from '../ui.js';
 import { base, refreshData } from './state.js';
-import { rangeLabel } from './payroll.js';
+import { rangeLabel, parseCsv } from './payroll.js';
 
 const hours = (m) => `${Math.round((m / 60) * 10) / 10} hours`;
 
@@ -14,6 +14,70 @@ function summaryView(s) {
     s.unmapped.length ? Alert('warn', `${plural(s.unmapped.length, 'person', 'people')} left out: not matched to your team.`, s.unmapped.slice(0, 6).map((u) => `${u.name} (${hours(u.minutes)})`).join(', ')) : null,
     s.problems.length ? Alert('warn', 'Some shifts couldn’t be saved.', s.problems.slice(0, 4).join(' · ')) : null,
     ...s.notes.map((n) => Alert('info', n)));
+}
+
+const COLUMNS = [['name', 'Employee name'], ['first', 'First name'], ['last', 'Last name'], ['email', 'Email'], ['date', 'Date'], ['clockIn', 'Clock in'], ['clockOut', 'Clock out'], ['hours', 'Paid hours'], ['breakMinutes', 'Unpaid break'], ['cardTips', 'Card tips'], ['cashTips', 'Cash tips'], ['tips', 'Total tips']];
+
+/**
+ * Hours from a report exported by any point of sale. The columns are found by their names and can be corrected, the
+ * people are matched, and nothing is saved until the owner says so.
+ */
+export function reportModal(onDone) {
+  const file = h('input', { type: 'file', accept: '.csv,text/csv', 'aria-label': 'Time clock report', 'data-testid': 'report-file' });
+  const body = h('div', { class: 'stack', style: { '--gap': '14px' } });
+  const go = Button({ disabled: true, type: 'button', 'data-testid': 'report-import' }, 'Import');
+  const m = modal({ title: 'Import a time clock report', body, actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Cancel'), go] });
+  let headers = []; let rows = []; let mapping = null; const links = {};
+  const intro = () => body.replaceChildren(h('p', { class: 'cap', style: { margin: 0 } }, 'Every point of sale can export hours. In yours, find the labor, time clock or timesheet report for a pay period and export it as CSV. Then choose the file here. Totali finds the columns, and you check them before anything is saved.'), file);
+  intro();
+  async function look() {
+    try {
+      const a = await api.post(`${base()}/pos/report`, { headers, rows, ...(mapping ? { mapping } : {}) });
+      mapping = a.mapping;
+      draw(a);
+    } catch (e) { body.replaceChildren(Alert('error', e.message), file); go.disabled = true; }
+  }
+  function draw(a) {
+    const opts = (cur) => [h('option', { value: '' }, 'Not in this report'), ...headers.map((x, i) => h('option', { value: String(i), selected: cur === i }, x || `Column ${i + 1}`))];
+    const sels = COLUMNS.map(([f, label]) => {
+      const sel = h('select', { class: 'in', 'aria-label': label, 'data-col': f, style: { minHeight: '34px', padding: '4px 8px', fontSize: '14px' } }, ...opts(a.mapping[f]));
+      sel.addEventListener('change', () => { const next = { ...mapping }; if (sel.value === '') delete next[f]; else next[f] = Number(sel.value); mapping = next; look(); });
+      return h('tr', {}, h('td', {}, label), h('td', {}, sel));
+    });
+    const peopleRows = a.people.map((p) => {
+      const sel = h('select', { class: 'in', 'aria-label': `Who is ${p.name}`, 'data-report-person': p.key, style: { minHeight: '34px', padding: '4px 8px', fontSize: '14px' } },
+        h('option', { value: '' }, 'Not matched'), h('option', { value: '__none' }, 'Not on my payroll'), ...a.team.map((e) => h('option', { value: e.id }, e.name)));
+      sel.value = p.status === 'ignored' ? '__none' : p.employeeId || '';
+      if (links[p.key] !== undefined) sel.value = links[p.key] === null ? '__none' : links[p.key];
+      sel.addEventListener('change', () => { links[p.key] = sel.value === '__none' ? null : sel.value === '' ? '' : sel.value; });
+      return h('tr', {}, h('td', {}, h('b', {}, p.name), h('div', { class: 'cap' }, `${plural(p.rows, 'shift')}, ${hours(p.minutes)}`)), h('td', {}, sel));
+    });
+    go.disabled = a.missing.length > 0 || a.rows === 0;
+    body.replaceChildren(...[
+      a.missing.length ? Alert('error', `I can’t find ${a.missing.join(' or ')}.`, 'Pick the right column below.') : h('p', { style: { margin: 0 }, 'data-testid': 'report-found' }, h('b', {}, `${plural(a.rows, 'row')}`), `, ${hours(a.minutes)}, ${a.from ? rangeLabel(a.from, a.to) : ''}`),
+      h('details', { open: a.missing.length > 0 }, h('summary', {}, 'Columns I found'), h('table', { class: 'tbl' }, h('tbody', {}, ...sels))),
+      a.people.length ? h('div', {}, h('div', { class: 'sec2' }, 'Who is who'), h('table', { class: 'tbl' }, h('tbody', {}, ...peopleRows))) : null,
+      a.problems.length ? Alert('warn', `${plural(a.problems.length, 'row')} skipped`, a.problems.slice(0, 4).join(' · ')) : null,
+      h('button', { class: 'link as-button', type: 'button', onClick: () => { headers = []; rows = []; mapping = null; file.value = ''; go.disabled = true; intro(); } }, 'Choose a different file')].filter(Boolean));
+  }
+  file.addEventListener('change', async () => {
+    const f = file.files[0]; if (!f) return;
+    const all = parseCsv(await f.text()).filter((r) => r.some((c) => c.trim()));
+    if (all.length < 2) return body.replaceChildren(Alert('error', 'That file has no rows.'), file);
+    if (all.length > 3001) return body.replaceChildren(Alert('error', 'That is more than 3,000 rows. Export one pay period at a time.'), file);
+    headers = all[0]; rows = all.slice(1); mapping = null;
+    await look();
+  });
+  go.addEventListener('click', async () => {
+    setLoading(go, true);
+    try {
+      const out = await api.post(`${base()}/pos/report`, { headers, rows, mapping, links, apply: true });
+      m.close(); await refreshData();
+      const s = out.applied;
+      toast(s.unmapped.length || s.problems.length ? 'warn' : 'success', `Imported ${plural(s.shifts, 'shift')} for ${plural(s.people, 'person', 'people')}.${s.unmapped.length ? ` ${s.unmapped.length} left out, not matched.` : ''}${s.problems.length ? ` ${s.problems.length} problems.` : ''}`, 9000);
+      onDone(s);
+    } catch (e) { body.prepend(Alert('error', e.message)); setLoading(go, false); }
+  });
 }
 
 /** Pull the hours and tips for a period, and say what happened. */
@@ -73,9 +137,18 @@ export async function posSection() {
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Connect your point of sale')),
         h('p', { class: 'cap', style: { marginTop: 0 } }, 'Totali doesn’t ring up sales. It reads your staff, their hours and their tips from the system you already use, so nobody types them twice. You can still enter hours by hand.'),
         connectForm(cat, redraw)),
-      h('p', { class: 'cap' }, 'Using Clover, Revel, Lightspeed or something else? Those aren’t connected yet. If your staff clock in on 7shifts, connect that. Otherwise export their hours as a spreadsheet and use Import hours when you run payroll.'));
+      h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Using something else?')),
+        h('p', { class: 'cap', style: { marginTop: 0 } }, 'Clover, Revel, Lightspeed, Aloha, TouchBistro, SpotOn, Heartland and the rest can all export hours. Choose their report here and Totali reads it, whatever the columns are called.'),
+        h('div', { class: 'acts' }, Button({ type: 'button', 'data-testid': 'open-report', onClick: () => reportModal(redraw) }, 'Import a time clock report'))));
   }
   const c = cat.connection;
+  if (c.provider === 'file') {
+    return h('div', { class: 'stack', style: { '--gap': '16px', maxWidth: '720px' } },
+      h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Spreadsheet imports'), h('span', { class: 'cap' }, c.lastSyncAt ? `Last imported ${longDate(c.lastSyncAt.slice(0, 10))}` : '')),
+        h('p', { class: 'cap', style: { marginTop: 0 } }, 'Import a report each pay period. Importing the same report again changes nothing, and a corrected report replaces the rows it corrects. Hours that were already paid never change.'),
+        h('div', { class: 'acts' }, Button({ type: 'button', 'data-testid': 'open-report', onClick: () => reportModal(redraw) }, 'Import a report'), h('button', { class: 'link as-button', type: 'button', 'data-testid': 'pos-disconnect', onClick: async () => { try { await api.del(`${base()}/pos`); toast('success', 'Done. You can connect a system now.'); redraw(); } catch (e) { toast('error', e.message); } } }, 'Stop using spreadsheets')),
+        c.lastSummary ? summaryView(c.lastSummary) : null));
+  }
   const periods = (await api.get(`${base()}/payroll/periods`)).periods.filter((p) => p.state !== 'paid').slice(0, 4);
   const periodSel = h('select', { class: 'in', 'aria-label': 'Which pay period', 'data-testid': 'pos-period', style: { minHeight: '38px', padding: '6px 10px' } }, ...periods.map((p) => h('option', { value: `${p.periodStart}|${p.periodEnd}` }, rangeLabel(p.periodStart, p.periodEnd))));
   const last = h('span', { class: 'cap' }, c.lastSyncAt ? `Last pulled ${longDate(c.lastSyncAt.slice(0, 10))}` : 'Not pulled yet');
@@ -103,6 +176,10 @@ export async function posSection() {
 
 /** On the Run payroll page: one button that pulls this period, then reloads the hours. */
 export function pullCard(conn, period) {
+  if (!conn || conn.provider === 'file') {
+    return h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Time clock report')), h('p', { class: 'cap', style: { marginTop: 0 } }, 'Bring in this period’s hours and tips from a report your point of sale exports.'),
+      h('div', { class: 'acts' }, Button({ size: 'sm', type: 'button', 'data-testid': 'pull-hours', onClick: () => reportModal(() => navigate(location.pathname + location.search)) }, 'Import a report')));
+  }
   const result = h('div', {});
   const go = Button({ size: 'sm', type: 'button', 'data-testid': 'pull-hours' }, 'Pull hours and tips');
   go.addEventListener('click', async () => {
