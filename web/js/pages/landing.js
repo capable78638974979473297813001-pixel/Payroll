@@ -9,9 +9,9 @@ export function landing() {
   el.innerHTML = markup;
   const signedIn = !!(session.user && session.user.emailVerified);
   if (signedIn) {
-    const login = el.querySelector('.top a[href="/login"]');
+    const login = el.querySelector('.lp-top a[href="/login"]');
     if (login) { login.setAttribute('href', '/app'); login.textContent = 'Open your dashboard'; }
-    const create = el.querySelector('.top a.btn');
+    const create = el.querySelector('.lp-top a.btn');
     if (create) create.remove();
   }
   for (const f of el.querySelectorAll('form[data-signup]')) {

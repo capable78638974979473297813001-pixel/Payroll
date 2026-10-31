@@ -53,6 +53,6 @@ export function helpPage() {
     return h('div', {}, h('div', { class: 'ph2' }, h('div', {}, h('h1', { class: 'pt' }, 'How can we ', h('em', {}, 'help'), '?'))), search, cards,
       h('div', { class: 'grid', style: { gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)', marginTop: '30px', alignItems: 'start' } },
         h('div', {}, h('h2', { class: 'st2', style: { marginBottom: '12px' } }, 'Common ', h('em', {}, 'questions')), list),
-        h('div', { class: 'card', style: { background: '#FBF1E5', boxShadow: 'none' } }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Still stuck?'), h('p', { class: 'cap', style: { marginBottom: '12px' } }, 'Tell us what you were doing and we’ll write back.'), msg, err, h('div', { style: { marginTop: '12px' } }, send), Hand('A person reads these.', { style: { marginTop: '20px', fontSize: '24px', transform: 'rotate(-2deg)', position: 'static' } }))));
+        h('div', { class: 'card', style: { background: '#F3F4EF', boxShadow: 'none' } }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Still stuck?'), h('p', { class: 'cap', style: { marginBottom: '12px' } }, 'Tell us what you were doing and we’ll write back.'), msg, err, h('div', { style: { marginTop: '12px' } }, send), Hand('A person reads these.', { style: { marginTop: '20px', fontSize: '24px', transform: 'rotate(-2deg)', position: 'static' } }))));
   } });
 }

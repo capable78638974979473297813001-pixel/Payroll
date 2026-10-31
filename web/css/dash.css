@@ -3,12 +3,12 @@
    design's chips, modules, tables and buttons follow the theme without being rewritten. A diner and a steakhouse are the
    same code with different values. The default values are the design's. */
 .dash {
-  --d-bg: #FFF6EA; --d-card: #FFFDF9; --d-ink: #3B2A33; --d-muted: #7B6A72; --d-faint: #9A8A91; --d-line: #E8D9CC;
-  --d-accent: #8E1F4E; --d-accent-ink: #FFFFFF; --d-accent2: #0E5A66;
-  --d-radius: 12px; --d-pad: 20px; --d-gap: 18px;
-  --d-font: "Instrument Sans", system-ui, sans-serif; --d-font-head: Fraunces, Georgia, serif;
+  --d-bg: #FBFAF7; --d-card: #FFFFFF; --d-ink: #15201C; --d-muted: #5E6B66; --d-faint: #8C9792; --d-line: #E4E6E1;
+  --d-accent: #1E5B47; --d-accent-ink: #FFFFFF; --d-accent2: #D9553B;
+  --d-radius: 8px; --d-pad: 20px; --d-gap: 18px;
+  --d-font: "Instrument Sans", system-ui, sans-serif; --d-font-head: "Instrument Sans", system-ui, sans-serif;
   --d-num-weight: 600; --d-num-font: Inter, system-ui, sans-serif; --d-num-ls: -0.02em;
-  --d-good: #0E5A66; --d-bad: #B3261E; --d-warn: #B05A00;
+  --d-good: #1E6B3E; --d-bad: #B3261E; --d-warn: #A15C00;
   /* the bridge */
   --berry: var(--d-accent); --berryd: color-mix(in srgb, var(--d-accent) 82%, #000); --teal: var(--d-accent2); --teal2: var(--d-accent2);
   --cream: var(--d-bg); --paper: var(--d-card); --ink: var(--d-ink); --mut: var(--d-muted); --faint: var(--d-faint); --line: var(--d-line);
@@ -50,7 +50,7 @@
 .dash .orgmark.bar { width: 5px; height: 22px; border-radius: 1px; }
 .dash .tabs a { color: var(--d-muted); border-radius: calc(var(--d-radius) * .5); }
 .dash .tabs a.on, .dash .tabs a[aria-current="page"] { background: var(--d-card); box-shadow: 0 0 0 1px var(--d-line); color: var(--d-accent); font-weight: 600; }
-.dash .tabs em { background: var(--tang, #F0613A); color: #fff; }
+.dash .tabs em { background: var(--tang, #D9553B); color: #fff; }
 .dash .nav .rt2 a.hl { color: var(--d-muted); text-decoration: none; }
 .dash .nav .rt2 a.hl[aria-current="page"], .dash .nav .rt2 a.hl:hover { color: var(--d-accent); }
 .dash .nav .av { background: var(--d-accent); color: var(--d-accent-ink); border: 0; cursor: pointer; font-family: Inter, sans-serif; }
@@ -167,7 +167,7 @@
 .add-card b { font-size: 14.5px; font-weight: 600; } .add-card span { font-size: 13px; color: var(--d-muted); }
 .tab-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; }
 .check { display: flex; gap: 10px; align-items: center; font: 14px Inter, sans-serif; cursor: pointer; }
-.check input { width: 17px; height: 17px; accent-color: var(--d-accent, #8E1F4E); }
+.check input { width: 17px; height: 17px; accent-color: var(--d-accent, #1E5B47); }
 .warnline { font: 12.5px Inter, sans-serif; color: var(--d-warn); min-height: 0; }
 .hrow { display: flex; align-items: center; }
 .row-between { display: flex; justify-content: space-between; align-items: center; }
@@ -210,7 +210,7 @@
 .dash .todos .lt b { font-weight: 600; }
 .dash .todos .lt i { font-style: normal; color: var(--d-muted); font-size: 13px; }
 .dash .todos .sev { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--d-faint); }
-.dash .todos li.urgent .sev { background: var(--tang, #F0613A); }
+.dash .todos li.urgent .sev { background: var(--tang, #D9553B); }
 .dash .todos li.soon .sev { background: var(--d-warn); }
 .dash .late { color: var(--d-bad); font: 600 12.5px Inter, sans-serif; }
 @media (max-width: 700px) { .dash .runby { border-left: 0; padding-left: 0; } }

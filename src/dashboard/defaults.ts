@@ -41,7 +41,7 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   for (const m of a2.build?.modules ?? []) overview.push(w('module', m.id === 'pay_run' ? 8 : 4, { module: m.id }));
   tabs.push({ id: 'overview', label: 'Overview', kind: 'page', widgets: overview });
 
-  tabs.push({ id: 'payroll', label: 'Payroll', kind: 'page', widgets: [w('next_payroll_hero', 12), w('payroll_history', 6), w('cost_trend', 6), w('payroll_cost', 6), w('tax_summary', 6)] });
+  tabs.push({ id: 'payroll', label: 'Payroll', kind: 'page', widgets: [w('next_payroll_hero', 12), w('payroll_history', 6), w('cost_trend', 6), w('tax_summary', 12)] });
 
   const people: DashboardWidget[] = [w('people_directory', 12), w('team_summary', 6), w('onboarding_progress', 6)];
   if (has('locations')) people.push(w('locations_card', 6));
@@ -64,7 +64,7 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   return {
     version: 1,
     brand: { name: company.legalName, tagline: '', mark: 'initial' },
-    theme: { mode: 'cream', accent: '#8e1f4e', accent2: '#0e5a66', font: 'instrument', headingFont: 'fraunces', radius: 12, density: 'comfortable', cardStyle: 'flat', nav: 'top', header: 'plain', numbers: 'bold' },
+    theme: { mode: 'cream', accent: '#1e5b47', accent2: '#d9553b', font: 'instrument', headingFont: 'instrument', radius: 8, density: 'comfortable', cardStyle: 'flat', nav: 'top', header: 'plain', numbers: 'bold' },
     terms: {},
     tabs,
   };

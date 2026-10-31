@@ -32,7 +32,9 @@ function nextSteps(at) {
     h('p', { class: 'trust' }, 'Social Security numbers and bank details are encrypted. You don’t need a credit card to start.'));
 }
 
-const photo = (src, alt, pos) => h('figure', { class: 'photo' }, h('img', { src, alt, style: { objectPosition: pos } }));
+/** A short, plain note beside a form that has nothing to count down. */
+const note = (title, lines) => h('div', { class: 'nextsteps' }, h('h2', {}, title), h('ul', { class: 'quiet' }, ...lines.map((l) => h('li', {}, l))), h('p', { class: 'trust' }, 'Social Security numbers and bank details are encrypted. Totali never holds your money.'));
+
 
 const googleOn = () => !!(session.config && session.config.google);
 function orRule() {
@@ -226,7 +228,7 @@ export function login(ctx) {
   const card = [h('h1', {}, 'Welcome ', h('em', {}, 'back')), h('p', {}, 'Log in to your Totali account.'), form,
     h('p', { class: 'fine', style: { marginTop: '20px' } }, 'Staying signed in lasts until you choose ', h('b', {}, 'Sign out'), ' in the top menu.'),
     h('p', { class: 'fine', style: { marginTop: '8px' } }, 'On a team that uses Totali? ', link('/employee', { class: 'link' }, 'Employee sign in'), '.')];
-  const aside = h('div', {}, photo('/assets/img/chef.jpg', 'Cooks plating dishes', '50% 40%'), Hand('Your pay run is where you left it.', { style: { left: '10px', top: '420px', width: '220px', fontSize: '26px', transform: 'rotate(-3deg)' } }));
+  const aside = note('Pick up where you left off', ['Your next payroll, who still owes paperwork, and what is due this week are on your home screen.', 'Hours and tips come in from your POS when you connect it.']);
   return { title: 'Log in | Totali', el: frame({ card, aside, nudge: ['New here?', '/signup', 'Create account'] }) };
 }
 
@@ -272,7 +274,7 @@ export function forgot() {
 
   body.append(stepOne);
   const card = [h('h1', {}, 'Reset your ', h('em', {}, 'password')), h('p', {}, 'We’ll email a code to the address on your account.'), body];
-  const aside = h('div', {}, photo('/assets/img/chef.jpg', 'Cooks plating dishes', '50% 40%'), Hand('It happens. We’ll have you back in a minute.', { style: { left: '10px', top: '420px', width: '200px', fontSize: '26px', transform: 'rotate(-3deg)' } }));
+  const aside = note('We’ll get you back in', ['Enter your email and we send a 6-digit code to choose a new password.', 'The code works for 15 minutes.']);
   return { title: 'Reset password | Totali', el: frame({ card, aside, nudge: ['Remembered it?', '/login', 'Log in'] }) };
 }
 

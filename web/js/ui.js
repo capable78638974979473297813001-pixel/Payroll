@@ -20,14 +20,14 @@ export function icon(name, size = 16) {
 }
 
 // ---------------------------------------------------------------- logo
-const SQUIGGLE = () => h('svg', { viewBox: '0 0 120 10', preserveAspectRatio: 'none', 'aria-hidden': 'true' }, h('path', { d: 'M2 6 C 22 1, 40 9, 62 5 S 100 2, 118 6', fill: 'none', stroke: '#F0613A', 'stroke-width': 2.6, 'stroke-linecap': 'round' }));
+const SQUIGGLE = () => h('svg', { viewBox: '0 0 120 10', preserveAspectRatio: 'none', 'aria-hidden': 'true' }, h('path', { d: 'M2 6 C 22 1, 40 9, 62 5 S 100 2, 118 6', fill: 'none', stroke: '#D9553B', 'stroke-width': 2.6, 'stroke-linecap': 'round' }));
 export function Logo({ small = false, href = '/' } = {}) {
   return link(href, { class: `logo ${small ? 'sm' : ''}`, 'aria-label': 'Totali' }, 'totali', SQUIGGLE());
 }
 
 /** Hand-lettered margin note, with an optional arrow. */
 export function Hand(text, { style = {}, arrow = null } = {}) {
-  return h('div', { class: 'hand', style }, text, arrow ? h('svg', { viewBox: '0 0 110 60', width: 110, height: 60, 'aria-hidden': 'true', style: arrow.style || {} }, h('path', { d: arrow.d || 'M6 8 C 30 2, 70 14, 100 46', fill: 'none', stroke: '#0E5A66', 'stroke-width': 2.4, 'stroke-linecap': 'round' }), h('path', { d: 'M86 52 L104 54 L100 36', fill: 'none', stroke: '#0E5A66', 'stroke-width': 2.4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) : null);
+  return h('div', { class: 'hand', style }, text, arrow ? h('svg', { viewBox: '0 0 110 60', width: 110, height: 60, 'aria-hidden': 'true', style: arrow.style || {} }, h('path', { d: arrow.d || 'M6 8 C 30 2, 70 14, 100 46', fill: 'none', stroke: '#1E5B47', 'stroke-width': 2.4, 'stroke-linecap': 'round' }), h('path', { d: 'M86 52 L104 54 L100 36', fill: 'none', stroke: '#1E5B47', 'stroke-width': 2.4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) : null);
 }
 
 // ---------------------------------------------------------------- button

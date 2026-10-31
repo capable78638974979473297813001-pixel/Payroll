@@ -26,7 +26,7 @@ export function readableOn(hex) {
   return contrast(hex, '#ffffff') >= contrast(hex, '#0a0a0a') ? '#ffffff' : '#0a0a0a';
 }
 
-const SURFACES = { cream: '#fffdf9', light: '#ffffff', paper: '#fffbf2', slate: '#f7f9fb', dark: '#1a1d24' };
+const SURFACES = { cream: '#FFFFFF', light: '#ffffff', paper: '#fffbf2', slate: '#f7f9fb', dark: '#1a1d24' };
 /** Does the accent read well as text or numbers on the card color? Large numbers need 3 to 1. */
 export function accentOnCard(theme) {
   return contrast(theme.accent, SURFACES[theme.mode] || '#ffffff');
@@ -55,11 +55,11 @@ export function terms(config, defaults) {
 }
 
 /** A few starting palettes, offered as swatches. They are colors, not templates: picking one changes only the accent. */
-export const SWATCHES = ['#8e1f4e', '#0e5a66', '#c2410c', '#1f3bff', '#7c3aed', '#a16207', '#166534', '#0f172a', '#db2777', '#0369a1'];
+export const SWATCHES = ['#1e5b47', '#1E5B47', '#1E5B47', '#c2410c', '#1f3bff', '#7c3aed', '#a16207', '#166534', '#0f172a', '#db2777', '#0369a1'];
 
 /** Coherent combinations for "surprise me". Each is a set of independent values, not a saved design. */
 export const LOOKS = [
-  { mode: 'cream', accent: '#8e1f4e', accent2: '#0e5a66', font: 'instrument', headingFont: 'fraunces', radius: 12, density: 'comfortable', cardStyle: 'flat', nav: 'top', header: 'plain', numbers: 'bold' },
+  { mode: 'cream', accent: '#1e5b47', accent2: '#d9553b', font: 'instrument', headingFont: 'instrument', radius: 8, density: 'comfortable', cardStyle: 'flat', nav: 'top', header: 'plain', numbers: 'bold' },
   { mode: 'paper', accent: '#9f1239', accent2: '#2b1d0e', font: 'serif', headingFont: 'didone', radius: 2, density: 'airy', cardStyle: 'ruled', nav: 'top', header: 'plain', numbers: 'light' },
   { mode: 'dark', accent: '#d4a24c', accent2: '#f2e8d5', font: 'serif', headingFont: 'didone', radius: 0, density: 'comfortable', cardStyle: 'outlined', nav: 'side', header: 'plain', numbers: 'light' },
   { mode: 'light', accent: '#ea580c', accent2: '#0a0a0a', font: 'rounded', headingFont: 'rounded', radius: 16, density: 'comfortable', cardStyle: 'elevated', nav: 'top', header: 'band', numbers: 'bold' },

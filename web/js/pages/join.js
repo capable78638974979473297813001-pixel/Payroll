@@ -29,7 +29,7 @@ export function joinPage() {
       const names = st.steps;
       stepsEl.replaceChildren(...names.flatMap((s, i) => [h('span', { class: s.done ? 'done' : s.id === stepId ? 'on' : '' }, s.label), i < names.length - 1 ? h('i') : null].filter(Boolean)));
       host.replaceChildren(h('p', { class: 'cap', style: { marginBottom: '6px' } }, `Hi ${st.firstName}. ${names.length === 1 ? 'One short form' : `${['Zero', 'One', 'Two', 'Three'][names.length]} short forms`}, about ${names.length * 2} minutes.`), h('div', { style: { marginBottom: '18px' } }, stepsEl), h('h1', { class: 'pt', style: { fontSize: '26px' } }, ...title), h('p', { class: 'cap', style: { margin: '6px 0 20px' } }, sub), form);
-      aside.replaceChildren(h('div', { class: 'card', style: { background: '#FBF1E5', boxShadow: 'none' } }, h('h3', { class: 'ct', style: { marginBottom: '8px' } }, why[0]), h('p', { class: 'cap', style: { fontSize: '14px' } }, why[1])), Hand(note, { style: { marginTop: '20px', fontSize: '25px', transform: 'rotate(-2deg)', position: 'static' } }));
+      aside.replaceChildren(h('div', { class: 'card', style: { background: '#F3F4EF', boxShadow: 'none' } }, h('h3', { class: 'ct', style: { marginBottom: '8px' } }, why[0]), h('p', { class: 'cap', style: { fontSize: '14px' } }, why[1])), Hand(note, { style: { marginTop: '20px', fontSize: '25px', transform: 'rotate(-2deg)', position: 'static' } }));
     };
 
     const submit = (path, build, after) => async (e, btn, err) => {

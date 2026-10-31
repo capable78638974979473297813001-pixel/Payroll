@@ -22,7 +22,7 @@ const typesOnPage = (page) => page.locator('.grid.cards > .card[data-widget]').e
     assert.deepEqual(start.slice(0, 4), ['setup_guide', 'next_payroll_hero', 'todo_list', 'week_snapshot']);
     assert.equal(start.filter((t) => t === 'module').length, 8, 'the design\'s eight sections');
     assert.equal(await page.locator('.nav .org').textContent(), 'MMaple & Main Diner', 'the initial mark and the business name');
-    assert.equal(await cssVar(page, '--d-accent'), '#8e1f4e');
+    assert.equal(await cssVar(page, '--d-accent'), '#1e5b47');
     // the setup's answers are on the page, and the Michigan items from the builder
     assert.ok((await page.locator('[data-type=built_from]').textContent()).includes('Detroit and Ferndale'));
     assert.ok((await page.locator('[data-module=new_hire_forms]').textContent()).includes('MI-W4'));
@@ -170,7 +170,7 @@ const typesOnPage = (page) => page.locator('.grid.cards > .card[data-widget]').e
     await page.click('button:has-text("Undo last save")');
     await page.click('.modal button:has-text("Undo")');
     await page.waitForSelector('.editbar', { state: 'detached' });
-    assert.equal(await cssVar(page, '--d-accent'), '#8e1f4e', 'back to how it was before the save');
+    assert.equal(await cssVar(page, '--d-accent'), '#1e5b47', 'back to how it was before the save');
 
     // ---- start over
     await page.click('[data-testid=customize]');

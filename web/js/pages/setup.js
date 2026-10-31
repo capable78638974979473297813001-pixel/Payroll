@@ -15,11 +15,11 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // ---------------------------------------------------------------- the industry cards (look and wording from the design)
 const IND = {
-  restaurant: { color: '#8E1F4E', title: ['Restaurants', 'and bars'], blurb: 'Servers, cooks and bartenders. Hours, tips and tip pools on one pay run.', noun: 'restaurant', tab: 'Time & tips', icon: 'M4 21h22M6 21a9 9 0 0 1 18 0M15 10V7M13 7h4' },
-  hotel_lodging: { color: '#0E5A66', title: ['Hotels', 'and venues'], blurb: 'Front desk to housekeeping. Departments, split shifts and service charges.', noun: 'hotel', tab: 'Departments', icon: 'M14.5 16H27M23 16v4.5M27 16v3', circle: [10, 16, 4.5] },
-  construction_trades: { color: '#F0613A', title: ['Trades', 'and construction'], blurb: 'Crews, jobs and cost codes. Prevailing wage and union rates when you need them.', noun: 'trades business', tab: 'Job costing', icon: 'M7 24l9-9M15 6l9 9-3.2 3.2-9-9zM13 8.5l-4 4' },
+  restaurant: { color: '#1E5B47', title: ['Restaurants', 'and bars'], blurb: 'Servers, cooks and bartenders. Hours, tips and tip pools on one pay run.', noun: 'restaurant', tab: 'Time & tips', icon: 'M4 21h22M6 21a9 9 0 0 1 18 0M15 10V7M13 7h4' },
+  hotel_lodging: { color: '#1E5B47', title: ['Hotels', 'and venues'], blurb: 'Front desk to housekeeping. Departments, split shifts and service charges.', noun: 'hotel', tab: 'Departments', icon: 'M14.5 16H27M23 16v4.5M27 16v3', circle: [10, 16, 4.5] },
+  construction_trades: { color: '#D9553B', title: ['Trades', 'and construction'], blurb: 'Crews, jobs and cost codes. Prevailing wage and union rates when you need them.', noun: 'trades business', tab: 'Job costing', icon: 'M7 24l9-9M15 6l9 9-3.2 3.2-9-9zM13 8.5l-4 4' },
   office_studios: { color: '#3B2A33', title: ['Office', 'and studios'], blurb: 'Salaried and hourly staff, time off, and people in more than one state.', noun: 'studio', tab: 'Time off', icon: 'M11 10V7h8v3M4 17.5h22', rect: [4, 10, 22, 15, 2.2], wide: true },
-  delivery_couriers: { color: '#0E4D5A', title: ['Delivery', 'and couriers'], blurb: 'Drivers paid by the hour and by the trip. Mileage and contractor drivers.', noun: 'delivery business', tab: 'Trips', icon: 'M4 10l11-5 11 5v11l-11 5-11-5zM4 10l11 5 11-5M15 15v11', wide: true },
+  delivery_couriers: { color: '#164537', title: ['Delivery', 'and couriers'], blurb: 'Drivers paid by the hour and by the trip. Mileage and contractor drivers.', noun: 'delivery business', tab: 'Trips', icon: 'M4 10l11-5 11 5v11l-11 5-11-5zM4 10l11 5 11-5M15 15v11', wide: true },
 };
 
 function indIcon(def) {
@@ -204,10 +204,10 @@ export function summarize(q, v, ctx) {
 // ---------------------------------------------------------------- the live preview
 const STAMP = () => h('svg', { class: 'stamp', viewBox: '0 0 120 120', 'aria-hidden': 'true' },
   h('defs', {}, h('path', { id: 'circ-pv', d: 'M60 60 m-44 0 a44 44 0 1 1 88 0 a44 44 0 1 1 -88 0' })),
-  h('circle', { cx: 60, cy: 60, r: 55, fill: 'none', stroke: '#F0613A', 'stroke-width': 3 }),
-  h('circle', { cx: 60, cy: 60, r: 33, fill: 'none', stroke: '#F0613A', 'stroke-width': 1.5 }),
-  h('text', { 'font-family': 'Inter', 'font-weight': 600, 'font-size': 11.5, 'letter-spacing': 3.2, fill: '#F0613A' }, h('textPath', { href: '#circ-pv' }, 'SAMPLE DATA · SAMPLE DATA ·')),
-  h('text', { x: 60, y: 66, 'text-anchor': 'middle', 'font-family': 'Fraunces', 'font-style': 'italic', 'font-size': 19, fill: '#F0613A' }, 'preview'));
+  h('circle', { cx: 60, cy: 60, r: 55, fill: 'none', stroke: '#D9553B', 'stroke-width': 3 }),
+  h('circle', { cx: 60, cy: 60, r: 33, fill: 'none', stroke: '#D9553B', 'stroke-width': 1.5 }),
+  h('text', { 'font-family': 'Inter', 'font-weight': 600, 'font-size': 11.5, 'letter-spacing': 3.2, fill: '#D9553B' }, h('textPath', { href: '#circ-pv' }, 'SAMPLE DATA · SAMPLE DATA ·')),
+  h('text', { x: 60, y: 66, 'text-anchor': 'middle', 'font-family': 'Fraunces', 'font-style': 'italic', 'font-size': 19, fill: '#D9553B' }, 'preview'));
 
 function moduleCard(m, wide, newIds) {
   const isNew = newIds.has(m.id);
