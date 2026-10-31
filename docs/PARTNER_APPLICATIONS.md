@@ -91,9 +91,15 @@ Ask NCR which API exposes labor and time clock data for Aloha Cloud, and whether
 
 What exists works without a partnership: a restaurant makes **standard API access** credentials in Toast Web and pastes them in. Becoming a Toast integration partner would let owners connect without making credentials, and Toast's help centre has an article titled "Become a Toast Integration Partner" that I could not open. Toast documents that a restaurant's relationship with an integration partner is separate from its relationship with Toast, and one third-party page says restaurants pay a *Toast Partner Connect* fee to enable third-party integrations.
 
-## Square (optional)
+## Square (do this, it is self-serve)
 
-Owners can paste a personal access token today. To let them click *Sign in with Square* instead, register Totali as an application in the Square Developer Dashboard with the `EMPLOYEES_READ`, `TIMECARDS_READ`, `PAYMENTS_READ` and `MERCHANT_PROFILE_READ` permissions. It is self-serve. The OAuth handoff is not built; say if you want it.
+Sign in with Square is built. To switch it on:
+1. In the Square Developer Dashboard, create an application.
+2. On its OAuth page set the redirect URL to `https://YOUR-SITE/v1/pos/square/callback`.
+3. Copy the production Application ID and Application Secret to the server as `SQUARE_APP_ID` and `SQUARE_APP_SECRET`.
+4. The *Sign in with Square* button appears by itself. Totali asks for `EMPLOYEES_READ`, `TIMECARDS_READ`, `PAYMENTS_READ` and `MERCHANT_PROFILE_READ`, and renews the 30-day token before it runs out.
+
+A restaurant with more than one Square location can't use the button yet; it has to use an access token and enter the location ID.
 
 ## What I can't do for you
 

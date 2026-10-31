@@ -6,7 +6,7 @@ import type { Store } from '../store/store.ts';
 import { assertAdmin, assertCompanyAccess, authenticate, type Principal } from '../domain/auth.ts';
 import { companyView, createCompany, updateCompany } from '../domain/companies.ts';
 import type { Employee } from '../domain/types.ts';
-import { PosService } from '../pos/service.ts';
+import { PosService, type OAuthApps } from '../pos/service.ts';
 import type { PosProviderId } from '../pos/types.ts';
 import { addEmployee, employeeView, importYtd, requireEmployee, setPayoutAccounts, terminateEmployee, updateEmployee } from '../domain/employees.ts';
 import { deleteShift, listShifts, recordHouseDay, recordShift, recordShifts } from '../domain/timekeeping.ts';
@@ -122,7 +122,7 @@ export interface App {
   handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
 }
 
-export function createApp(deps: { clover?: { appId: string; secret: string } | null; posFetch?: typeof fetch; posHosts?: Partial<Record<PosProviderId, string>>; store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer; billingStripe?: StripeBillingApi | null; google?: GoogleAuth | null }): App {
+export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; posHosts?: Partial<Record<PosProviderId, string>>; store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer; billingStripe?: StripeBillingApi | null; google?: GoogleAuth | null }): App {
   const { store, banks, ach, config } = deps;
   const mailer = deps.mailer ?? new OutboxMailer();
   const accounts = deps.accounts ?? new AccountService(store, mailer, { ...(deps.now ? { now: deps.now } : {}), ...(deps.log ? { log: deps.log } : {}) });
@@ -151,8 +151,8 @@ export function createApp(deps: { clover?: { appId: string; secret: string } | n
   const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
   const google = deps.google !== undefined ? deps.google : (() => { const g = googleFromEnv(); return g ? new GoogleAuth(g, fetch, now) : null; })();
   const OAUTH_COOKIE = 'totali_oauth';
-  const clover = deps.clover !== undefined ? deps.clover : (process.env.CLOVER_APP_ID && process.env.CLOVER_APP_SECRET ? { appId: process.env.CLOVER_APP_ID, secret: process.env.CLOVER_APP_SECRET } : null);
-  const pos = new PosService(store, now, deps.posFetch ?? globalThis.fetch, config.devTools ? deps.posHosts ?? {} : {}, clover);
+  const oauth = deps.oauth ?? { ...(process.env.CLOVER_APP_ID && process.env.CLOVER_APP_SECRET ? { clover: { appId: process.env.CLOVER_APP_ID, secret: process.env.CLOVER_APP_SECRET } } : {}), ...(process.env.SQUARE_APP_ID && process.env.SQUARE_APP_SECRET ? { square: { appId: process.env.SQUARE_APP_ID, secret: process.env.SQUARE_APP_SECRET } } : {}) };
+  const pos = new PosService(store, now, deps.posFetch ?? globalThis.fetch, config.devTools ? deps.posHosts ?? {} : {}, oauth);
   const taxCache = new Map<string, { at: number; value: unknown }>();
   const contractors = new ContractorService(store, mailer, now);
   const jobs = new JobService(store, now);
@@ -444,11 +444,11 @@ export function createApp(deps: { clover?: { appId: string; secret: string } | n
     route('GET', `${C}/pos`, 'company', (c) => pos.catalog(c.params.cid)),
     route('POST', `${C}/pos/connect`, 'company', async (c) => pos.connect(c.params.cid, c.json()), 201),
     route('DELETE', `${C}/pos`, 'company', (c) => pos.disconnect(c.params.cid)),
-    route('GET', `${C}/pos/clover/start`, 'company', (c) => ({ url: pos.cloverStart(c.params.cid, `${siteBase(c.req)}/v1/pos/clover/callback`).url })),
-    route('GET', '/v1/pos/clover/callback', 'none', async (c) => {
+    route('GET', `${C}/pos/:provider/start`, 'company', (c) => ({ url: pos.oauthStart(c.params.cid, c.params.provider as PosProviderId, `${siteBase(c.req)}/v1/pos/${c.params.provider}/callback`).url })),
+    route('GET', '/v1/pos/:provider/callback', 'none', async (c) => {
       const back = (q: string) => new Reply({}, { location: `/app/settings/pos?${q}` }, 302);
-      try { await pos.cloverFinish(c.query, c.user?.companyId ?? null); return back('pos=connected'); }
-      catch (e) { return back(`pos_error=${encodeURIComponent(e instanceof Error ? e.message : 'Could not connect Clover.')}`); }
+      try { await pos.oauthFinish(c.params.provider as PosProviderId, c.query, c.user?.companyId ?? null); return back('pos=connected'); }
+      catch (e) { return back(`pos_error=${encodeURIComponent(e instanceof Error ? e.message : 'Could not connect.')}`); }
     }),
     route('GET', `${C}/pos/people`, 'company', async (c) => pos.people(c.params.cid)),
     route('POST', `${C}/pos/report`, 'company', (c) => pos.importReport(c.params.cid, c.json())),

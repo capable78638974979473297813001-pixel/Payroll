@@ -104,7 +104,7 @@ function connectForm(cat, after) {
     }
     host.replaceChildren(
       h('div', { class: 'opts', role: 'radiogroup', 'aria-label': 'Your system' }, ...cat.providers.map((p) => h('button', { type: 'button', class: `opt ${p.id === pick ? 'on' : ''}`, role: 'radio', 'aria-checked': String(p.id === pick), 'data-provider': p.id, onClick: () => { pick = p.id; draw(); } }, h('span', { class: 'rd' }), h('span', {}, p.name, h('small', {}, p.brings.join(', ')))))),
-      h('p', { class: 'cap', style: { margin: 0 } }, info.where),
+      h('ol', { class: 'cap', style: { margin: '0 0 0 18px', display: 'grid', gap: '4px' } }, ...info.steps.map((x) => h('li', {}, x))),
       info.caution ? Alert('info', info.caution) : null,
       h('form', { class: 'f', novalidate: true, onSubmit: async (e) => {
         e.preventDefault(); err.replaceChildren();

@@ -252,21 +252,21 @@ test('Clover sign-in: the owner approves at Clover, the code becomes tokens, and
     [/GET .*\/v3\/merchants\/M9\/shifts/, () => ({ elements: [] })],
   ]);
   const { store, company, advance } = make(f.f);
-  const svc = new PosService(store, () => new Date(t), f.f, {}, { appId: 'APP1', secret: 'SECRET1' });
+  const svc = new PosService(store, () => new Date(t), f.f, {}, { clover: { appId: 'APP1', secret: 'SECRET1' } });
   assert.equal(svc.catalog(company.id).providers.find((p) => p.id === 'clover')!.signIn, true, 'the button appears only when the app is set up');
-  const { url, state } = svc.cloverStart(company.id, 'https://totali.example/v1/pos/clover/callback');
+  const { url, state } = svc.oauthStart(company.id, 'clover', 'https://totali.example/v1/pos/clover/callback');
   assert.equal(url, `https://www.clover.com/oauth/v2/authorize?client_id=APP1&redirect_uri=${encodeURIComponent('https://totali.example/v1/pos/clover/callback')}&state=${state}`);
-  await assert.rejects(svc.cloverFinish(new URLSearchParams({ state: 'nope', code: 'c', merchant_id: 'M9' }), company.id), /expired/);
-  const again = svc.cloverStart(company.id, 'https://totali.example/cb');
-  await assert.rejects(svc.cloverFinish(new URLSearchParams({ state: again.state, code: 'c', merchant_id: 'M9' }), 'cmp_someone_else'), (e: unknown) => e instanceof ApiError && e.code === 'wrong_company');
-  const third = svc.cloverStart(company.id, 'https://totali.example/cb');
-  const conn = await svc.cloverFinish(new URLSearchParams({ state: third.state, code: 'the-code', merchant_id: 'M9' }), company.id);
+  await assert.rejects(svc.oauthFinish('clover', new URLSearchParams({ state: 'nope', code: 'c', merchant_id: 'M9' }), company.id), /expired/);
+  const again = svc.oauthStart(company.id, 'clover', 'https://totali.example/cb');
+  await assert.rejects(svc.oauthFinish('clover', new URLSearchParams({ state: again.state, code: 'c', merchant_id: 'M9' }), 'cmp_someone_else'), (e: unknown) => e instanceof ApiError && e.code === 'wrong_company');
+  const third = svc.oauthStart(company.id, 'clover', 'https://totali.example/cb');
+  const conn = await svc.oauthFinish('clover', new URLSearchParams({ state: third.state, code: 'the-code', merchant_id: 'M9' }), company.id);
   assert.equal(conn.provider, 'clover');
   const exchange = f.calls.find((c) => /oauth\/v2\/token/.test(c.url))!;
   assert.equal(exchange.url, 'https://api.clover.com/oauth/v2/token');
   assert.deepEqual(exchange.body, { client_id: 'APP1', client_secret: 'SECRET1', code: 'the-code' });
   assert.equal(JSON.stringify(store.posConnections.all()).includes('at-1'), false, 'tokens are stored encrypted');
-  await assert.rejects(svc.cloverFinish(new URLSearchParams({ state: third.state, code: 'x', merchant_id: 'M9' }), company.id), /expired/, 'a state works once');
+  await assert.rejects(svc.oauthFinish('clover', new URLSearchParams({ state: third.state, code: 'x', merchant_id: 'M9' }), company.id), /expired/, 'a state works once');
   // thirty minutes later the access token has run out: it is renewed with the refresh token, once
   await svc.people(company.id);
   assert.equal(f.calls.filter((c) => /oauth\/v2\/refresh/.test(c.url)).length, 0, 'still fresh');
@@ -276,4 +276,35 @@ test('Clover sign-in: the owner approves at Clover, the code becomes tokens, and
   assert.deepEqual(refresh.body, { client_id: 'APP1', refresh_token: 'rt-1' });
   assert.equal(f.calls.filter((c) => /merchants\/M9\/employees/.test(c.url)).at(-1)!.headers.authorization, 'Bearer at-2');
   void tokenCalls;
+});
+
+test('Sign in with Square: approve at Square, exchange the code, keep the tokens encrypted, renew them before the 30 days are up', async () => {
+  let refreshes = 0;
+  const f = fake([
+    [/POST .*\/oauth2\/token/, (c) => {
+      const b = c.body as Record<string, string>;
+      if (b.grant_type === 'refresh_token') { refreshes++; return { access_token: 'sq-at-2', token_type: 'bearer', expires_at: new Date(t + 30 * 86_400_000).toISOString(), merchant_id: 'MER1', refresh_token: b.refresh_token }; }
+      return { access_token: 'sq-at-1', token_type: 'bearer', expires_at: new Date(t + 30 * 86_400_000).toISOString(), merchant_id: 'MER1', refresh_token: 'sq-rt' };
+    }],
+    [/GET .*\/v2\/locations$/, () => ({ locations: [{ id: 'L1', name: 'Harbor Street', status: 'ACTIVE' }] })],
+    [/POST .*\/v2\/team-members\/search/, () => ({ team_members: [{ id: 'tm1', given_name: 'Ana', family_name: 'Cruz' }] })],
+  ]);
+  const { store, company, advance } = make(f.f);
+  const svc = new PosService(store, () => new Date(t), f.f, {}, { square: { appId: 'SQ-APP', secret: 'SQ-SECRET' } });
+  assert.equal(svc.catalog(company.id).providers.find((p) => p.id === 'square')!.signIn, true);
+  const { url, state } = svc.oauthStart(company.id, 'square', 'unused');
+  assert.equal(url, `https://connect.squareup.com/oauth2/authorize?client_id=SQ-APP&scope=EMPLOYEES_READ+TIMECARDS_READ+PAYMENTS_READ+MERCHANT_PROFILE_READ&session=false&state=${state}`);
+  await assert.rejects(svc.oauthFinish('clover', new URLSearchParams({ state, code: 'c' }), company.id), /isn’t set up|expired/, 'a state made for Square is not good for Clover');
+  const again = svc.oauthStart(company.id, 'square', 'unused');
+  const conn = await svc.oauthFinish('square', new URLSearchParams({ state: again.state, code: 'the-code' }), company.id);
+  assert.deepEqual([conn.provider, conn.label], ['square', 'Square: Harbor Street']);
+  const exchange = f.calls.find((c) => /oauth2\/token/.test(c.url))!;
+  assert.deepEqual(exchange.body, { client_id: 'SQ-APP', client_secret: 'SQ-SECRET', code: 'the-code', grant_type: 'authorization_code' });
+  assert.equal(JSON.stringify(store.posConnections.all()).includes('sq-at-1'), false, 'tokens are stored encrypted');
+  await svc.people(company.id);
+  assert.equal(refreshes, 0);
+  advance(29.5 * 86_400_000);
+  await svc.people(company.id);
+  assert.equal(refreshes, 1, 'renewed with a day or less left');
+  assert.equal(f.calls.filter((c) => /team-members/.test(c.url)).at(-1)!.headers.authorization, 'Bearer sq-at-2');
 });

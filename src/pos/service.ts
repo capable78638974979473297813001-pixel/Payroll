@@ -9,6 +9,7 @@ import type { Store } from '../store/store.ts';
 import type { Employee } from '../domain/types.ts';
 import { getJson, PosError, str, num, type Fetch } from './http.ts';
 import { CLOVER_HOSTS } from './clover.ts';
+import { SQUARE_HOSTS } from './square.ts';
 import { toastAdapter } from './toast.ts';
 import { squareAdapter } from './square.ts';
 import { sevenShiftsAdapter } from './sevenshifts.ts';
@@ -19,19 +20,21 @@ import type { PosAdapter, PosConnection, PosProviderId, PosProviderInfo, PosSumm
 
 const ENV = { name: 'environment', label: 'Which Toast or Square', optional: true, options: [{ value: 'production', label: 'My real restaurant' }, { value: 'sandbox', label: 'A test account' }] };
 
+export type OAuthApps = Partial<Record<'clover' | 'square', { appId: string; secret: string }>>;
+
 export const PROVIDERS: PosProviderInfo[] = [
   { id: 'toast', name: 'Toast', brings: ['Your staff', 'Hours from the time clock', 'Card tips and declared cash tips'],
-    where: 'In Toast Web, make API credentials under standard API access. Toast gives you a client ID and secret, and the restaurant GUID is in the restaurant’s details.',
+    steps: ['Sign in to Toast Web as an owner or admin.', 'Create API credentials under standard API access. Toast gives you a client ID and a client secret.', 'Copy those and your restaurant’s GUID into the boxes below. Totali only reads staff, hours and tips.'],
     fields: [{ name: 'clientId', label: 'Client ID' }, { name: 'clientSecret', label: 'Client secret', secret: true }, { name: 'restaurantGuid', label: 'Restaurant GUID' }, { ...ENV, label: 'Which Toast' }] },
   { id: 'square', name: 'Square', brings: ['Your staff', 'Hours from Square Team timecards', 'Declared cash tips and card tips'],
-    where: 'In the Square Developer Dashboard, open your application and copy its access token. It needs permission to read employees, timecards and payments. Card tips only come through when the sale was rung under a team member.',
+    steps: ['In the Square Developer Dashboard, open your application.', 'Copy its access token. It needs permission to read employees, timecards and payments.', 'Paste it below. Card tips come through when the sale was rung under a team member.'],
     fields: [{ name: 'accessToken', label: 'Access token', secret: true }, { name: 'locationId', label: 'Location ID', optional: true, hint: 'Only if you have more than one location.' }, { ...ENV, label: 'Which Square' }] },
   { id: 'clover', name: 'Clover', brings: ['Your staff', 'Hours from Clover shifts', 'Card tips from payments and cash tips entered at clock out'],
-    where: 'Clover gives a merchant ID and an access token to an app the restaurant has installed. The app needs permission to read employees and payments.',
+    steps: ['Clover gives a merchant ID and an access token to an app the restaurant has installed.', 'The app needs permission to read employees and payments.'],
     caution: 'Clover only issues production tokens through apps it has approved, so most restaurants can’t get one yet. If you can’t, import Clover’s hours report below.',
     fields: [{ name: 'merchantId', label: 'Merchant ID' }, { name: 'accessToken', label: 'Access token', secret: true }, { name: 'region', label: 'Where is the restaurant', optional: true, options: [{ value: 'na', label: 'United States or Canada' }, { value: 'eu', label: 'Europe' }, { value: 'la', label: 'Latin America' }] }] },
   { id: 'sevenshifts', name: '7shifts', brings: ['Your staff', 'Hours from the time clock', 'Tips on each punch'],
-    where: 'In 7shifts, go to Company Settings, Developer Tools, and choose Create Access Token. 7shifts works with most point of sale systems, so this is the way in if yours isn’t listed.',
+    steps: ['In 7shifts, open Company Settings, then Developer Tools.', 'Choose Create Access Token and copy it.', 'Paste it below. 7shifts works with most point of sale systems, so this is the way in if yours isn’t listed.'],
     fields: [{ name: 'accessToken', label: 'Access token', secret: true }, { name: 'companyId', label: 'Company ID', optional: true, hint: 'Only if the token reaches more than one company.' }] },
 ];
 
@@ -45,9 +48,9 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
  */
 export class PosService {
   private store: Store; private now: () => Date; private f: Fetch; private hosts: Partial<Record<PosProviderId, string>>; private lastSync = new Map<string, number>();
-  private clover: { appId: string; secret: string } | null; private pending = new Map<string, { companyId: string; until: number }>();
-  constructor(store: Store, now: () => Date = () => new Date(), f: Fetch = globalThis.fetch, hosts: Partial<Record<PosProviderId, string>> = {}, clover: { appId: string; secret: string } | null = null) {
-    this.store = store; this.now = now; this.f = f; this.hosts = hosts; this.clover = clover;
+  private oauth: OAuthApps; private pending = new Map<string, { companyId: string; provider: PosProviderId; until: number }>();
+  constructor(store: Store, now: () => Date = () => new Date(), f: Fetch = globalThis.fetch, hosts: Partial<Record<PosProviderId, string>> = {}, oauth: OAuthApps = {}) {
+    this.store = store; this.now = now; this.f = f; this.hosts = hosts; this.oauth = oauth;
   }
   private iso() { return this.now().toISOString(); }
 
@@ -67,7 +70,7 @@ export class PosService {
 
   catalog(companyId: string) {
     const c = this.connectionOf(companyId);
-    return { providers: PROVIDERS.map((p) => (p.id === 'clover' && this.clover ? { ...p, signIn: true } : p)), connection: c ? this.view(c) : null };
+    return { providers: PROVIDERS.map((p) => ((p.id === 'clover' || p.id === 'square') && this.oauth[p.id] ? { ...p, signIn: true } : p)), connection: c ? this.view(c) : null };
   }
 
   /** Check the details against the other system first. Only details that work are kept, and they are kept encrypted. */
@@ -90,35 +93,54 @@ export class PosService {
     return this.view(conn);
   }
 
-  // ------------------------------------------------------------------ Clover: the merchant signs in at Clover and approves Totali's app
+  // ------------------------------------------------------------------ the owner signs in at Clover or Square and approves Totali's app
 
-  private cloverHost(region?: string) { return this.hosts.clover ?? CLOVER_HOSTS[(region as keyof typeof CLOVER_HOSTS) ?? 'na'] ?? CLOVER_HOSTS.na; }
+  private apiHost(provider: PosProviderId, region?: string) {
+    if (this.hosts[provider]) return this.hosts[provider]!;
+    return provider === 'square' ? SQUARE_HOSTS.production : CLOVER_HOSTS[(region as keyof typeof CLOVER_HOSTS) ?? 'na'] ?? CLOVER_HOSTS.na;
+  }
 
-  /** Where to send the owner to approve Totali at Clover. Only works once Totali's own Clover app is set up. */
-  cloverStart(companyId: string, redirectUri: string) {
-    if (!this.clover) throw conflict('clover_not_set_up', 'Clover sign-in isn’t set up on this server yet.');
+  /** Where to send the owner to approve Totali. Works once Totali's own app is registered with that vendor. */
+  oauthStart(companyId: string, provider: PosProviderId, redirectUri: string) {
+    const app = provider === 'clover' || provider === 'square' ? this.oauth[provider] : undefined;
+    if (!app) throw conflict('sign_in_not_set_up', `Sign in with ${providerName(provider)} isn’t set up on this server yet.`);
     if (this.connectionOf(companyId)) throw conflict('one_source', 'Disconnect the current source first. Two sources would both report the same shift.');
     for (const [k, v] of this.pending) if (v.until < this.now().getTime()) this.pending.delete(k);
     const state = randomBytes(24).toString('base64url');
-    this.pending.set(state, { companyId, until: this.now().getTime() + 15 * 60_000 });
-    const host = this.hosts.clover ? this.hosts.clover : 'https://www.clover.com';
-    return { url: `${host}/oauth/v2/authorize?client_id=${encodeURIComponent(this.clover.appId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`, state };
+    this.pending.set(state, { companyId, provider, until: this.now().getTime() + 15 * 60_000 });
+    const q = encodeURIComponent;
+    if (provider === 'square') {
+      const host = this.hosts.square ?? SQUARE_HOSTS.production;
+      return { state, url: `${host}/oauth2/authorize?client_id=${q(app.appId)}&scope=${['EMPLOYEES_READ', 'TIMECARDS_READ', 'PAYMENTS_READ', 'MERCHANT_PROFILE_READ'].join('+')}&session=false&state=${state}` };
+    }
+    const host = this.hosts.clover ?? 'https://www.clover.com';
+    return { state, url: `${host}/oauth/v2/authorize?client_id=${q(app.appId)}&redirect_uri=${q(redirectUri)}&state=${state}` };
   }
 
-  /** Clover sends the merchant back with a code. Exchange it for tokens and keep them encrypted. */
-  async cloverFinish(query: URLSearchParams, signedInCompanyId: string | null) {
-    if (!this.clover) throw conflict('clover_not_set_up', 'Clover sign-in isn’t set up on this server yet.');
+  /** The vendor sends the owner back with a code. Exchange it for tokens and keep them encrypted. */
+  async oauthFinish(provider: PosProviderId, query: URLSearchParams, signedInCompanyId: string | null) {
+    const app = provider === 'clover' || provider === 'square' ? this.oauth[provider] : undefined;
+    if (!app) throw conflict('sign_in_not_set_up', `Sign in with ${providerName(provider)} isn’t set up on this server yet.`);
     const state = query.get('state') ?? '';
     const p = this.pending.get(state);
     this.pending.delete(state);
-    if (!p || p.until < this.now().getTime()) throw badRequest('That sign-in link has expired. Start again from Settings.');
+    if (!p || p.provider !== provider || p.until < this.now().getTime()) throw badRequest('That sign-in link has expired. Start again from Settings.');
     if (signedInCompanyId !== p.companyId) throw new ApiError(403, 'wrong_company', 'Sign in to the same Totali account you started from, and try again.');
-    const code = query.get('code'); const merchantId = query.get('merchant_id');
-    if (!code || !merchantId) throw badRequest('Clover didn’t approve the connection.');
-    const t = await getJson(this.f, 'Clover', `${this.cloverHost()}/oauth/v2/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: this.clover.appId, client_secret: this.clover.secret, code }) });
-    const creds = this.cloverTokens({ merchantId, region: 'na' }, t);
-    const checked = await this.adapter('clover', creds).check();
-    const conn: PosConnection = { id: newId('pos'), companyId: p.companyId, provider: 'clover', label: checked.label, credentialsEncrypted: encryptField(JSON.stringify(creds)), employeeMap: {}, connectedAt: this.iso() };
+    const code = query.get('code');
+    if (!code || query.get('error')) throw badRequest(`${providerName(provider)} didn’t approve the connection.`);
+    let creds: Record<string, string>;
+    if (provider === 'square') {
+      const t = await getJson(this.f, 'Square', `${this.apiHost('square')}/oauth2/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: app.appId, client_secret: app.secret, code, grant_type: 'authorization_code' }) });
+      creds = this.squareTokens({ environment: this.hosts.square ? 'sandbox' : 'production' }, t);
+    } else {
+      const merchantId = query.get('merchant_id');
+      if (!merchantId) throw badRequest('Clover didn’t say which restaurant approved.');
+      const t = await getJson(this.f, 'Clover', `${this.apiHost('clover')}/oauth/v2/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: app.appId, client_secret: app.secret, code }) });
+      creds = this.cloverTokens({ merchantId, region: 'na' }, t);
+    }
+    const checked = await this.adapter(provider, creds).check();
+    const stored = checked.creds ?? creds;
+    const conn: PosConnection = { id: newId('pos'), companyId: p.companyId, provider, label: checked.label, credentialsEncrypted: encryptField(JSON.stringify(stored)), employeeMap: {}, connectedAt: this.iso() };
     this.store.tx(() => this.store.posConnections.put(conn));
     return this.view(conn);
   }
@@ -128,13 +150,25 @@ export class PosService {
     return { ...base, accessToken: str(t.access_token), accessExpiresAt: String(num(t.access_token_expiration)), refreshToken: str(t.refresh_token), refreshExpiresAt: String(num(t.refresh_token_expiration)) };
   }
 
-  /** The adapter for a connection, with Clover's short-lived token renewed first when it is about to run out. */
+  private squareTokens(base: Record<string, string>, t: Record<string, unknown>): Record<string, string> {
+    if (!str(t.access_token)) throw new PosError('Square didn’t give an access token.');
+    const exp = Date.parse(str(t.expires_at));
+    return { ...base, accessToken: str(t.access_token), accessExpiresAt: String(Number.isFinite(exp) ? Math.floor(exp / 1000) : 0), refreshToken: str(t.refresh_token) };
+  }
+
+  /** The adapter for a connection, with a short-lived OAuth token renewed first when it is about to run out. */
   private async adapterFor(c: PosConnection): Promise<PosAdapter> {
     let creds = this.creds(c);
-    if (c.provider === 'clover' && creds.refreshToken && this.clover && Number(creds.accessExpiresAt) * 1000 < this.now().getTime() + 60_000) {
-      if (Number(creds.refreshExpiresAt) * 1000 < this.now().getTime()) throw new PosError('Clover’s sign-in has run out. Disconnect and connect Clover again.');
-      const t = await getJson(this.f, 'Clover', `${this.cloverHost(creds.region)}/oauth/v2/refresh`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: this.clover.appId, refresh_token: creds.refreshToken }) });
+    const nowMs = this.now().getTime();
+    if (c.provider === 'clover' && creds.refreshToken && this.oauth.clover && Number(creds.accessExpiresAt) * 1000 < nowMs + 60_000) {
+      if (Number(creds.refreshExpiresAt) * 1000 < nowMs) throw new PosError('Clover’s sign-in has run out. Disconnect and connect Clover again.');
+      const t = await getJson(this.f, 'Clover', `${this.apiHost('clover', creds.region)}/oauth/v2/refresh`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: this.oauth.clover.appId, refresh_token: creds.refreshToken }) });
       creds = this.cloverTokens(creds, t);
+      this.store.tx(() => this.store.posConnections.put({ ...c, credentialsEncrypted: encryptField(JSON.stringify(creds)) }));
+    }
+    if (c.provider === 'square' && creds.refreshToken && this.oauth.square && Number(creds.accessExpiresAt) * 1000 < nowMs + 86_400_000) {
+      const t = await getJson(this.f, 'Square', `${this.apiHost('square')}/oauth2/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: this.oauth.square.appId, client_secret: this.oauth.square.secret, grant_type: 'refresh_token', refresh_token: creds.refreshToken }) });
+      creds = this.squareTokens(creds, { ...t, refresh_token: str(t.refresh_token) || creds.refreshToken });
       this.store.tx(() => this.store.posConnections.put({ ...c, credentialsEncrypted: encryptField(JSON.stringify(creds)) }));
     }
     return this.adapter(c.provider, creds);

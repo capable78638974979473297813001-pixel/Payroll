@@ -40,8 +40,8 @@ export interface PosProviderInfo {
   name: string;
   /** What it brings in. */
   brings: string[];
-  /** Where the owner finds the details to paste in. */
-  where: string;
+  /** Where the owner finds the details to paste in, one step each. */
+  steps: string[];
   /** Something the owner should know before relying on it. */
   caution?: string;
   /** The owner can sign in at the other system and approve Totali, instead of pasting a token. */
