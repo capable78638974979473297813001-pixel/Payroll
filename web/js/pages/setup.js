@@ -415,6 +415,7 @@ export async function builder() {
         await persist('review');
         await api.post('/v1/builder/finish');
         await refreshUser();
+        try { sessionStorage.setItem('totali_welcome', '1'); } catch { /* the prompt is a convenience */ }
         navigate('/app');
       } catch (e) { err.replaceChildren(Alert('error', e.message)); setLoading(finish, false); }
     });

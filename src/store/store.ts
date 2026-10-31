@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { notFound } from '../lib/errors.ts';
 import type { EmailCode, Session, User } from '../accounts/types.ts';
-import type { PortalSession } from '../portal/types.ts';
+import type { PortalAccount, PortalSession } from '../portal/types.ts';
 import type { DashboardDoc } from '../dashboard/service.ts';
 import type { AchFile, ApiKey, AuditEntry, BankAccount, BankLink, Company, Contractor, Counter, Job, Employee, HouseDay, LedgerEntry, MoneyLeg, PayRun, Shift, TaxDeposit } from '../domain/types.ts';
 
@@ -95,6 +95,7 @@ export class Store {
   readonly contractors = new Collection<Contractor>(this, 'contractors');
   readonly jobs = new Collection<Job>(this, 'jobs');
   readonly portalSessions = new Collection<PortalSession>(this, 'portalSessions');
+  readonly portalAccounts = new Collection<PortalAccount>(this, 'portalAccounts');
 
   private readonly collections: Record<string, Collection<Doc>>;
   private db: DatabaseSync | undefined;
@@ -102,7 +103,7 @@ export class Store {
 
   constructor(path?: string) {
     this.collections = Object.fromEntries(
-      [this.companies, this.employees, this.shifts, this.houseDays, this.payRuns, this.legs, this.ledger, this.apiKeys, this.taxDeposits, this.bankAccounts, this.bankLinks, this.achFiles, this.counters, this.auditLog, this.users, this.emailCodes, this.sessions, this.dashboards, this.contractors, this.jobs, this.portalSessions].map((c) => [c.name, c as unknown as Collection<Doc>]),
+      [this.companies, this.employees, this.shifts, this.houseDays, this.payRuns, this.legs, this.ledger, this.apiKeys, this.taxDeposits, this.bankAccounts, this.bankLinks, this.achFiles, this.counters, this.auditLog, this.users, this.emailCodes, this.sessions, this.dashboards, this.contractors, this.jobs, this.portalSessions, this.portalAccounts].map((c) => [c.name, c as unknown as Collection<Doc>]),
     );
     if (path) this.open(path);
   }

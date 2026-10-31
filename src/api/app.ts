@@ -7,6 +7,7 @@ import { assertAdmin, assertCompanyAccess, authenticate, type Principal } from '
 import { companyView, createCompany, updateCompany } from '../domain/companies.ts';
 import type { Employee } from '../domain/types.ts';
 import { PortalService } from '../portal/service.ts';
+import type { PortalAccount } from '../portal/types.ts';
 import { addEmployee, employeeView, importYtd, requireEmployee, setPayoutAccounts, terminateEmployee, updateEmployee } from '../domain/employees.ts';
 import { deleteShift, listShifts, recordHouseDay, recordShift, recordShifts } from '../domain/timekeeping.ts';
 import { approvePayRun, draftPayRun, getRun, recalculatePayRun, voidPayRun } from '../payroll/payRuns.ts';
@@ -91,6 +92,7 @@ interface Ctx {
   req: IncomingMessage;
   user: User | null;
   employee: Employee | null;
+  account: PortalAccount | null;
   params: Record<string, string>;
   query: URLSearchParams;
   raw: string;
@@ -104,7 +106,7 @@ interface Route {
   method: string;
   re: RegExp;
   keys: string[];
-  auth: 'none' | 'admin' | 'company' | 'user' | 'employee';
+  auth: 'none' | 'admin' | 'company' | 'user' | 'employee' | 'portal';
   handler: Handler;
   status: number;
 }
@@ -191,7 +193,11 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       stripePublishableKey: (process.env.STRIPE_PUBLISHABLE_KEY ?? '').trim() || null,
       termsVersion: '2026-10-terms-v1',
     })),
-    route('GET', '/v1/auth/me', 'none', (c) => ({ user: c.user ? publicUser(c.user) : null })),
+    route('GET', '/v1/auth/me', 'none', (c) => {
+      const et = cookieValue(c.req.headers.cookie, EMP_COOKIE);
+      const who = et ? portal.resolve(et) : null;
+      return { user: c.user ? publicUser(c.user) : null, portal: who ? portal.accountView(who.account, who.ended) : null };
+    }),
     route('POST', '/v1/auth/signup', 'none', async (c) => {
       requireCsrf(c.req);
       const wait = signups.hit(`signup:${c.ip}`, 20, now().getTime());
@@ -444,24 +450,30 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('GET', `${C}/reports/wc`, 'company', (c) => { const r = wcReport(store, store.companies.require(c.params.cid, 'Company'), Number(c.query.get('year') ?? now().getUTCFullYear())); return c.query.get('format') === 'csv' ? new Text(r.csv, r.fileName) : { year: r.year, rows: r.rows, note: r.note }; }),
     route('GET', `${C}/portal/access`, 'company', (c) => portal.access(c.params.cid)),
     route('POST', `${C}/portal/rotate`, 'company', (c) => portal.rotate(c.params.cid)),
-    route('PUT', `${C}/portal/enabled`, 'company', (c) => portal.setEnabled(c.params.cid, c.json().enabled)),
+    route('GET', `${C}/portal/requests`, 'company', (c) => portal.requests(c.params.cid)),
+    route('POST', `${C}/portal/requests/:aid/approve`, 'company', (c) => portal.approve(c.params.cid, c.params.aid, c.json())),
+    route('POST', `${C}/portal/requests/:aid/decline`, 'company', (c) => portal.decline(c.params.cid, c.params.aid, c.json().reason)),
     route('POST', `${C}/employees/:eid/deposit-change`, 'company', (c) => portal.decideDeposit(c.params.cid, c.params.eid, c.json().approve)),
-    route('POST', '/v1/portal/start', 'none', async (c) => {
+    route('POST', '/v1/portal/signup', 'none', async (c) => {
       requireCsrf(c.req);
-      const wait = logins.hit(`portal:${c.ip}`, 30, now().getTime());
+      const wait = logins.hit(`portalsu:${c.ip}`, 20, now().getTime());
       if (wait) throw new ApiError(429, 'rate_limited', `Too many tries from here. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
       const o = c.json();
-      await portal.start(o.code, o.email);
-      return { ok: true, message: 'If that code and email match someone on the team, we sent a 6-digit code.' };
-    }),
-    route('POST', '/v1/portal/verify', 'none', (c) => {
-      requireCsrf(c.req);
-      const wait = logins.hit(`portalv:${c.ip}`, 60, now().getTime());
-      if (wait) throw new ApiError(429, 'rate_limited', `Too many tries from here. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
-      const o = c.json();
-      const r = portal.verify(o.code, o.email, o.otp, c.req.headers['user-agent']);
+      const r = await portal.signUp(o.code, o.email, o.password, c.req.headers['user-agent']);
       return new Reply({ ok: true }, { 'set-cookie': empCookie(c.req, r.token) });
     }),
+    route('POST', '/v1/portal/signin', 'none', async (c) => {
+      requireCsrf(c.req);
+      const o = c.json();
+      const email = typeof o.email === 'string' ? o.email.trim().toLowerCase().slice(0, 200) : '';
+      const wait = Math.max(logins.hit(`portalsi:${c.ip}`, 60, now().getTime()), logins.hit(`portalui:${email}`, 12, now().getTime()));
+      if (wait) throw new ApiError(429, 'rate_limited', `Too many tries. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
+      const r = await portal.signIn(email, o.password, c.req.headers['user-agent']);
+      return new Reply({ ok: true }, { 'set-cookie': empCookie(c.req, r.token) });
+    }),
+    route('GET', '/v1/portal/account', 'portal', (c) => portal.accountView(c.account!, !c.employee && !!c.account!.employeeId)),
+    route('POST', '/v1/portal/request', 'portal', (c) => portal.submitRequest(c.account!, c.json())),
+    route('POST', '/v1/portal/reopen', 'portal', (c) => portal.reopen(c.account!)),
     route('POST', '/v1/portal/logout', 'none', (c) => {
       requireCsrf(c.req);
       const t = cookieValue(c.req.headers.cookie, EMP_COOKIE);
@@ -731,11 +743,13 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
           if (method !== 'GET' && method !== 'HEAD' && r.auth !== 'none') requireCsrf(req);
         }
       }
-      let employee: Employee | null = null;
-      if (r.auth === 'employee') {
+      let employee: Employee | null = null; let account: PortalAccount | null = null;
+      if (r.auth === 'employee' || r.auth === 'portal') {
         const et = cookieValue(req.headers.cookie, EMP_COOKIE);
-        employee = et ? portal.resolve(et) : null;
-        if (!employee) throw unauthorized('Sign in to see your pay stubs.');
+        const who = et ? portal.resolve(et) : null;
+        if (!who) throw unauthorized('Sign in to continue.');
+        account = who.account; employee = who.employee;
+        if (r.auth === 'employee' && !employee) throw new ApiError(403, 'not_approved', who.ended ? 'Your access has ended.' : 'Your manager hasn’t approved you yet.');
         if (method !== 'GET' && method !== 'HEAD') requireCsrf(req);
       }
       if (r.auth === 'user') {
@@ -759,6 +773,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
         req,
         user,
         employee,
+        account,
         params,
         query: url.searchParams,
         raw,

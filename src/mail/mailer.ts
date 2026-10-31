@@ -168,16 +168,6 @@ export function resetEmail(a: { to: string; firstName: string; code: string; exp
   return { to: a.to, subject: 'Your password reset code', html, text: `Hi ${a.firstName}, your Totali password reset code is ${a.code}. It expires in ${minutes} minute(s). If you didn’t ask for it, ignore this email.` };
 }
 
-export function portalCodeEmail(a: { to: string; firstName: string; businessName: string; code: string; expiresAt: string; now?: Date }): Message {
-  const minutes = Math.max(1, Math.round((new Date(a.expiresAt).getTime() - (a.now ?? new Date()).getTime()) / 60_000));
-  const html = wrap(
-    `Hi ${escapeHtml(a.firstName)},`,
-    `${para(`Use this code to sign in to your ${escapeHtml(a.businessName)} pay stubs and forms.`)}${codeBlock(a.code)}${para(`It expires in ${minutes} minute${minutes === 1 ? '' : 's'}. If you didn’t ask for it, ignore this email.`)}`,
-    'OMNIA TAX LLC',
-  );
-  return { to: a.to, subject: `Your Totali code for ${a.businessName}`, html, text: `Hi ${a.firstName}, your Totali sign-in code for ${a.businessName} is ${a.code}. It expires in ${minutes} minute(s). If you didn’t ask for it, ignore this email.` };
-}
-
 export function depositChangeEmail(a: { to: string; ownerName: string; employeeName: string; link: string }): Message {
   const html = wrap(
     `${escapeHtml(a.employeeName)} asked to change their bank account`,

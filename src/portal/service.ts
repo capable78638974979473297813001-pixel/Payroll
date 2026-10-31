@@ -2,11 +2,12 @@ import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { ApiError, badRequest, conflict, notFound } from '../lib/errors.ts';
 import * as v from '../lib/validate.ts';
 import { newId } from '../lib/ids.ts';
-import { safeEqual } from '../lib/crypto.ts';
+import { decryptField, encryptField } from '../lib/crypto.ts';
+import { hashPassword, passwordProblem, verifyPassword } from '../accounts/password.ts';
 import type { Store } from '../store/store.ts';
 import type { Company, Employee, PayRun } from '../domain/types.ts';
 import type { Mailer } from '../mail/mailer.ts';
-import { depositChangeEmail, portalCodeEmail } from '../mail/mailer.ts';
+import { depositChangeEmail } from '../mail/mailer.ts';
 import type { BankService } from '../banking/accounts.ts';
 import type { DashboardService } from '../dashboard/service.ts';
 import { formsOf } from '../dashboard/data.ts';
@@ -14,10 +15,15 @@ import { paystub } from '../payroll/paystub.ts';
 import { nextPayday } from '../payroll/schedule.ts';
 import { daysBetween, eachDay } from '../lib/dates.ts';
 import { STATE_FORMS } from '../onboarding/forms.ts';
+import { addEmployee } from '../domain/employees.ts';
+import { parseI9, parseW4 } from '../onboarding/inputs.ts';
+import { stateFacts } from '../builder/facts.ts';
+import { validateRoutingNumber } from '../../engine/payroll/directDeposit.ts';
+import type { JoinRequest, PortalAccount } from './types.ts';
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I: a code read aloud or off a flyer must survive
-const CODE_MINUTES = 15; const TRIES = 5; const RESEND_SECONDS = 60; const PER_HOUR = 6; const SESSION_DAYS = 30;
+const CODE_DAYS = 3; const SESSION_DAYS = 30;
 const PAID_STATES = ['approved', 'funding', 'funded', 'disbursing', 'completed'];
 const norm = (s: unknown) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -25,9 +31,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const formatJoinCode = (c: string) => `${c.slice(0, 4)}-${c.slice(4)}`;
 
 /**
- * Employees sign in to their own dashboard with the company's code and their own email address. The code only finds
- * the company; the proof is a six-digit code sent to the email the owner has on file for that person. Whether the code
- * and address match someone is never revealed to the person asking.
+ * Employees have their own login. The owner gives out a code that works for three days; with it a person makes an
+ * account (an email and a password, nothing is emailed to them), fills in a request on their phone, and sends it. The
+ * employee is created only when the owner approves. Until then the account can do nothing but wait.
  */
 export class PortalService {
   private store: Store; private mailer: Mailer; private banks: BankService; private dashboards: DashboardService; private now: () => Date; private log: (m: string) => void;
@@ -35,6 +41,7 @@ export class PortalService {
     this.store = store; this.mailer = mailer; this.banks = banks; this.dashboards = dashboards; this.now = now; this.log = log;
   }
   private iso() { return this.now().toISOString(); }
+  private today() { return this.now().toISOString().slice(0, 10); }
 
   // ------------------------------------------------------------------ the owner's side: the code
 
@@ -42,96 +49,210 @@ export class PortalService {
     const taken = new Set(this.store.companies.all().map((c) => norm(c.joinCode)));
     for (;;) { const c = Array.from({ length: 8 }, () => ALPHABET[randomInt(ALPHABET.length)]).join(''); if (!taken.has(c)) return c; }
   }
+  private withNewCode(c: Company): Company {
+    return { ...structuredClone(c), joinCode: formatJoinCode(this.freshCode()), joinCodeExpiresAt: new Date(this.now().getTime() + CODE_DAYS * 86_400_000).toISOString() };
+  }
 
-  /** The company's code, made the first time anyone asks. */
+  /** The company's code, made the first time anyone asks. When it runs out the owner asks for a new one; it is never replaced behind their back. */
   access(companyId: string) {
     let c = this.store.companies.require(companyId, 'Company');
-    if (!c.joinCode) { c = this.store.tx(() => this.store.companies.put({ ...structuredClone(c), joinCode: formatJoinCode(this.freshCode()) })); }
-    const people = this.store.employees.where((e) => e.companyId === companyId && !e.terminationDate);
-    return { code: c.joinCode!, enabled: !c.joinCodeOff, withEmail: people.filter((e) => !!e.email).length, withoutEmail: people.filter((e) => !e.email).length, signedInRecently: new Set(this.store.portalSessions.where((s) => s.companyId === companyId && Date.parse(s.lastSeenAt) > this.now().getTime() - 30 * 86_400_000).map((s) => s.employeeId)).size };
+    if (!c.joinCode) c = this.store.tx(() => this.store.companies.put(this.withNewCode(c)));
+    const expiresAt = c.joinCodeExpiresAt ?? null;
+    const left = expiresAt ? Date.parse(expiresAt) - this.now().getTime() : 0;
+    const accounts = this.store.portalAccounts.where((a) => a.companyId === companyId);
+    return {
+      code: c.joinCode!, expiresAt, expired: left <= 0, daysLeft: left > 0 ? Math.ceil(left / 86_400_000) : 0, codeDays: CODE_DAYS,
+      requests: accounts.filter((a) => a.status === 'pending').length, started: accounts.filter((a) => a.status === 'draft').length, joined: accounts.filter((a) => a.status === 'approved').length,
+      signedInRecently: new Set(this.store.portalSessions.where((s) => s.companyId === companyId && Date.parse(s.lastSeenAt) > this.now().getTime() - 30 * 86_400_000).map((s) => s.accountId)).size,
+    };
   }
 
-  /** A new code. The old one stops working at once, and everyone signed in with it is signed out. */
+  /** A new code for three more days. The old one stops working at once. People who already made an account are not affected. */
   rotate(companyId: string) {
-    const c = structuredClone(this.store.companies.require(companyId, 'Company'));
-    c.joinCode = formatJoinCode(this.freshCode());
-    this.store.tx(() => { this.store.companies.put(c); for (const s of this.store.portalSessions.where((x) => x.companyId === companyId)) this.store.portalSessions.delete(s.id); });
-    return this.access(companyId);
-  }
-
-  setEnabled(companyId: string, on: unknown) {
-    if (typeof on !== 'boolean') throw badRequest('Say whether employee sign-in is on.');
     this.access(companyId);
-    const c = structuredClone(this.store.companies.require(companyId, 'Company'));
-    if (on) delete c.joinCodeOff; else c.joinCodeOff = true;
-    this.store.tx(() => { this.store.companies.put(c); if (!on) for (const s of this.store.portalSessions.where((x) => x.companyId === companyId)) this.store.portalSessions.delete(s.id); });
+    this.store.tx(() => this.store.companies.put(this.withNewCode(this.store.companies.require(companyId, 'Company'))));
     return this.access(companyId);
   }
 
-  // ------------------------------------------------------------------ signing in
+  // ------------------------------------------------------------------ making an account and signing in
 
-  private find(rawCode: unknown, rawEmail: unknown): { company: Company; employee: Employee } | null {
-    const code = norm(rawCode); const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
-    if (code.length !== 8 || !EMAIL_RE.test(email)) return null;
-    const company = this.store.companies.all().find((c) => !c.joinCodeOff && !!c.joinCode && norm(c.joinCode) === code);
-    if (!company) return null;
-    const employee = this.store.employees.where((e) => e.companyId === company.id && !e.terminationDate && e.email?.toLowerCase() === email)[0];
-    return employee ? { company, employee } : null;
-  }
-
-  /** Send a sign-in code to the address on file. Says nothing about whether anyone matched. */
-  async start(rawCode: unknown, rawEmail: unknown): Promise<void> {
-    const hit = this.find(rawCode, rawEmail);
-    if (!hit) return;
-    const { company, employee } = hit;
-    const nowMs = this.now().getTime();
-    const recent = this.store.emailCodes.where((c) => c.userId === employee.id && c.purpose === 'employee_login').sort((a, b) => b.sentAt.localeCompare(a.sentAt));
-    if (recent[0] && Date.parse(recent[0].sentAt) + RESEND_SECONDS * 1000 > nowMs) return;
-    if (recent.filter((c) => Date.parse(c.sentAt) > nowMs - 3_600_000).length >= PER_HOUR) return;
-    const code = String(randomInt(0, 1_000_000)).padStart(6, '0'); const salt = randomBytes(12).toString('hex');
-    const expiresAt = new Date(nowMs + CODE_MINUTES * 60_000).toISOString();
-    this.store.tx(() => {
-      for (const c of recent) if (!c.usedAt) this.store.emailCodes.put({ ...c, usedAt: this.iso(), attemptsLeft: 0 });
-      this.store.emailCodes.put({ id: newId('code'), userId: employee.id, purpose: 'employee_login', email: employee.email!, salt, hash: sha(`${salt}:${employee.id}:${code}`), expiresAt, attemptsLeft: TRIES, sentAt: this.iso() });
-    });
-    const r = await this.mailer.send(portalCodeEmail({ to: employee.email!, firstName: employee.firstName, businessName: company.legalName, code, expiresAt, now: this.now() }));
-    if (!r.sent) this.log(`portal code for ${employee.id} not sent: ${r.reason ?? 'unknown'}`);
-  }
-
-  verify(rawCode: unknown, rawEmail: unknown, rawOtp: unknown, userAgent?: string): { token: string; employee: Employee } {
-    const wrong = new ApiError(400, 'code_invalid', 'That code isn’t valid. Ask for a new one.', { attemptsLeft: 0 });
-    const otp = typeof rawOtp === 'string' ? rawOtp.replace(/\s+/g, '') : '';
-    if (!/^\d{6}$/.test(otp)) throw badRequest('Enter the 6-digit code.', { field: 'code' });
-    const hit = this.find(rawCode, rawEmail);
-    if (!hit) throw wrong;
-    const e = hit.employee;
-    const live = this.store.emailCodes.where((c) => c.userId === e.id && c.purpose === 'employee_login' && !c.usedAt).sort((a, b) => b.sentAt.localeCompare(a.sentAt))[0];
-    if (!live) throw wrong;
-    if (Date.parse(live.expiresAt) <= this.now().getTime()) throw new ApiError(400, 'code_expired', 'That code has expired. Ask for a new one.', { attemptsLeft: 0 });
-    if (!safeEqual(sha(`${live.salt}:${e.id}:${otp}`), live.hash)) {
-      const left = Math.max(0, live.attemptsLeft - 1);
-      this.store.tx(() => this.store.emailCodes.put({ ...live, attemptsLeft: left, ...(left === 0 ? { usedAt: this.iso() } : {}) }));
-      throw new ApiError(400, 'code_wrong', left > 0 ? `That code didn’t match. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'That code didn’t match and has been cancelled. Ask for a new one.', { attemptsLeft: left });
-    }
+  private startSession(account: PortalAccount, userAgent?: string): string {
     const token = `temp_${randomBytes(32).toString('base64url')}`;
-    this.store.tx(() => {
-      this.store.emailCodes.put({ ...live, usedAt: this.iso() });
-      this.store.portalSessions.put({ id: newId('psn'), employeeId: e.id, companyId: e.companyId, hash: sha(token), createdAt: this.iso(), lastSeenAt: this.iso(), expiresAt: new Date(this.now().getTime() + SESSION_DAYS * 86_400_000).toISOString(), ...(userAgent ? { userAgent: userAgent.slice(0, 200) } : {}) });
-    });
-    return { token, employee: e };
+    this.store.portalSessions.put({ id: newId('psn'), accountId: account.id, companyId: account.companyId, hash: sha(token), createdAt: this.iso(), lastSeenAt: this.iso(), expiresAt: new Date(this.now().getTime() + SESSION_DAYS * 86_400_000).toISOString(), ...(userAgent ? { userAgent: userAgent.slice(0, 200) } : {}) });
+    return token;
   }
 
-  resolve(token: string): Employee | null {
+  /** The company's code, an email and a password. Nothing is sent to the email: it is only the name of the login. */
+  async signUp(rawCode: unknown, rawEmail: unknown, password: unknown, userAgent?: string): Promise<{ token: string }> {
+    const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+    if (!EMAIL_RE.test(email)) throw badRequest('Enter your email address.', { field: 'email' });
+    const code = norm(rawCode);
+    const company = code.length === 8 ? this.store.companies.all().find((c) => !!c.joinCode && norm(c.joinCode) === code) : undefined;
+    if (!company) throw new ApiError(400, 'code_invalid', 'That code isn’t right. Check it with your manager.', { field: 'code' });
+    if (!company.joinCodeExpiresAt || Date.parse(company.joinCodeExpiresAt) <= this.now().getTime()) throw new ApiError(400, 'code_expired', 'That code has run out. Ask your manager for a new one.', { field: 'code' });
+    const problem = passwordProblem(password, email);
+    if (problem) throw badRequest(problem, { field: 'password' });
+    const taken = () => this.store.portalAccounts.where((a) => a.email === email).length > 0;
+    if (taken()) throw conflict('email_taken', 'There’s already an account with that email. Sign in instead.');
+    const passwordHash = await hashPassword(password as string);
+    if (taken()) throw conflict('email_taken', 'There’s already an account with that email. Sign in instead.');
+    return this.store.tx(() => {
+      const account: PortalAccount = { id: newId('pac'), companyId: company.id, email, passwordHash, status: 'draft', createdAt: this.iso() };
+      this.store.portalAccounts.put(account);
+      return { token: this.startSession(account, userAgent) };
+    });
+  }
+
+  async signIn(rawEmail: unknown, password: unknown, userAgent?: string): Promise<{ token: string }> {
+    const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+    const account = this.store.portalAccounts.where((a) => a.email === email)[0];
+    const ok = await verifyPassword(typeof password === 'string' ? password : '', account?.passwordHash);
+    if (!account || !ok) throw new ApiError(400, 'sign_in_failed', 'That email and password don’t match.');
+    return this.store.tx(() => ({ token: this.startSession(account, userAgent) }));
+  }
+
+  /** Who a cookie belongs to. The employee is there once the owner has approved them and until they are let go. */
+  resolve(token: string): { account: PortalAccount; employee: Employee | null; ended: boolean } | null {
     const s = this.store.portalSessions.where((x) => x.hash === sha(token))[0];
     if (!s || Date.parse(s.expiresAt) < this.now().getTime()) return null;
-    const e = this.store.employees.get(s.employeeId);
-    const c = this.store.companies.get(s.companyId);
-    if (!e || !c || e.terminationDate || c.joinCodeOff) return null;
+    const account = this.store.portalAccounts.get(s.accountId);
+    if (!account || !this.store.companies.get(account.companyId)) return null;
     if (Date.parse(s.lastSeenAt) < this.now().getTime() - 3_600_000) this.store.tx(() => this.store.portalSessions.put({ ...s, lastSeenAt: this.iso(), expiresAt: new Date(this.now().getTime() + SESSION_DAYS * 86_400_000).toISOString() }));
-    return e;
+    const e = account.employeeId ? this.store.employees.get(account.employeeId) : undefined;
+    return { account, employee: e && !e.terminationDate ? e : null, ended: !!e?.terminationDate };
   }
 
   logout(token: string) { const s = this.store.portalSessions.where((x) => x.hash === sha(token))[0]; if (s) this.store.tx(() => this.store.portalSessions.delete(s.id)); }
+
+  /** What the account's own screens need: where it stands, and what the request form has to ask for. */
+  accountView(account: PortalAccount, ended = false) {
+    const company = this.store.companies.require(account.companyId, 'Company');
+    const cfg = this.dashboards.get(company.id).config;
+    const stateName = (() => { try { return stateFacts(company.homeState, this.today()).name; } catch { return company.homeState; } })();
+    return {
+      email: account.email, status: ended ? 'ended' : account.status,
+      name: account.summary ? `${account.summary.firstName} ${account.summary.lastName}` : null,
+      firstName: account.summary?.firstName ?? null,
+      submittedAt: account.summary?.submittedAt ?? null, declineReason: account.status === 'declined' ? account.declineReason ?? null : null,
+      business: company.legalName, brand: cfg.brand, theme: cfg.theme,
+      form: { state: company.homeState, stateName, stateForm: STATE_FORMS[company.homeState] ?? null },
+    };
+  }
+
+  // ------------------------------------------------------------------ the request
+
+  /** Everything the owner needs to put them on the payroll, checked now so approval can't fail on a typo. */
+  submitRequest(account: PortalAccount, body: unknown) {
+    if (account.status === 'pending') throw conflict('already_sent', 'Your request is already with your manager.');
+    if (account.status === 'approved') throw conflict('already_approved', 'You’re already on the team.');
+    const company = this.store.companies.require(account.companyId, 'Company');
+    const o = v.obj(body);
+    const firstName = v.str(o, 'firstName', { max: 60 }); const lastName = v.str(o, 'lastName', { max: 60 });
+    const wantsState = !!STATE_FORMS[company.homeState];
+    const w = parseW4({ ...v.obj(o.w4, 'w4'), signature: o.signature }, firstName, lastName, wantsState);
+    const i = parseI9({ ...v.obj(o.i9, 'i9'), signature: o.signature }, firstName, lastName, this.today());
+    let deposit: JoinRequest['deposit'];
+    if (o.deposit !== undefined && o.deposit !== null) {
+      const d = v.obj(o.deposit, 'deposit');
+      if (d.confirm !== true) throw badRequest('Confirm the bank details are yours and correct.', { field: 'confirm' });
+      const routing = String(d.routingNumber ?? '').replace(/\D/g, ''); const acct = String(d.accountNumber ?? '').replace(/\D/g, '');
+      if (routing.length !== 9 || !validateRoutingNumber(routing)) throw badRequest('That routing number isn’t valid. Check it against your card or bank app.', { field: 'routingNumber' });
+      if (acct.length < 4 || acct.length > 17) throw badRequest('The account number should be 4 to 17 digits.', { field: 'accountNumber' });
+      if (d.accountType !== 'checking' && d.accountType !== 'savings') throw badRequest('Pick checking or savings.', { field: 'accountType' });
+      deposit = { routingNumber: routing, accountNumber: acct, accountType: d.accountType, ...(typeof d.bankName === 'string' && d.bankName.trim() ? { bankName: d.bankName.trim().slice(0, 80) } : {}) };
+    }
+    const at = this.iso();
+    const req: JoinRequest = { firstName, lastName, w4: { federalW4: w.federalW4, exemptions: w.exemptions, signedAt: at }, i9: { legalFirstName: i.legalFirstName, legalLastName: i.legalLastName, dateOfBirth: i.dateOfBirth, status: i.status, ssn: i.ssn, ageAtYearEnd: i.ageAtYearEnd, signedAt: at }, ...(deposit ? { deposit } : {}), submittedAt: at };
+    this.store.tx(() => this.store.portalAccounts.put({ ...account, status: 'pending', requestEncrypted: encryptField(JSON.stringify(req)), summary: { firstName, lastName, submittedAt: at, forms: { w4: true, i9: true, deposit: !!deposit } }, declineReason: undefined }));
+    return { ok: true };
+  }
+
+  /** After a no, the person fixes what was wrong and sends it again. */
+  reopen(account: PortalAccount) {
+    if (account.status !== 'declined') throw conflict('not_declined', 'There’s nothing to fix.');
+    this.store.tx(() => this.store.portalAccounts.put({ ...account, status: 'draft' }));
+    return { ok: true };
+  }
+
+  // ------------------------------------------------------------------ the owner decides
+
+  requests(companyId: string) {
+    const roles = this.store.companies.require(companyId, 'Company').settings.roles;
+    const people = this.store.employees.where((e) => e.companyId === companyId && !e.terminationDate);
+    const linked = new Set(this.store.portalAccounts.where((a) => a.companyId === companyId && !!a.employeeId).map((a) => a.employeeId!));
+    const free = people.filter((e) => !linked.has(e.id));
+    const list = this.store.portalAccounts.where((a) => a.companyId === companyId && a.status === 'pending' && !!a.summary).sort((a, b) => a.summary!.submittedAt.localeCompare(b.summary!.submittedAt));
+    return {
+      requests: list.map((a) => ({
+        accountId: a.id, email: a.email, name: `${a.summary!.firstName} ${a.summary!.lastName}`, firstName: a.summary!.firstName, submittedAt: a.summary!.submittedAt, forms: a.summary!.forms,
+        sameEmail: free.find((e) => e.email?.toLowerCase() === a.email)?.id ?? null,
+      })),
+      // someone the owner already added by hand can be matched to a request, so they aren't added twice
+      unlinked: free.map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`, role: roles.find((r) => r.key === e.roleKey)?.label ?? e.roleKey })),
+    };
+  }
+
+  /** The owner says yes, and says what the job is. That creates the employee from the request and links the account. */
+  approve(companyId: string, accountId: string, body: unknown) {
+    const account = this.store.portalAccounts.get(accountId);
+    if (!account || account.companyId !== companyId) throw notFound('Request');
+    if (account.status !== 'pending') throw conflict('not_pending', 'That request has already been answered.');
+    const company = this.store.companies.require(companyId, 'Company');
+    const o = v.obj(body);
+    let employeeId: string;
+    if (o.linkEmployeeId !== undefined && o.linkEmployeeId !== null && o.linkEmployeeId !== '') {
+      const e = this.store.employees.get(String(o.linkEmployeeId));
+      if (!e || e.companyId !== companyId || e.terminationDate) throw badRequest('Pick someone on your team.', { field: 'linkEmployeeId' });
+      if (this.store.portalAccounts.where((a) => a.employeeId === e.id).length) throw conflict('already_linked', `${e.firstName} already has a login.`);
+      if (!e.email) this.store.tx(() => this.store.employees.put({ ...e, email: account.email }));
+      employeeId = e.id;
+    } else {
+      const role = company.settings.roles.find((r) => r.key === o.roleKey);
+      if (!role) throw badRequest('Pick their role.', { field: 'roleKey' });
+      const rateCents = v.cents(o, 'rateCents', { min: 1 });
+      const startDate = o.startDate === undefined || o.startDate === '' ? this.today() : v.date(o, 'startDate');
+      const req = JSON.parse(decryptField(account.requestEncrypted!)) as JoinRequest;
+      const wantsState = !!STATE_FORMS[company.homeState];
+      const created = addEmployee(this.store, companyId, {
+        firstName: req.firstName, lastName: req.lastName, email: account.email, roleKey: role.key, hireDate: startDate, location: o.location,
+        payType: role.pay === 'hourly' ? { kind: 'hourly', rateCents } : { kind: 'salary', annualCents: rateCents },
+        ...(role.tipped !== 'never' && o.tipCreditNotice === true ? { tipCreditNoticeDate: startDate } : {}),
+      });
+      const at = this.iso();
+      const fresh = structuredClone(this.store.employees.require(created.id, 'Employee'));
+      fresh.federalW4 = req.w4.federalW4;
+      if (wantsState && req.w4.exemptions !== null) fresh.workState = { ...fresh.workState, certificate: { ...(fresh.workState.certificate ?? {}), allowances: req.w4.exemptions } as NonNullable<Employee['workState']['certificate']> };
+      fresh.ssnEncrypted = encryptField(req.i9.ssn); fresh.ssnLast4 = req.i9.ssn.slice(-4); fresh.ageAtYearEnd = req.i9.ageAtYearEnd;
+      fresh.onboarding = {
+        invitedAt: req.submittedAt, inviteEmail: account.email, startDate, requested: ['w4', ...(wantsState ? ['stateForm' as const] : []), 'i9', 'deposit'],
+        w4: { completedAt: req.w4.signedAt }, ...(wantsState ? { stateForm: { id: STATE_FORMS[company.homeState]!, completedAt: req.w4.signedAt } } : {}),
+        i9: { section1At: req.i9.signedAt, detailsEncrypted: encryptField(JSON.stringify({ section1: { legalFirstName: req.i9.legalFirstName, legalLastName: req.i9.legalLastName, dateOfBirth: req.i9.dateOfBirth, status: req.i9.status } })) },
+      };
+      this.store.tx(() => this.store.employees.put(fresh));
+      if (req.deposit) {
+        const acct = this.banks.addManualAccount(companyId, { employeeId: created.id, routingNumber: req.deposit.routingNumber, accountNumber: req.deposit.accountNumber, accountType: req.deposit.accountType });
+        if (req.deposit.bankName) this.store.tx(() => this.store.bankAccounts.put({ ...acct, institutionName: req.deposit!.bankName }));
+        const again = structuredClone(this.store.employees.require(created.id, 'Employee'));
+        again.payoutAccounts = [{ bankAccountId: acct.id, allocation: { kind: 'remainder' } }];
+        again.onboarding = { ...again.onboarding!, deposit: { completedAt: at } };
+        this.store.tx(() => this.store.employees.put(again));
+      }
+      employeeId = created.id;
+    }
+    const { requestEncrypted: _drop, ...rest } = account;
+    this.store.tx(() => this.store.portalAccounts.put({ ...rest, status: 'approved', employeeId, decidedAt: this.iso() }));
+    return { ok: true, employeeId };
+  }
+
+  decline(companyId: string, accountId: string, reason: unknown) {
+    const account = this.store.portalAccounts.get(accountId);
+    if (!account || account.companyId !== companyId) throw notFound('Request');
+    if (account.status !== 'pending') throw conflict('not_pending', 'That request has already been answered.');
+    const text = typeof reason === 'string' && reason.trim() ? reason.trim().slice(0, 200) : undefined;
+    const { requestEncrypted: _drop, ...rest } = account;
+    this.store.tx(() => this.store.portalAccounts.put({ ...rest, status: 'declined', decidedAt: this.iso(), ...(text ? { declineReason: text } : {}) }));
+    return { ok: true };
+  }
 
   // ------------------------------------------------------------------ what an employee sees: only their own
 

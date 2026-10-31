@@ -190,7 +190,9 @@ export function dashboardData(store: Store, company: Company, today: string) {
   if (bank.length) add({ id: 'bank_change', severity: 'soon', title: `${names(bank)} asked to change ${bank.length === 1 ? 'their' : 'a'} bank account`, detail: 'Nothing changes until you approve it.', to: '/app/onboarding' });
   const waiting = forms.filter((f) => f.w4 && !f.done).length;
   if (waiting && !noW4.length) add({ id: 'paperwork', severity: 'info', title: `${waiting} ${waiting === 1 ? 'person has' : 'people have'} paperwork to finish`, detail: 'Send a reminder from Onboarding.', to: '/app/onboarding' });
-  if (!active.length) add({ id: 'first', severity: 'soon', title: 'Add your first person', detail: 'Invite them and they fill in their own forms on their phone.', to: '/app/onboarding' });
+  const asking = store.portalAccounts.where((x) => x.companyId === company.id && x.status === 'pending').length;
+  if (asking) add({ id: 'join_requests', severity: 'urgent', title: `${asking === 1 ? 'Someone asked' : `${asking} people asked`} to join your team`, detail: 'They filled in their details. Check them and approve.', to: '/app/onboarding' });
+  if (!active.length && !asking) add({ id: 'first', severity: 'soon', title: 'Add your employees', detail: 'Give your team the code. They make an account and send you their details.', to: '/app/onboarding' });
   if (company.setup && !company.profile?.submittedAt && company.ein) add({ id: 'profile', severity: 'info', title: 'Finish company setup', detail: 'Owners, address and documents.', to: '/app/settings/company' });
   const noW9 = store.contractors.where((x) => x.companyId === company.id && !x.archivedAt && !x.w9At).length;
   if (noW9) add({ id: 'w9', severity: 'info', title: `${noW9} ${noW9 === 1 ? 'contractor has' : 'contractors have'} no W-9`, detail: 'Request one so you can report what you paid them.', to: '/app/contractors' });

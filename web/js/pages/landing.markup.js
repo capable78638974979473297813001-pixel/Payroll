@@ -10,7 +10,7 @@ export default `
 <section class="lp-hero">
   <div class="lp-hero-copy">
     <h1>Payroll for restaurants, crews and small teams.</h1>
-    <p>Totali figures out each paycheck, shows you how every tax was worked out, and writes the bank file you upload to pay your people. New hires fill in their own tax forms. Employees sign in to see their own stubs.</p>
+    <p>Totali figures out each paycheck, shows you how every tax was worked out, and writes the bank file you upload to pay your people. New hires fill in their own tax forms. Employees make their own login and see their own stubs.</p>
     <form class="lp-join" data-signup><input type="email" placeholder="Work email" aria-label="Work email"><button class="btn" type="submit">Create account</button></form>
     <p class="lp-fine">Setup takes about five minutes. Taxes are calculated by the Omnia.tax engine.</p>
   </div>
@@ -37,7 +37,7 @@ export default `
     <div><dt>Helps you pay your team</dt><dd>When you approve a run, Totali writes the direct deposit file. You download it, upload it at your own bank and release it there. Totali never holds your money.</dd></div>
     <div><dt>Keeps track of taxes</dt><dd>It lists what is due and when, for federal and state deposits and quarterly forms, and lets you mark each one paid. You make the payments yourself.</dd></div>
     <div><dt>Onboards new hires</dt><dd>Enter a name and an email. They get a link to fill in their W-4, their state form, I-9 section 1 and their bank details on a phone. You see who is still missing something and can send a reminder.</dd></div>
-    <div><dt>Gives employees their own sign-in</dt><dd>You get a code like <span class="mono">K7PM-4QXR</span> to hand out. Employees use it with their email to see pay stubs and hours, update their W-4, and ask to change their bank account. Nothing changes until you approve it.</dd></div>
+    <div><dt>Gives employees their own sign-in</dt><dd>You get a code like <span class="mono">K7PM-4QXR</span> to hand out. An employee makes an account with it, fills in their details on their phone and sends them to you. When you approve, they’re on your payroll and can sign in to see their own pay stubs and hours. A code works for three days.</dd></div>
   </dl>
 </section>
 

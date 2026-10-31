@@ -1,67 +1,162 @@
 import { h, money, shortDate, longDate, plural, hoursFromMinutes } from '../dom.js';
 import { api } from '../api.js';
 import { link, navigate } from '../router.js';
-import { Button, Alert, Chip, CodeBoxes, Field, Hand, Logo, modal, setLoading, toast } from '../ui.js';
+import { Button, Alert, Chip, Field, Logo, modal, setLoading, toast } from '../ui.js';
 import { applyTheme } from '../theme.js';
+import { refreshPortal } from '../session.js';
 
 // ---------------------------------------------------------------- state: who is signed in
 const me = { data: null };
+/** The approved employee's own data. Null when signed out, or when signed in but not approved yet. */
 async function load(force = false) {
   if (me.data && !force) return me.data;
-  try { me.data = await api.get('/v1/portal/me'); } catch (e) { if (e.status === 401) { me.data = null; return null; } throw e; }
+  try { me.data = await api.get('/v1/portal/me'); } catch (e) { if (e.status === 401 || e.status === 403) { me.data = null; return null; } throw e; }
   return me.data;
 }
-export const employeeGuard = async () => ((await load()) ? null : '/employee');
-export const employeeSignedIn = async () => !!(await load());
+/** Where this login stands: null (not signed in), draft, pending, declined, approved or ended. */
+const standing = async () => (await refreshPortal());
+const homeFor = (p) => (p && p.status === 'approved' ? '/me' : '/me/join');
+export const employeeGuard = async (pattern) => {
+  const p = await standing();
+  if (!p) return '/employee';
+  if (p.status === 'approved') return pattern === '/me/join' ? '/me' : null;
+  return pattern === '/me/join' ? null : '/me/join';
+};
+export const employeeSignedIn = async () => { const p = await standing(); return p ? homeFor(p) : null; };
 
 const FREQ = { weekly: 'Weekly', biweekly: 'Every other week', semimonthly: 'Twice a month', monthly: 'Monthly' };
 const initials = (e) => `${e.firstName[0]}${e.lastName[0]}`.toUpperCase();
 const rangeText = (a, b) => `${shortDate(a)} to ${shortDate(b)}, ${b.slice(0, 4)}`;
 const statusLine = (d) => (d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d < 0 ? `${-d} days ago` : `In ${d} days`);
 
-// ---------------------------------------------------------------- sign in: company code, email, emailed code
+const shell = (card, visual) => h('div', { class: 'authpage' }, h('header', { class: 'authtop ui' }, Logo(), h('span', {}, 'Own the business?', link('/login', { class: 'l2' }, 'Owner log in'))),
+  h('main', { class: 'auth' }, h('div', { class: 'acard ui' }, card), visual || h('div', { class: 'avis' }, h('figure', { class: 'photo' }, h('img', { src: '/assets/img/waiter.jpg', alt: 'A server carrying plates', style: { objectPosition: '50% 30%' } })))));
+
+// ---------------------------------------------------------------- the employee section: make an account, or sign in
 export function employeeSignIn(ctx) {
-  const code = Field({ label: 'Company code', name: 'companyCode', placeholder: 'K7QM-2XRD', autocomplete: 'off', autofocus: true, hint: 'Your manager has this. It’s on the card they gave you.' });
-  const email = Field({ label: 'Your email', name: 'email', type: 'email', autocomplete: 'email', placeholder: 'you@example.com', hint: 'The one your employer has for you.' });
-  const q = ctx && ctx.query.get('code'); if (q) code.value = q;
-  code.input.addEventListener('input', () => { const d = code.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); code.value = d.length > 4 ? `${d.slice(0, 4)}-${d.slice(4)}` : d; });
-  const card = h('div', {}); const err = h('div', {});
-  const askBtn = Button({ size: 'lg', full: true, type: 'submit' }, 'Email me a code');
-  const stepOne = h('form', { class: 'f', novalidate: true, onSubmit: async (e) => {
-    e.preventDefault(); err.replaceChildren();
-    if (code.value.replace(/[^A-Za-z0-9]/g, '').length !== 8) return code.setError('The code has 8 letters and numbers, like K7QM-2XRD.');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.value.trim())) return email.setError('Enter your email address.');
-    setLoading(askBtn, true);
-    try { await api.post('/v1/portal/start', { code: code.value, email: email.value }); showCode(); } catch (e2) { err.replaceChildren(Alert('error', e2.message)); }
-    setLoading(askBtn, false);
-  } }, code.el, email.el, err, askBtn);
-  function showCode() {
-    const boxes = CodeBoxes({ onChange: () => { go.disabled = boxes.value().length !== 6; } });
-    const cErr = h('div', { class: 'ferr', role: 'alert', hidden: true });
-    const go = Button({ size: 'lg', full: true, type: 'submit', disabled: true }, 'Sign in');
-    card.replaceChildren(h('h1', {}, 'Check your ', h('em', {}, 'email')), h('p', {}, `If that code and email match someone on the team, we sent a 6-digit code to ${email.value.trim()}. It works for 15 minutes.`),
-      h('form', { novalidate: true, onSubmit: async (e) => {
-        e.preventDefault(); cErr.hidden = true; boxes.setError(false); setLoading(go, true);
-        try { await api.post('/v1/portal/verify', { code: code.value, email: email.value, otp: boxes.value() }); me.data = null; await load(true); navigate('/me'); }
-        catch (e2) { boxes.setError(true); cErr.textContent = e2.message; cErr.hidden = false; setLoading(go, false); go.disabled = true; }
-      } }, boxes.el, cErr, go),
-      h('p', { class: 'fine', style: { marginTop: '16px' } }, 'Nothing there? Check spam, or ', h('button', { class: 'link as-button', type: 'button', onClick: async () => { try { await api.post('/v1/portal/start', { code: code.value, email: email.value }); toast('success', 'If it matches, a new code is on its way.'); } catch (e) { toast('error', e.message); } } }, 'send a new code'), '. Wrong address? ', h('button', { class: 'link as-button', type: 'button', onClick: () => { card.replaceChildren(...first()); } }, 'Start over'), '.'));
-    boxes.focus();
+  let mode = ctx && ctx.query.get('mode') === 'signin' ? 'signin' : 'signup';
+  const card = h('div', {});
+  const err = h('div', {});
+  const done = async () => { me.data = null; const p = await refreshPortal(); navigate(homeFor(p)); };
+
+  function signup() {
+    const code = Field({ label: 'Company code', name: 'companyCode', placeholder: 'K7QM-2XRD', autocomplete: 'off', autofocus: true, hint: 'Your manager gave you this. It works for three days after they make it.' });
+    const email = Field({ label: 'Your email', name: 'email', type: 'email', autocomplete: 'email', placeholder: 'you@example.com', hint: 'This is your username. We won’t send anything to it.' });
+    const pw = Field({ label: 'Choose a password', name: 'password', type: 'password', autocomplete: 'new-password', rightSlot: 'Show', hint: 'At least 10 characters. A phrase works well.' });
+    const q = ctx && ctx.query.get('code'); if (q) code.value = q;
+    code.input.addEventListener('input', () => { const d = code.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); code.value = d.length > 4 ? `${d.slice(0, 4)}-${d.slice(4)}` : d; });
+    const go = Button({ size: 'lg', full: true, type: 'submit', 'data-testid': 'emp-create' }, 'Create account');
+    return h('form', { class: 'f', novalidate: true, onSubmit: async (e) => {
+      e.preventDefault(); err.replaceChildren();
+      if (code.value.replace(/[^A-Za-z0-9]/g, '').length !== 8) return code.setError('The code has 8 letters and numbers, like K7QM-2XRD.');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.value.trim())) return email.setError('Enter your email address.');
+      if (!pw.value) return pw.setError('Choose a password.');
+      setLoading(go, true);
+      try { await api.post('/v1/portal/signup', { code: code.value, email: email.value, password: pw.value }); await done(); return; }
+      catch (e2) { const t = { code, email, password: pw }[e2.details && e2.details.field]; if (t) t.setError(e2.message); else err.replaceChildren(Alert('error', e2.message)); }
+      setLoading(go, false);
+    } }, code.el, email.el, pw.el, err, go);
   }
-  const first = () => [h('h1', {}, 'Your ', h('em', {}, 'pay'), ' and paperwork'), h('p', {}, 'See your pay stubs, hours and tax forms. No password: we email you a code.'), stepOne];
-  card.append(...first());
-  return { title: 'Employee sign in | Totali', el: h('div', { class: 'authpage' }, h('header', { class: 'authtop ui' }, Logo(), h('span', {}, 'Own the business?', link('/login', { class: 'l2' }, 'Owner log in'))),
-    h('main', { class: 'auth' }, h('div', { class: 'acard ui' }, card), h('div', { class: 'avis' }, h('figure', { class: 'photo' }, h('img', { src: '/assets/img/waiter.jpg', alt: 'A server carrying plates', style: { objectPosition: '50% 30%' } })), Hand('Your stubs are here after every pay day.', { style: { left: '-10px', top: '90px', width: '220px', fontSize: '26px' } })))) };
+
+  function signin() {
+    const email = Field({ label: 'Your email', name: 'email', type: 'email', autocomplete: 'email', autofocus: true });
+    const pw = Field({ label: 'Password', name: 'password', type: 'password', autocomplete: 'current-password', rightSlot: 'Show' });
+    const go = Button({ size: 'lg', full: true, type: 'submit', 'data-testid': 'emp-signin' }, 'Sign in');
+    return h('form', { class: 'f', novalidate: true, onSubmit: async (e) => {
+      e.preventDefault(); err.replaceChildren();
+      if (!email.value.trim() || !pw.value) return err.replaceChildren(Alert('error', 'Enter your email and password.'));
+      setLoading(go, true);
+      try { await api.post('/v1/portal/signin', { email: email.value, password: pw.value }); await done(); return; } catch (e2) { err.replaceChildren(Alert('error', e2.message)); }
+      setLoading(go, false);
+    } }, email.el, pw.el, err, go);
+  }
+
+  const draw = () => {
+    err.replaceChildren();
+    card.replaceChildren(
+      h('h1', {}, mode === 'signup' ? 'Create your login' : 'Welcome back'),
+      h('p', {}, mode === 'signup' ? 'Use the code from your manager once to make your account. Then you’ll fill in your details and send them to be approved.' : 'See your pay stubs, hours and tax forms.'),
+      mode === 'signup' ? signup() : signin(),
+      h('p', { class: 'fine', style: { marginTop: '18px' } }, mode === 'signup' ? 'Already have a login? ' : 'First time here? ', h('button', { class: 'link as-button', type: 'button', 'data-testid': 'emp-switch', onClick: () => { mode = mode === 'signup' ? 'signin' : 'signup'; draw(); } }, mode === 'signup' ? 'Sign in' : 'Create account')));
+    const first = card.querySelector('input'); if (first) first.focus();
+  };
+  draw();
+  return { title: 'Employee sign in | Totali', el: shell(card) };
+}
+
+// ---------------------------------------------------------------- the request: your details, on your phone, sent to your manager
+const FILING_OPTS = [['single', 'Single or married filing separately'], ['married_joint', 'Married filing jointly'], ['head_of_household', 'Head of household']];
+const STATUS = [['citizen', 'A citizen of the United States'], ['noncitizen_national', 'A noncitizen national'], ['permanent_resident', 'A lawful permanent resident'], ['authorized_to_work', 'A noncitizen authorized to work']];
+
+export function joinPage() {
+  return async () => {
+    const a = await api.get('/v1/portal/account');
+    const out = h('button', { class: 'link as-button', type: 'button', 'data-testid': 'emp-sign-out', onClick: async () => { try { await api.post('/v1/portal/logout'); } catch { /* a dead session is fine */ } me.data = null; await refreshPortal(); navigate('/employee'); } }, 'Sign out');
+    const frame = (...kids) => ({ title: `Your details | ${a.business}`, el: h('div', {}, h('header', { class: 'eptop ui' }, Logo({ small: true, href: '/' }), h('span', { class: 'co' }, h('span', { class: 'orgmark' }, (a.business[0] || 'T').toUpperCase()), a.business, ' ', out)), h('main', { class: 'empage ui', style: { gridTemplateColumns: 'minmax(0, 560px)', justifyContent: 'center' } }, h('div', { 'data-testid': `join-${a.status}` }, ...kids))) });
+    if (a.status === 'pending') return frame(h('h1', { class: 'pt', style: { fontSize: '26px' } }, 'Request sent'), h('p', { class: 'cap', style: { margin: '10px 0 0', maxWidth: '46ch' } }, `${a.business} will look at your details and approve you. You don’t need to do anything else. Come back and sign in with ${a.email} after they have. Your name will be at the top of the Totali page.`), h('div', { class: 'acts', style: { marginTop: '18px' } }, Button({ variant: 'ghost', onClick: () => navigate(location.pathname) }, 'Check again')));
+    if (a.status === 'ended') return frame(h('h1', { class: 'pt', style: { fontSize: '26px' } }, 'Your access has ended'), h('p', { class: 'cap', style: { margin: '10px 0 0' } }, `${a.business} has taken you off their team. Your past pay stubs are with them.`));
+    if (a.status === 'declined') {
+      const again = Button({ type: 'button', 'data-testid': 'emp-reopen' }, 'Fix it and send again');
+      again.addEventListener('click', async () => { setLoading(again, true); try { await api.post('/v1/portal/reopen'); navigate(location.pathname); } catch (e) { toast('error', e.message); setLoading(again, false); } });
+      return frame(h('h1', { class: 'pt', style: { fontSize: '26px' } }, 'Not approved'), h('p', { class: 'cap', style: { margin: '10px 0 0' } }, a.declineReason ? `${a.business} said: “${a.declineReason}”` : `${a.business} didn’t approve this request.`), h('div', { class: 'acts', style: { marginTop: '18px' } }, again));
+    }
+
+    // draft: the whole request on one page
+    const first = Field({ label: 'First name', name: 'firstName', autocomplete: 'given-name', autofocus: true });
+    const last = Field({ label: 'Last name', name: 'lastName', autocomplete: 'family-name' });
+    const filing = Field({ label: 'Filing status', name: 'filingStatus', select: true, value: 'single', options: FILING_OPTS.map(([v, l]) => ({ value: v, label: l })) });
+    const multi = h('input', { type: 'checkbox', name: 'multipleJobs' });
+    const kids = Field({ label: 'Children under 17', name: 'children', type: 'number', value: '0', min: 0, max: 20 });
+    const others = Field({ label: 'Other dependents', name: 'otherDependents', type: 'number', value: '0', min: 0, max: 20 });
+    const ex = a.form.stateForm ? Field({ label: `${a.form.stateName} ${a.form.stateForm}: exemptions`, name: 'exemptions', type: 'number', value: '1', min: 0, max: 30 }) : null;
+    const dob = Field({ label: 'Date of birth', name: 'dateOfBirth', type: 'date', autocomplete: 'bday' });
+    const ssn = Field({ label: 'Social Security number', name: 'ssn', placeholder: '123-45-6789', autocomplete: 'off', inputmode: 'numeric' });
+    ssn.input.addEventListener('input', () => { const d = ssn.value.replace(/\D/g, '').slice(0, 9); ssn.value = d.length > 5 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : d.length > 3 ? `${d.slice(0, 3)}-${d.slice(3)}` : d; });
+    const status = Field({ label: 'I am', name: 'status', select: true, value: 'citizen', options: STATUS.map(([v, l]) => ({ value: v, label: l })) });
+    const bank = Field({ label: 'Bank name', name: 'bankName', autocomplete: 'off', optional: true });
+    const routing = Field({ label: 'Routing number', name: 'routingNumber', inputmode: 'numeric', maxlength: 9, autocomplete: 'off', hint: '9 digits, on the bottom left of a check.' });
+    const account = Field({ label: 'Account number', name: 'accountNumber', inputmode: 'numeric', maxlength: 17, autocomplete: 'off', type: 'password' });
+    const acctType = Field({ label: 'Account type', name: 'accountType', select: true, value: 'checking', options: [{ value: 'checking', label: 'Checking' }, { value: 'savings', label: 'Savings' }] });
+    const confirm = h('input', { type: 'checkbox', name: 'confirm' });
+    const bankBox = h('div', { class: 'f' }, bank.el, h('div', { class: 'r2' }, routing.el, account.el), acctType.el, h('label', { class: 'ck2' }, confirm, h('span', { class: 'cb' }), h('span', { class: 'fine' }, 'These bank details are mine and correct.')));
+    const wantBank = h('input', { type: 'checkbox', name: 'wantBank', checked: true });
+    wantBank.addEventListener('change', () => { bankBox.hidden = !wantBank.checked; });
+    const sig = h('input', { class: 'in sig', name: 'signature', autocomplete: 'off', 'aria-label': 'Type your full name to sign' });
+    const err = h('div', {}); const go = Button({ size: 'lg', full: true, type: 'submit', 'data-testid': 'emp-send' }, 'Send request');
+    const fields = { firstName: first, lastName: last, signature: { setError: (m) => err.replaceChildren(Alert('error', m)) }, dateOfBirth: dob, ssn, routingNumber: routing, accountNumber: account, accountType: acctType, confirm: { setError: (m) => err.replaceChildren(Alert('error', m)) }, exemptions: ex || undefined, status };
+    const sec = (t) => h('div', { class: 'sec2', style: { margin: '10px 0 -6px' } }, t);
+    const form = h('form', { class: 'f', novalidate: true, onSubmit: async (e) => {
+      e.preventDefault(); err.replaceChildren();
+      if (!first.value.trim() || !last.value.trim()) return err.replaceChildren(Alert('error', 'Enter your first and last name.'));
+      setLoading(go, true);
+      try {
+        await api.post('/v1/portal/request', {
+          firstName: first.value, lastName: last.value, signature: sig.value,
+          w4: { filingStatus: filing.value, multipleJobs: multi.checked, children: Number(kids.value) || 0, otherDependents: Number(others.value) || 0, ...(ex ? { exemptions: Number(ex.value) || 0 } : {}) },
+          i9: { legalFirstName: first.value, legalLastName: last.value, dateOfBirth: dob.value, ssn: ssn.value, status: status.value },
+          ...(wantBank.checked ? { deposit: { bankName: bank.value, routingNumber: routing.value.replace(/\D/g, ''), accountNumber: account.value.replace(/\D/g, ''), accountType: acctType.value, confirm: confirm.checked } } : {}),
+        });
+        navigate(location.pathname); return;
+      } catch (e2) { const t = fields[e2.details && e2.details.field]; if (t) t.setError(e2.message); else err.replaceChildren(Alert('error', e2.message)); if (t && t.el) t.el.scrollIntoView({ block: 'center' }); }
+      setLoading(go, false);
+    } },
+      sec('About you'), h('div', { class: 'r2' }, first.el, last.el),
+      sec('Your W-4 (tax withholding)'), filing.el, h('label', { class: 'ck2' }, multi, h('span', { class: 'cb' }), h('span', { class: 'fine' }, 'I have more than one job, or my spouse works.')), h('div', { class: 'r2' }, kids.el, others.el), ex ? ex.el : null,
+      sec('Your I-9 (work eligibility)'), h('div', { class: 'r2' }, dob.el, ssn.el), status.el,
+      sec('Direct deposit'), h('label', { class: 'ck2' }, wantBank, h('span', { class: 'cb' }), h('span', { class: 'fine' }, 'Add my bank account now. All of my pay goes there.')), bankBox,
+      sec('Sign'), sig, h('p', { class: 'help' }, `Type your full name. By signing you say this is correct to the best of your knowledge. Section 2 of the I-9 is done in person with your manager, so bring your ID on your first day.`), err, go);
+    return frame(h('p', { class: 'cap', style: { marginBottom: '6px' } }, `Hi. You’re joining ${a.business}.`), h('h1', { class: 'pt', style: { fontSize: '26px' } }, 'Your details'), h('p', { class: 'cap', style: { margin: '6px 0 20px' } }, 'About five minutes. When you send this, your manager checks it and approves you. Nothing is saved until you send.'), form);
+  };
 }
 
 // ---------------------------------------------------------------- the frame every employee page sits in
 async function page(ctx, { active, title, render }) {
   const d = await load();
-  if (!d) { navigate('/employee', { replace: true }); return { title: 'Sign in', el: h('div') }; }
+  if (!d) { const p = await refreshPortal(); navigate(p ? '/me/join' : '/employee', { replace: true }); return { title: 'Sign in', el: h('div') }; }
   const root = h('div', { class: 'dash emp' });
   applyTheme(root, d.theme, d.brand);
   const tabs = [['/me', 'Home', 'home'], ['/me/stubs', 'Pay stubs', 'stubs'], ['/me/hours', 'Hours', 'hours'], ['/me/details', 'My details', 'details']];
-  const out = async () => { try { await api.post('/v1/portal/logout'); } catch { /* signing out of a dead session is fine */ } me.data = null; navigate('/employee'); };
+  const out = async () => { try { await api.post('/v1/portal/logout'); } catch { /* signing out of a dead session is fine */ } me.data = null; await refreshPortal(); navigate('/employee'); };
   const nav = h('header', { class: 'nav ui' }, Logo({ small: true, href: '/me' }), h('span', { class: 'org' }, h('span', { class: 'orgmark' }, (d.brand.name[0] || 'T').toUpperCase()), h('b', {}, d.brand.name)),
     h('nav', { class: 'tabs', 'aria-label': 'Your pages' }, ...tabs.map(([to, label, id]) => link(to, { class: id === active ? 'on' : '', 'aria-current': id === active ? 'page' : undefined, 'data-tab': id }, label))),
     h('span', { class: 'rt2' }, h('span', { class: 'who-name' }, d.employee.firstName), h('button', { class: 'signout', type: 'button', 'data-testid': 'emp-sign-out', onClick: out }, 'Sign out')));

@@ -27,59 +27,145 @@ function make() {
   const mk = (first: string, last: string, email?: string) => addEmployee(store, company.id, { firstName: first, lastName: last, ...(email ? { email } : {}), roleKey: 'server', hireDate: '2026-01-05', payType: { kind: 'hourly', rateCents: 1700 }, ssn: `512-34-${1000 + Math.floor(Math.random() * 8000)}`, location: 'Detroit', tipCreditNoticeDate: '2026-01-05' });
   return { store, mailer, company, svc, mk, banks, advance: (ms: number) => { t += ms; } };
 }
-const codeIn = (m: OutboxMailer) => /\b(\d{6})\b/.exec(m.messages.at(-1)!.text)![1]!;
 const refused = (fn: () => unknown, re: RegExp) => assert.throws(fn, (e: unknown) => e instanceof ApiError && re.test(`${e.code} ${e.message}`), String(re));
+const refusedAsync = (p: Promise<unknown>, re: RegExp) => assert.rejects(p, (e: unknown) => e instanceof ApiError && re.test(`${e.code} ${e.message}`), String(re));
+const PW = 'correct horse battery';
+const REQUEST = { firstName: 'Priya', lastName: 'Raman', signature: 'Priya Raman', w4: { filingStatus: 'single', multipleJobs: false, children: 1, exemptions: 2 }, i9: { legalFirstName: 'Priya', legalLastName: 'Raman', dateOfBirth: '1996-04-12', status: 'citizen', ssn: '512-34-9001' }, deposit: { routingNumber: ROUTING, accountNumber: '000111112222', accountType: 'checking', bankName: 'Harbor CU', confirm: true } };
 
-test('the owner gets a code that is easy to read aloud; it is stable until rotated, and rotating signs everyone out', async () => {
-  const { svc, company, mk, mailer } = make();
+test('the owner gets a code that is easy to read aloud, good for three days; a new one is only made when asked for', () => {
+  const { svc, company, advance } = make();
   const a = svc.access(company.id);
   assert.match(a.code, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
-  assert.equal(svc.access(company.id).code, a.code);
-  const e = mk('Elena', 'Ruiz', 'elena@harbor.test'); mk('Tom', 'Whitaker');
-  assert.deepEqual([svc.access(company.id).withEmail, svc.access(company.id).withoutEmail], [1, 1]);
-  await svc.start(a.code, 'elena@harbor.test');
-  const { token } = svc.verify(a.code, 'elena@harbor.test', codeIn(mailer));
-  assert.equal(svc.resolve(token)!.id, e.id);
+  assert.equal(a.daysLeft, 3); assert.equal(a.expired, false);
+  assert.equal(svc.access(company.id).code, a.code, 'stable until asked');
+  advance(2 * 86_400_000);
+  assert.equal(svc.access(company.id).daysLeft, 1);
+  advance(86_400_000 + 60_000);
+  const gone = svc.access(company.id);
+  assert.equal(gone.expired, true);
+  assert.equal(gone.code, a.code, 'an expired code is not swapped behind the owner\'s back');
   const b = svc.rotate(company.id);
-  assert.notEqual(b.code, a.code);
-  assert.equal(svc.resolve(token), null, 'the old session is gone');
-  const before = mailer.messages.length;
-  await svc.start(a.code, 'elena@harbor.test');
-  assert.equal(mailer.messages.length, before, 'the old code finds nothing');
-  svc.setEnabled(company.id, false);
-  await svc.start(b.code, 'elena@harbor.test');
-  assert.equal(mailer.messages.length, before, 'switched off, nothing is sent');
+  assert.notEqual(b.code, a.code); assert.equal(b.expired, false); assert.equal(b.daysLeft, 3);
 });
 
-test('signing in needs the company code, the email on file and the emailed code, and says nothing about which was wrong', async () => {
-  const { svc, company, mk, mailer, store, advance } = make();
+test('an employee makes an account with the code, an email and a password, and nothing is emailed to them', async () => {
+  const { svc, company, mailer, store, advance } = make();
   const { code } = svc.access(company.id);
-  const e = mk('Elena', 'Ruiz', 'Elena@Harbor.test');
-  for (const [c, em] of [['ZZZZ-ZZZZ', 'elena@harbor.test'], [code, 'nobody@harbor.test'], [code, 'not an email'], ['', '']] as const) { await svc.start(c, em); }
-  assert.equal(mailer.messages.length, 0);
-  await svc.start(code.toLowerCase().replace('-', ' '), ' elena@harbor.test ');
-  assert.equal(mailer.messages.length, 1);
-  assert.equal(mailer.messages[0]!.to, 'elena@harbor.test');
-  const otp = codeIn(mailer);
-  refused(() => svc.verify(code, 'elena@harbor.test', otp === '000000' ? '111111' : '000000'), /code_wrong/);
-  await svc.start(code, 'elena@harbor.test');
-  assert.equal(mailer.messages.length, 1, 'a second request inside a minute sends nothing');
-  advance(61_000);
-  await svc.start(code, 'elena@harbor.test');
-  assert.equal(mailer.messages.length, 2);
-  refused(() => svc.verify(code, 'elena@harbor.test', otp), /code_wrong|code_invalid/);
-  const real = codeIn(mailer);
-  refused(() => svc.verify(code, 'someone-else@harbor.test', real), /code_invalid/);
-  advance(16 * 60_000);
-  refused(() => svc.verify(code, 'elena@harbor.test', real), /code_expired/);
-  advance(61_000);
-  await svc.start(code, 'elena@harbor.test');
-  const { token } = svc.verify(code, 'elena@harbor.test', codeIn(mailer));
-  assert.ok(svc.resolve(token));
+  await refusedAsync(svc.signUp('ZZZZ-ZZZZ', 'priya@harbor.test', PW), /code_invalid/);
+  await refusedAsync(svc.signUp('', 'priya@harbor.test', PW), /code_invalid/);
+  await refusedAsync(svc.signUp(code, 'not an email', PW), /email/);
+  await refusedAsync(svc.signUp(code, 'priya@harbor.test', 'short'), /at least 10/);
+  const { token } = await svc.signUp(code.toLowerCase().replace('-', ' '), ' Priya@Harbor.test ', PW);
+  const who = svc.resolve(token)!;
+  assert.equal(who.account.email, 'priya@harbor.test');
+  assert.equal(who.account.status, 'draft'); assert.equal(who.employee, null);
+  assert.equal(mailer.messages.length, 0, 'nothing is sent to the employee');
   assert.equal(JSON.stringify(store.portalSessions.all()).includes(token), false, 'only the hash is stored');
-  store.tx(() => store.employees.put({ ...store.employees.get(e.id)!, terminationDate: '2026-10-29' }));
-  assert.equal(svc.resolve(token), null, 'someone who has left is signed out');
-  svc.logout(token);
+  assert.equal(JSON.stringify(store.portalAccounts.all()).includes(PW), false);
+  await refusedAsync(svc.signUp(code, 'PRIYA@harbor.test', PW), /email_taken/);
+  // signing in again, and the wrong password, which does not say which half was wrong
+  await refusedAsync(svc.signIn('priya@harbor.test', 'wrong password!!'), /sign_in_failed/);
+  await refusedAsync(svc.signIn('nobody@harbor.test', PW), /sign_in_failed/);
+  const again = await svc.signIn('priya@harbor.test', PW);
+  assert.ok(svc.resolve(again.token));
+  svc.logout(again.token);
+  assert.equal(svc.resolve(again.token), null);
+  // after three days the code stops letting new people in, but people already in stay in
+  advance(3 * 86_400_000 + 1000);
+  await refusedAsync(svc.signUp(code, 'late@harbor.test', PW), /code_expired/);
+  assert.ok(svc.resolve(token), 'an account made in time keeps working');
+});
+
+test('a request is checked when it is sent, and nothing is on the payroll until the owner approves', async () => {
+  const { svc, company, store, banks } = make();
+  const { code } = svc.access(company.id);
+  const { token } = await svc.signUp(code, 'priya@harbor.test', PW);
+  const account = () => svc.resolve(token)!.account;
+  refused(() => svc.submitRequest(account(), { ...REQUEST, signature: 'Someone Else' }), /full name/);
+  refused(() => svc.submitRequest(account(), { ...REQUEST, i9: { ...REQUEST.i9, ssn: '000-12-3456' } }), /SSN/);
+  refused(() => svc.submitRequest(account(), { ...REQUEST, i9: { ...REQUEST.i9, dateOfBirth: '2999-01-01' } }), /date of birth/);
+  refused(() => svc.submitRequest(account(), { ...REQUEST, deposit: { ...REQUEST.deposit, routingNumber: '123456789' } }), /routing/);
+  refused(() => svc.submitRequest(account(), { ...REQUEST, deposit: { ...REQUEST.deposit, confirm: false } }), /Confirm/);
+  assert.equal(account().status, 'draft', 'a bad request changes nothing');
+  svc.submitRequest(account(), REQUEST);
+  assert.equal(account().status, 'pending');
+  assert.equal(store.employees.where((e) => e.companyId === company.id).length, 0, 'nobody is on the payroll yet');
+  const raw = JSON.stringify(store.portalAccounts.all());
+  assert.equal(raw.includes('512-34-9001') || raw.includes('000111112222'), false, 'the request is stored encrypted');
+  refused(() => svc.submitRequest(account(), REQUEST), /already_sent/);
+  const list = svc.requests(company.id);
+  assert.equal(list.requests.length, 1);
+  assert.deepEqual([list.requests[0]!.name, list.requests[0]!.email, list.requests[0]!.forms.deposit], ['Priya Raman', 'priya@harbor.test', true]);
+  assert.equal(svc.access(company.id).requests, 1);
+  refused(() => svc.approve(company.id, account().id, { roleKey: 'nobody', rateCents: 1500 }), /role/);
+  const done = svc.approve(company.id, account().id, { roleKey: 'server', rateCents: 1550, location: 'Detroit', startDate: '2026-11-02', tipCreditNotice: true });
+  const e = store.employees.get(done.employeeId)!;
+  assert.deepEqual([e.firstName, e.lastName, e.email, e.hireDate, e.location], ['Priya', 'Raman', 'priya@harbor.test', '2026-11-02', 'Detroit']);
+  assert.equal(e.payType.kind, 'hourly');
+  assert.equal(e.federalW4.dependentCredit, 200_000);
+  assert.equal(e.ssnLast4, '9001');
+  assert.equal(e.tipCreditNoticeDate, '2026-11-02');
+  assert.equal((e.workState.certificate as { allowances: number }).allowances, 2);
+  assert.equal(e.onboarding!.i9!.section2At, undefined, 'section 2 of the I-9 is still the owner\'s to do');
+  assert.ok(e.onboarding!.w4 && e.onboarding!.i9!.section1At && e.onboarding!.deposit);
+  assert.equal(store.bankAccounts.get(e.payoutAccounts[0]!.bankAccountId)!.last4, '2222');
+  assert.equal(account().status, 'approved'); assert.equal(account().requestEncrypted, undefined, 'the private copy is dropped once used');
+  assert.equal(svc.resolve(token)!.employee!.id, e.id, 'the same login now opens their dashboard');
+  assert.equal(svc.me(svc.resolve(token)!.employee!).employee.firstName, 'Priya');
+  refused(() => svc.approve(company.id, account().id, { roleKey: 'server', rateCents: 1500 }), /not_pending/);
+  void banks;
+});
+
+test('the owner can say no, with a reason, and the person fixes it and sends it again', async () => {
+  const { svc, company } = make();
+  const { code } = svc.access(company.id);
+  const { token } = await svc.signUp(code, 'priya@harbor.test', PW);
+  const account = () => svc.resolve(token)!.account;
+  svc.submitRequest(account(), REQUEST);
+  svc.decline(company.id, account().id, 'We aren\'t hiring in Ferndale.');
+  assert.equal(account().status, 'declined');
+  assert.equal(svc.accountView(account()).declineReason, 'We aren\'t hiring in Ferndale.');
+  assert.equal(svc.requests(company.id).requests.length, 0);
+  svc.reopen(account());
+  assert.equal(account().status, 'draft');
+  svc.submitRequest(account(), { ...REQUEST, deposit: undefined });
+  assert.equal(account().summary!.forms.deposit, false, 'direct deposit can be left for later');
+  refused(() => svc.reopen(account()), /not_declined/);
+});
+
+test('an account can be matched to someone the owner already added, so they are not on the team twice', async () => {
+  const { svc, company, mk, store } = make();
+  const existing = mk('Priya', 'Raman', 'priya@harbor.test'); const other = mk('Tom', 'Whitaker', 'tom@harbor.test');
+  const { code } = svc.access(company.id);
+  const { token } = await svc.signUp(code, 'priya@harbor.test', PW);
+  const account = () => svc.resolve(token)!.account;
+  svc.submitRequest(account(), REQUEST);
+  const req = svc.requests(company.id);
+  assert.equal(req.requests[0]!.sameEmail, existing.id, 'the matching email is offered');
+  assert.equal(req.unlinked.length, 2);
+  refused(() => svc.approve(company.id, account().id, { linkEmployeeId: 'emp_nope' }), /team/);
+  const n = store.employees.where((e) => e.companyId === company.id).length;
+  svc.approve(company.id, account().id, { linkEmployeeId: existing.id });
+  assert.equal(store.employees.where((e) => e.companyId === company.id).length, n, 'no second Priya');
+  assert.equal(svc.resolve(token)!.employee!.id, existing.id);
+  // someone else cannot be linked to a person who already has a login
+  const t2 = await svc.signUp(code, 'p2@harbor.test', PW);
+  svc.submitRequest(svc.resolve(t2.token)!.account, REQUEST);
+  refused(() => svc.approve(company.id, svc.resolve(t2.token)!.account.id, { linkEmployeeId: existing.id }), /already_linked/);
+  void other;
+});
+
+test('someone who has left loses their dashboard, and one company cannot decide another company\'s requests', async () => {
+  const { svc, company, store } = make();
+  const { code } = svc.access(company.id);
+  const { token } = await svc.signUp(code, 'priya@harbor.test', PW);
+  svc.submitRequest(svc.resolve(token)!.account, REQUEST);
+  refused(() => svc.approve('cmp_other', svc.resolve(token)!.account.id, { roleKey: 'server', rateCents: 1500 }), /not found|Company|Request/i);
+  const { employeeId } = svc.approve(company.id, svc.resolve(token)!.account.id, { roleKey: 'server', rateCents: 1500 });
+  store.tx(() => store.employees.put({ ...store.employees.get(employeeId)!, terminationDate: '2026-10-29' }));
+  const who = svc.resolve(token)!;
+  assert.equal(who.employee, null); assert.equal(who.ended, true);
+  assert.equal(svc.accountView(who.account, who.ended).status, 'ended');
 });
 
 test('an employee sees their own stubs, hours and year to date, and nobody else\'s', async () => {

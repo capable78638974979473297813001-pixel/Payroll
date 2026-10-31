@@ -9,6 +9,7 @@ import type { Mailer } from '../mail/mailer.ts';
 import { inviteEmail, reminderEmail } from '../mail/mailer.ts';
 import type { BankService } from '../banking/accounts.ts';
 import { formsOf } from '../dashboard/data.ts';
+import { parseI9, parseW4 } from './inputs.ts';
 
 type Form = NonNullable<EmployeeOnboarding['requested']>[number];
 const FORM_LABEL: Record<Form, string> = { w4: 'W-4', i9: 'I-9', deposit: 'Direct deposit', stateForm: 'State withholding form' };
@@ -174,29 +175,13 @@ export class OnboardingService {
     return { business: company.legalName, firstName: e.firstName, lastName: e.lastName, state: company.homeState, stateName: (() => { try { return stateFacts(company.homeState, this.now().toISOString().slice(0, 10)).name; } catch { return company.homeState; } })(), steps, next: steps.find((s) => !s.done)?.id ?? null, complete: steps.every((s) => s.done), sinceMinutes: 6 };
   }
 
-  private signed(e: Employee, signature: unknown) {
-    if (typeof signature !== 'string' || norm(signature) !== norm(`${e.firstName} ${e.lastName}`)) throw badRequest(`Type your full name, ${e.firstName} ${e.lastName}, to sign.`, { field: 'signature' });
-  }
-
   submitW4(token: unknown, body: unknown) {
     const { e, company } = this.byToken(token);
     if (!e.onboarding!.requested!.includes('w4')) throw conflict('not_requested', 'No W-4 was asked for.');
-    const o = v.obj(body);
-    this.signed(e, o.signature);
-    const children = o.children === undefined ? 0 : v.int(o, 'children', 0, 20);
-    const others = o.otherDependents === undefined ? 0 : v.int(o, 'otherDependents', 0, 20);
-    const federalW4 = {
-      filingStatus: v.oneOf(o, 'filingStatus', ['single', 'married_joint', 'head_of_household'] as const),
-      multipleJobs: v.bool(o, 'multipleJobs', false),
-      dependentCredit: children * 200_000 + others * 50_000,
-      otherIncome: 0, deductions: 0, extraWithholding: 0,
-    };
-    const patch: Partial<Employee> = { federalW4 };
     const wantsState = e.onboarding!.requested!.includes('stateForm') && !!STATE_FORMS[company.homeState];
-    if (wantsState) {
-      const n = o.exemptions === undefined ? 1 : v.int(o, 'exemptions', 0, 30);
-      patch.workState = { ...e.workState, certificate: { ...(e.workState.certificate ?? {}), allowances: n } as NonNullable<Employee['workState']['certificate']> };
-    }
+    const w = parseW4(v.obj(body), e.firstName, e.lastName, wantsState);
+    const patch: Partial<Employee> = { federalW4: w.federalW4 };
+    if (wantsState) patch.workState = { ...e.workState, certificate: { ...(e.workState.certificate ?? {}), allowances: w.exemptions ?? 1 } as NonNullable<Employee['workState']['certificate']> };
     const at = this.iso();
     const next = this.save({ ...e, ...patch }, { w4: { completedAt: at }, ...(wantsState ? { stateForm: { id: STATE_FORMS[company.homeState]!, completedAt: at } } : {}) });
     return { ok: true, next: this.statusOf(next, company) };
@@ -210,17 +195,10 @@ export class OnboardingService {
   submitI9(token: unknown, body: unknown) {
     const { e, company } = this.byToken(token);
     if (!e.onboarding!.requested!.includes('i9')) throw conflict('not_requested', 'No I-9 was asked for.');
-    const o = v.obj(body);
-    this.signed(e, o.signature);
-    const first = v.str(o, 'legalFirstName', { max: 60 }); const last = v.str(o, 'legalLastName', { max: 60 });
-    const dob = v.date(o, 'dateOfBirth');
-    const age = this.now().getUTCFullYear() - Number(dob.slice(0, 4));
-    if (dob > this.now().toISOString().slice(0, 10) || age > 110) throw badRequest('Check the date of birth.', { field: 'dateOfBirth' });
-    const status = v.oneOf(o, 'status', ['citizen', 'noncitizen_national', 'permanent_resident', 'authorized_to_work'] as const);
-    const ssn = v.ssn(o, 'ssn');
-    const patch: Partial<Employee> = { ssnEncrypted: encryptField(ssn), ssnLast4: ssn.slice(-4), ageAtYearEnd: Math.max(14, age) };
+    const i = parseI9(v.obj(body), e.firstName, e.lastName, this.now().toISOString().slice(0, 10));
+    const patch: Partial<Employee> = { ssnEncrypted: encryptField(i.ssn), ssnLast4: i.ssn.slice(-4), ageAtYearEnd: i.ageAtYearEnd };
     const prev = e.onboarding!.i9?.detailsEncrypted ? (JSON.parse(decryptField(e.onboarding!.i9.detailsEncrypted)) as Record<string, unknown>) : {};
-    const next = this.save({ ...e, ...patch }, { i9: { ...(e.onboarding!.i9 ?? {}), section1At: this.iso(), detailsEncrypted: encryptField(JSON.stringify({ ...prev, section1: { legalFirstName: first, legalLastName: last, dateOfBirth: dob, status } })) } });
+    const next = this.save({ ...e, ...patch }, { i9: { ...(e.onboarding!.i9 ?? {}), section1At: this.iso(), detailsEncrypted: encryptField(JSON.stringify({ ...prev, section1: { legalFirstName: i.legalFirstName, legalLastName: i.legalLastName, dateOfBirth: i.dateOfBirth, status: i.status } })) } });
     return { ok: true, next: this.statusOf(next, company) };
   }
 

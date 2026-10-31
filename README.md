@@ -52,9 +52,15 @@ for f in setup-flow dashboard payroll people settings time contractors jobs goog
 
 The persistent disk needs a paid Render instance. SQLite is a single file, so run one instance.
 
-### Employee portal
+### Employee accounts
 
-The owner gets a code like `K7PM-4QXR` (Settings, or the Employee sign-in card on the People tab; it prints as a flyer and can be rotated or turned off). Employees go to `/employee`, enter the code and their work email, and sign in with an emailed 6-digit code. They see only their own pay stubs, hours and W-4, and can ask to change their bank account; nothing changes until the owner approves it. The cookie is `totali_emp`, separate from the owner's session.
+When the owner finishes the setup, the first screen says to add employees and shows a code like `K7PM-4QXR`. The code works for **three days**; for someone hired later the owner makes a new one (Onboarding tab, or Settings). It can be printed as a card.
+
+An employee goes to `/employee`, taps *Create account*, and enters the code, their email and a password. **Nothing is emailed to them and there is no verification**: the email is just the username. They then fill in their name, W-4, I-9 section 1, optional bank details and a typed signature on one page, and send the request. Nothing is on the payroll yet.
+
+The owner sees the request on the Onboarding tab (and as a to-do on the home), picks the role, pay, location and start date, and approves. That is when the employee record is created from the request and linked to the login; the private copy of the request (SSN, bank numbers) is deleted. The owner can instead link a request to someone they already added, so nobody is on the team twice, or decline with a reason. A declined person can fix it and send again.
+
+Back at Totali, anyone with a login sees their name at the top of the landing page and a button to their dashboard. Approved employees see only their own pay stubs and hours, can change their W-4, and can ask to change their bank account (the owner approves). The cookie is `totali_emp`, separate from the owner's session. There is no password reset for employees yet.
 
 ### The questions
 
@@ -66,7 +72,8 @@ Said plainly, so nobody finds out the hard way:
 
 - **Time off, trips and mileage** (office, delivery): the builder lists them as "coming soon" and does not count them.
 - **Garnishments.** The deductions question covers benefits and retirement; court-ordered withholding is not set up.
-- **Manager sign-ins.** Only the owner signs in to the dashboard. Employees have their own, smaller sign-in (below); there are no manager accounts.
+- **Manager sign-ins.** Only the owner signs in to the dashboard. Employees have their own, smaller login (above); there are no manager accounts.
+- **Employee password reset.** An employee who forgets their password cannot reset it; nothing is emailed to them.
 - **Texting** invites. Invites go by email (or copy the link).
 - **State forms other than Michigan's MI-W4.** Other states use the federal W-4 numbers and the state's default withholding.
 - **Filing.** Totali keeps records and exports for your accountant (contractors, comp classes, job costs). It does not file 1099s.

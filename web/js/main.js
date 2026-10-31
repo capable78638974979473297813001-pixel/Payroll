@@ -14,7 +14,7 @@ import { RENDERERS } from './widgets.js';
 import { joinPage } from './pages/join.js';
 import { w9Page } from './pages/w9.js';
 import { terms, privacy } from './pages/legal.js';
-import { employeeSignIn, employeeGuard, employeeSignedIn, homePage as empHome, stubsPage as empStubs, stubPage as empStub, hoursPage as empHours, detailsPage as empDetails } from './pages/employee.js';
+import { employeeSignIn, employeeGuard, employeeSignedIn, joinPage as empJoin, homePage as empHome, stubsPage as empStubs, stubPage as empStub, hoursPage as empHours, detailsPage as empDetails } from './pages/employee.js';
 import { contractorsPage } from './app/contractors.js';
 import { jobsPage } from './app/jobs.js';
 
@@ -40,6 +40,7 @@ route('/join/:token', joinPage());
 route('/w9/:token', w9Page());
 route('/employee', employeeSignIn);
 route('/me', empHome());
+route('/me/join', empJoin());
 route('/me/stubs', empStubs());
 route('/me/stubs/:rid', empStub());
 route('/me/hours', empHours());
@@ -58,8 +59,8 @@ route('/404', () => ({ title: 'Not found | Totali', el: h('div', { class: 'auth'
 
 setGuard(async (ctx, pattern) => {
   const u = session.user;
-  if (pattern === '/employee') return (await employeeSignedIn()) ? '/me' : null;
-  if (pattern.startsWith('/me')) return employeeGuard();
+  if (pattern === '/employee') return employeeSignedIn();
+  if (pattern.startsWith('/me')) return employeeGuard(pattern);
   if (pattern === '/login' || pattern === '/signup' || pattern === '/forgot') return u && u.emailVerified ? nextPath(u) : null;
   if (pattern === '/signup/verify') return !u ? '/signup' : u.emailVerified ? nextPath(u) : null;
   if (pattern === '/signup/business') return !u ? '/signup' : !u.emailVerified ? '/signup/verify' : u.profileComplete ? nextPath(u) : null;

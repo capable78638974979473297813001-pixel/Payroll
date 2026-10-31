@@ -62,9 +62,9 @@ export interface Company {
   address?: string;
   /** Billing: the card on file (brand and last four only, held by Stripe) and who gets the invoices. */
   billing?: { stripeCustomerId?: string; email?: string; card?: { paymentMethodId: string; brand: string; last4: string; expMonth: number; expYear: number }; updatedAt?: string };
-  /** The code the owner gives employees so they can sign in to their own dashboard. Off switches it. */
+  /** The code the owner gives new employees so they can make their own account. It stops working after three days. */
   joinCode?: string;
-  joinCodeOff?: boolean;
+  joinCodeExpiresAt?: string;
   /** Business verification (Company setup): who the business is and who owns it. */
   profile?: CompanyProfile;
   paySchedule: { frequency: PayFrequency; checkDateLagDays: number; /** The weekday employees are paid, when the business pays weekly or every other week. */ payWeekday?: string };
