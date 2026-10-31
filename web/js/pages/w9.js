@@ -10,7 +10,7 @@ export function w9Page() {
     const token = encodeURIComponent(ctx.params.token);
     let st;
     try { st = await api.get(`/v1/w9/${token}`); } catch (e) {
-      return { title: 'Your W-9 — Totali', el: h('div', {}, h('header', { class: 'eptop ui' }, Logo({ small: true })), h('main', { class: 'empage ui' }, h('div', {}, h('h1', { class: 'pt', style: { fontSize: '26px' } }, 'This link ', h('em', {}, 'isn’t valid')), h('p', { class: 'cap', style: { margin: '10px 0 0' } }, 'It may have expired, or you may have sent your W-9 already. Ask the business for a new link.')))) };
+      return { title: 'Your W-9 | Totali', el: h('div', {}, h('header', { class: 'eptop ui' }, Logo({ small: true })), h('main', { class: 'empage ui' }, h('div', {}, h('h1', { class: 'pt', style: { fontSize: '26px' } }, 'This link ', h('em', {}, 'isn’t valid')), h('p', { class: 'cap', style: { margin: '10px 0 0' } }, 'It may have expired, or you may have sent your W-9 already. Ask the business for a new link.')))) };
     }
     const host = h('div', {});
     let tinType = 'ssn';
@@ -38,6 +38,6 @@ export function w9Page() {
     const aside = h('aside', { style: { position: 'relative', paddingTop: '20px' } }, h('div', { class: 'card', style: { background: '#FBF1E5', boxShadow: 'none' } }, h('h3', { class: 'ct', style: { marginBottom: '8px' } }, 'Who sees this'), h('p', { class: 'cap', style: { fontSize: '14px' } }, `Only ${st.business} and the people they allow. Your number is stored encrypted and shown to them as its last four digits.`)), Hand('Two minutes, and you’re done.', { style: { marginTop: '20px', fontSize: '25px', transform: 'rotate(-2deg)', position: 'static' } }));
     function done() { host.replaceChildren(h('h1', { class: 'pt', style: { fontSize: '26px' } }, 'Thank ', h('em', {}, 'you')), h('p', { class: 'cap', style: { margin: '10px 0' } }, `${st.business} has your W-9. You can close this page.`)); aside.replaceChildren(); }
     host.append(h('h1', { class: 'pt', style: { fontSize: '26px' } }, 'Your ', h('em', {}, 'W-9')), h('p', { class: 'cap', style: { margin: '6px 0 20px' } }, `${st.business} needs this to report what they pay you.`), form);
-    return { title: `Your W-9 — ${st.business}`, el: h('div', {}, h('header', { class: 'eptop ui' }, Logo({ small: true, href: '/' }), h('span', { class: 'co' }, h('span', { class: 'orgmark' }, st.business[0].toUpperCase()), st.business)), h('main', { class: 'empage ui' }, host, aside)) };
+    return { title: `Your W-9 | ${st.business}`, el: h('div', {}, h('header', { class: 'eptop ui' }, Logo({ small: true, href: '/' }), h('span', { class: 'co' }, h('span', { class: 'orgmark' }, st.business[0].toUpperCase()), st.business)), h('main', { class: 'empage ui' }, host, aside)) };
   };
 }

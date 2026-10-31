@@ -5,7 +5,7 @@ import { link } from '../router.js';
 const DRAFT = h('div', { class: 'alert', style: { margin: '0 0 22px' } }, h('span', { class: 'dot' }), h('span', {}, h('b', {}, 'Draft. '), 'This page describes how Totali works today in plain language. It has not been reviewed by a lawyer, and OMNIA TAX LLC will replace it with reviewed terms before launch.'));
 
 function doc(title, em, updated, sections) {
-  return { title: `${title} — Totali`, el: h('div', {}, h('header', { class: 'authtop ui' }, Logo(), h('span', {}, link('/', { class: 'l2' }, 'Back to Totali'))),
+  return { title: `${title} | Totali`, el: h('div', {}, h('header', { class: 'authtop ui' }, Logo(), h('span', {}, link('/', { class: 'l2' }, 'Back to Totali'))),
     h('main', { class: 'legal-page ui' }, h('h1', { class: 'pt', style: { fontSize: '30px' } }, title.replace(em, ''), h('em', {}, em)), h('p', { class: 'cap', style: { margin: '6px 0 18px' } }, `OMNIA TAX LLC · Last updated ${updated}`), DRAFT,
       ...sections.flatMap(([head, ...paras]) => [h('h2', { class: 'st2', style: { margin: '24px 0 8px', fontSize: '19px' } }, head), ...paras.map((p) => h('p', { style: { margin: '0 0 10px', lineHeight: '1.6', maxWidth: '68ch' } }, p))]))) };
 }

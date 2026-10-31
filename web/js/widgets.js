@@ -156,7 +156,7 @@ export const RENDERERS = {
       h('span', { class: 'cap', style: { whiteSpace: 'nowrap' } }, 'Built from your answers'),
       h('div', { class: 'chips2' }, ...b.answers.map((a) => Chip(a, 'berry'))),
       link('/app/settings', { class: 'link' }, 'Edit answers'),
-      h('div', { class: 'hand', style: { flexBasis: '100%', fontSize: '23px' } }, `What you told us is what’s in here. `, h('span', { style: { color: 'var(--mut)', fontSize: '19px' } }, `(${b.counts.modules} modules, ${b.counts.items} items)`))) };
+      h('div', { class: 'hand', style: { flexBasis: '100%' } }, `${b.counts.modules} sections, ${b.counts.items} items, all from what you told us.`)) };
   },
   welcome({ settings, config }) {
     const name = session.user ? session.user.firstName : '';

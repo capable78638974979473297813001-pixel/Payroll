@@ -46,7 +46,7 @@ export async function appPage(ctx, { active, title, render, config: override, ed
   root.append(frame);
   const out = await render({ root, main, config, t, data: app.data, dash: app.dash });
   if (out) main.append(out);
-  return { title: `${title} — ${config.brand.name}`, el: root };
+  return { title: `${title} | ${config.brand.name}`, el: root };
 }
 
 /** The initials at the top right: who is signed in, and the places that aren't tabs. */

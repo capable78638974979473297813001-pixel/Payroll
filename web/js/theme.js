@@ -46,7 +46,7 @@ export function applyTheme(root, theme, brand) {
   s.setProperty('--d-radius', `${theme.radius}px`);
   s.setProperty('--d-font', FONT_STACKS[theme.font] || FONT_STACKS.instrument);
   s.setProperty('--d-font-head', FONT_STACKS[theme.headingFont] || FONT_STACKS.fraunces);
-  if (brand) document.title = `${brand.name} — Totali`;
+  if (brand) document.title = `${brand.name} | Totali`;
 }
 
 /** The business's own words for things. `t('team')` is "Crew" if they renamed it. */
@@ -59,7 +59,7 @@ export const SWATCHES = ['#8e1f4e', '#0e5a66', '#c2410c', '#1f3bff', '#7c3aed', 
 
 /** Coherent combinations for "surprise me". Each is a set of independent values, not a saved design. */
 export const LOOKS = [
-  { mode: 'cream', accent: '#8e1f4e', accent2: '#0e5a66', font: 'instrument', headingFont: 'fraunces', radius: 12, density: 'comfortable', cardStyle: 'outlined', nav: 'top', header: 'plain', numbers: 'bold' },
+  { mode: 'cream', accent: '#8e1f4e', accent2: '#0e5a66', font: 'instrument', headingFont: 'fraunces', radius: 12, density: 'comfortable', cardStyle: 'flat', nav: 'top', header: 'plain', numbers: 'bold' },
   { mode: 'paper', accent: '#9f1239', accent2: '#2b1d0e', font: 'serif', headingFont: 'didone', radius: 2, density: 'airy', cardStyle: 'ruled', nav: 'top', header: 'plain', numbers: 'light' },
   { mode: 'dark', accent: '#d4a24c', accent2: '#f2e8d5', font: 'serif', headingFont: 'didone', radius: 0, density: 'comfortable', cardStyle: 'outlined', nav: 'side', header: 'plain', numbers: 'light' },
   { mode: 'light', accent: '#ea580c', accent2: '#0a0a0a', font: 'rounded', headingFont: 'rounded', radius: 16, density: 'comfortable', cardStyle: 'elevated', nav: 'top', header: 'band', numbers: 'bold' },

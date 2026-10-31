@@ -266,7 +266,7 @@ export async function industry() {
     } catch (e) { toast('error', e.message); setLoading(go, false); }
   });
   const out = TextLink('Back', { onClick: async () => { await signOut(); navigate('/'); } });
-  return { title: 'Pick your industry — Totali', el: h('div', {},
+  return { title: 'Pick your industry | Totali', el: h('div', {},
     h('header', { class: 'authtop ui' }, Logo(), h('span', {}, `Signed in as ${user.email}`)),
     h('div', { class: 'indhead ui' }, Steps3(2),
       h('h1', { class: 'pt', style: { fontSize: '30px' } }, 'What kind of ', h('em', {}, 'business'), ' is it?'),
@@ -436,5 +436,5 @@ export async function builder() {
   newIds = new Set();
   if (stepsAll[stepIdx].id === 'review' && !build.progress.ready) stepIdx = Math.max(0, questions.findIndex((q) => ctx.answers[q.id] === undefined));
   drawStep();
-  return { title: 'Build your dashboard — Totali', el: h('div', {}, top, h('main', { class: 'bgrid ui' }, stepper, left, right)) };
+  return { title: 'Build your dashboard | Totali', el: h('div', {}, top, h('main', { class: 'bgrid ui' }, stepper, left, right)) };
 }

@@ -52,12 +52,21 @@ for f in setup-flow dashboard payroll people settings time contractors jobs goog
 
 The persistent disk needs a paid Render instance. SQLite is a single file, so run one instance.
 
+### Employee portal
+
+The owner gets a code like `K7PM-4QXR` (Settings, or the Employee sign-in card on the People tab; it prints as a flyer and can be rotated or turned off). Employees go to `/employee`, enter the code and their work email, and sign in with an emailed 6-digit code. They see only their own pay stubs, hours and W-4, and can ask to change their bank account; nothing changes until the owner approves it. The cookie is `totali_emp`, separate from the owner's session.
+
+### The questions
+
+The builder asks industry-specific questions. Some are optional and start on No: tip credit (only if tips is Yes), bonuses and reimbursements, deductions, and earlier-provider year-to-date. Each one adds a real screen: tip credit notice on the invite form, a bonuses card on Run payroll, a Deductions card on a person's Pay tab, and an opening-balances form on the same tab.
+
 ### What isn't built yet
 
 Said plainly, so nobody finds out the hard way:
 
 - **Time off, trips and mileage** (office, delivery): the builder lists them as "coming soon" and does not count them.
-- **Manager sign-ins.** Only the owner signs in. Employees use private links for their own forms but have no account to see stubs.
+- **Garnishments.** The deductions question covers benefits and retirement; court-ordered withholding is not set up.
+- **Manager sign-ins.** Only the owner signs in to the dashboard. Employees have their own, smaller sign-in (below); there are no manager accounts.
 - **Texting** invites. Invites go by email (or copy the link).
 - **State forms other than Michigan's MI-W4.** Other states use the federal W-4 numbers and the state's default withholding.
 - **Filing.** Totali keeps records and exports for your accountant (contractors, comp classes, job costs). It does not file 1099s.

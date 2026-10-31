@@ -50,7 +50,7 @@ export function employeeSignIn(ctx) {
   }
   const first = () => [h('h1', {}, 'Your ', h('em', {}, 'pay'), ' and paperwork'), h('p', {}, 'See your pay stubs, hours and tax forms. No password: we email you a code.'), stepOne];
   card.append(...first());
-  return { title: 'Employee sign in — Totali', el: h('div', { class: 'authpage' }, h('header', { class: 'authtop ui' }, Logo(), h('span', {}, 'Own the business?', link('/login', { class: 'l2' }, 'Owner log in'))),
+  return { title: 'Employee sign in | Totali', el: h('div', { class: 'authpage' }, h('header', { class: 'authtop ui' }, Logo(), h('span', {}, 'Own the business?', link('/login', { class: 'l2' }, 'Owner log in'))),
     h('main', { class: 'auth' }, h('div', { class: 'acard ui' }, card), h('div', { class: 'avis' }, h('figure', { class: 'photo' }, h('img', { src: '/assets/img/waiter.jpg', alt: 'A server carrying plates', style: { objectPosition: '50% 30%' } })), Hand('Your stubs are here after every pay day.', { style: { left: '-10px', top: '90px', width: '220px', fontSize: '26px' } })))) };
 }
 
@@ -68,7 +68,7 @@ async function page(ctx, { active, title, render }) {
   const main = h('main', { class: 'dash-main wrap ui' });
   root.append(h('div', { class: 'dash-frame' }, nav, h('div', {}, main)));
   main.append(await render(d));
-  return { title: `${title} — ${d.brand.name}`, el: root };
+  return { title: `${title} | ${d.brand.name}`, el: root };
 }
 
 const head = (title, sub) => h('div', { class: 'ph2' }, h('div', {}, h('h1', { class: 'pt' }, ...title), sub ? h('p', {}, sub) : null));

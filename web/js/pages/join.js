@@ -18,7 +18,7 @@ export function joinPage() {
     const token = ctx.params.token;
     let st;
     try { st = await api.get(`/v1/join/${encodeURIComponent(token)}`); } catch (e) {
-      return { title: 'Your forms — Totali', el: h('div', {}, h('header', { class: 'eptop ui' }, Logo({ small: true })), h('main', { class: 'empage ui' }, h('div', {}, h('h1', { class: 'pt', style: { fontSize: '26px' } }, 'This link ', h('em', {}, 'isn’t valid')), h('p', { class: 'cap', style: { margin: '10px 0 0' } }, e.status === 429 ? e.message : 'It may have expired, or been replaced by a newer one. Ask your manager to send you a fresh link.')))) };
+      return { title: 'Your forms | Totali', el: h('div', {}, h('header', { class: 'eptop ui' }, Logo({ small: true })), h('main', { class: 'empage ui' }, h('div', {}, h('h1', { class: 'pt', style: { fontSize: '26px' } }, 'This link ', h('em', {}, 'isn’t valid')), h('p', { class: 'cap', style: { margin: '10px 0 0' } }, e.status === 429 ? e.message : 'It may have expired, or been replaced by a newer one. Ask your manager to send you a fresh link.')))) };
     }
     const host = h('div', {});
     const aside = h('aside', { style: { position: 'relative', paddingTop: '20px' } });
@@ -95,6 +95,6 @@ export function joinPage() {
 
     function draw() { if (!current) return done(); ({ w4, i9, deposit })[current](); }
     draw();
-    return { title: `Your forms — ${st.business}`, el: h('div', {}, h('header', { class: 'eptop ui' }, Logo({ small: true, href: '/' }), h('span', { class: 'co' }, h('span', { class: 'orgmark' }, st.business[0].toUpperCase()), st.business)), h('main', { class: 'empage ui' }, host, aside)) };
+    return { title: `Your forms | ${st.business}`, el: h('div', {}, h('header', { class: 'eptop ui' }, Logo({ small: true, href: '/' }), h('span', { class: 'co' }, h('span', { class: 'orgmark' }, st.business[0].toUpperCase()), st.business)), h('main', { class: 'empage ui' }, host, aside)) };
   };
 }

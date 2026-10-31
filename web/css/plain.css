@@ -1,0 +1,19 @@
+/* Last stylesheet. Takes the design's scrapbook touches out of the working screens: flat paper, quiet notes, no pills. */
+body{background-image:none}
+/* margin notes read as ordinary small text, never as handwriting with arrows */
+.hand{font-family:"Instrument Sans",system-ui,sans-serif!important;font-weight:400!important;font-size:14px!important;line-height:1.5!important;color:var(--mut)!important;transform:none!important;position:static!important;max-width:34em;width:auto!important;left:auto!important;top:auto!important;margin:16px 0 0!important}
+.hand svg{display:none}
+.hand:empty{display:none}
+.avis .hand{display:none}
+/* the italic berry word in every heading */
+h1 em,h2 em,h1.pt em,.band h2 em{font-style:normal!important;font-weight:inherit!important;color:inherit!important}
+/* cards: no drop shadow, tighter corners */
+.card,.acard{box-shadow:none!important}
+.chip{border-radius:4px}
+/* working screens */
+.dash .built .chip{background:none;padding:0;border-radius:0;font:inherit;color:var(--ink)}
+.dash .built .chip:not(:last-of-type)::after{content:","}
+.dash .built .hand{margin:0!important}
+.dash[data-cards="flat"] .card{padding-left:0!important;padding-right:0!important}
+.dash .grid.cards > .card.built,.dash .built{background:transparent!important}
+.dash .hero{padding:0;grid-template-columns:minmax(0,1fr);gap:16px;position:static}

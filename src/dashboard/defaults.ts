@@ -64,7 +64,7 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   return {
     version: 1,
     brand: { name: company.legalName, tagline: '', mark: 'initial' },
-    theme: { mode: 'cream', accent: '#8e1f4e', accent2: '#0e5a66', font: 'instrument', headingFont: 'fraunces', radius: 12, density: 'comfortable', cardStyle: 'outlined', nav: 'top', header: 'plain', numbers: 'bold' },
+    theme: { mode: 'cream', accent: '#8e1f4e', accent2: '#0e5a66', font: 'instrument', headingFont: 'fraunces', radius: 12, density: 'comfortable', cardStyle: 'flat', nav: 'top', header: 'plain', numbers: 'bold' },
     terms: {},
     tabs,
   };

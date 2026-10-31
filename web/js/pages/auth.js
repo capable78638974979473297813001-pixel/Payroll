@@ -80,7 +80,7 @@ export function signup(ctx) {
   const aside = h('div', {}, photo('/assets/img/waiter.jpg', 'A server carrying plates', '50% 30%'),
     Hand('Takes about five minutes. Stop any time, we save as you go.', { style: { left: '-20px', top: '70px', width: '200px', fontSize: '26px' } }),
     Hand('', { style: { left: '30px', top: '200px' }, arrow: {} }));
-  return { title: 'Create account — Totali', el: frame({ card, aside, nudge: ['Already have an account?', '/login', 'Log in'] }) };
+  return { title: 'Create account | Totali', el: frame({ card, aside, nudge: ['Already have an account?', '/login', 'Log in'] }) };
 }
 
 // ---------------------------------------------------------------- verify email
@@ -194,7 +194,7 @@ export async function verify() {
     h('div', { class: 'mh2' }, h('b', { style: { color: 'var(--ink)' } }, 'Totali'), ' <no-reply@totali.example>', h('br'), `To: ${email}`, h('br'), 'Subject: Your Totali code'),
     h('div', { class: 'mb' }, `Hi ${user.firstName},`, h('br'), 'Use this code to finish creating your account.', h('div', { class: 'code' }, '481 025'), h('span', { class: 'fine' }, 'It expires in 15 minutes. If you didn’t ask for it, ignore this email.'), h('br'), h('br'), h('span', { class: 'fine' }, 'OMNIA TAX LLC · sample email')));
   const aside = h('div', {}, mail, Hand('This is what lands in your inbox.', { style: { left: '60px', top: '370px', width: '260px', fontSize: '26px', transform: 'rotate(-3deg)' } }));
-  return { title: 'Check your email — Totali', el: frame({ card, aside, nudge: ['Wrong account?', '/signup', 'Start over'] }), cleanup: () => clearInterval(timer) };
+  return { title: 'Check your email | Totali', el: frame({ card, aside, nudge: ['Wrong account?', '/signup', 'Start over'] }), cleanup: () => clearInterval(timer) };
 }
 
 // ---------------------------------------------------------------- log in
@@ -223,7 +223,7 @@ export function login(ctx) {
     h('p', { class: 'fine', style: { marginTop: '20px' } }, 'Staying signed in lasts until you choose ', h('b', {}, 'Sign out'), ' in the top menu.'),
     h('p', { class: 'fine', style: { marginTop: '8px' } }, 'On a team that uses Totali? ', link('/employee', { class: 'link' }, 'Employee sign in'), '.')];
   const aside = h('div', {}, photo('/assets/img/chef.jpg', 'Cooks plating dishes', '50% 40%'), Hand('Your pay run is where you left it.', { style: { left: '10px', top: '420px', width: '220px', fontSize: '26px', transform: 'rotate(-3deg)' } }));
-  return { title: 'Log in — Totali', el: frame({ card, aside, nudge: ['New here?', '/signup', 'Create account'] }) };
+  return { title: 'Log in | Totali', el: frame({ card, aside, nudge: ['New here?', '/signup', 'Create account'] }) };
 }
 
 // ---------------------------------------------------------------- forgot password: ask for a code, then choose a new password
@@ -269,7 +269,7 @@ export function forgot() {
   body.append(stepOne);
   const card = [h('h1', {}, 'Reset your ', h('em', {}, 'password')), h('p', {}, 'We’ll email a code to the address on your account.'), body];
   const aside = h('div', {}, photo('/assets/img/chef.jpg', 'Cooks plating dishes', '50% 40%'), Hand('It happens. We’ll have you back in a minute.', { style: { left: '10px', top: '420px', width: '200px', fontSize: '26px', transform: 'rotate(-3deg)' } }));
-  return { title: 'Reset password — Totali', el: frame({ card, aside, nudge: ['Remembered it?', '/login', 'Log in'] }) };
+  return { title: 'Reset password | Totali', el: frame({ card, aside, nudge: ['Remembered it?', '/login', 'Log in'] }) };
 }
 
 // ---------------------------------------------------------------- after Google: the two things it can't tell us
@@ -287,5 +287,5 @@ export function business() {
   const u = session.user;
   const card = [Steps3(2), h('h1', {}, `One more thing, ${u.firstName}`), h('p', {}, 'Your Google account is confirmed. What’s the business called?'), form];
   const aside = h('div', {}, photo('/assets/img/waiter.jpg', 'A server carrying plates', '50% 30%'), Hand('Takes about five minutes. Stop any time, we save as you go.', { style: { left: '-20px', top: '70px', width: '200px', fontSize: '26px' } }));
-  return { title: 'Your business — Totali', el: frame({ card, aside, nudge: ['Signed in as', '/app', u.email] }) };
+  return { title: 'Your business | Totali', el: frame({ card, aside, nudge: ['Signed in as', '/app', u.email] }) };
 }
