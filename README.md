@@ -40,6 +40,10 @@ Playwright and Chromium are used for end-to-end tests. Each script starts its ow
 for f in setup-flow dashboard payroll people settings time contractors google employee extras; do node e2e/$f.e2e.cjs; done
 ```
 
+### Production
+
+Before real customers, follow `docs/LAUNCH.md` (what only you can do, in order). With `NODE_ENV=production` the server checks its own settings at startup and refuses to start if a secret, address or key that would lose data or break sign-in and billing is missing (`src/production.ts`). `GET /ready` checks that the database can be written; `GET /health` is the cheap liveness check. The database is copied every six hours to `backups/` beside the data file (14 days kept), and every response carries the security headers and, on https, HSTS.
+
 ### Deploy to Render
 
 `render.yaml` is a blueprint: one web service, a persistent disk for the database, and every secret listed with `sync: false`, so Render asks you for the value in its dashboard and nothing secret is in git.
@@ -48,7 +52,7 @@ for f in setup-flow dashboard payroll people settings time contractors google em
 2. **`TOTALI_DATA_KEY`**: 32 random bytes, base64 (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`). It encrypts SSNs and bank numbers. Back it up somewhere other than the disk; losing it makes them unrecoverable.
 3. **`PUBLIC_BASE_URL`**: the site's address, with `https://`. It makes cookies `Secure` and decides where links in emails point. Without it the server refuses to build email links.
 4. **`RESEND_API_KEY`** and **`RESEND_FROM`**: email. Verify your domain in Resend and use an address on it; until then Resend only delivers to its account owner.
-5. Optional: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (add `{PUBLIC_BASE_URL}/v1/auth/google/callback` as a redirect URI; the button is hidden without them), `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` / `STRIPE_WEBHOOK_SECRET` (cards on the Billing page; point a Stripe webhook at `/v1/stripe/webhook` for `setup_intent.succeeded`), `SUPPORT_EMAIL` (where Help messages go).
+5. Optional: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (add `{PUBLIC_BASE_URL}/v1/auth/google/callback` as a redirect URI; the button is hidden without them), `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` / `STRIPE_WEBHOOK_SECRET` (the subscription and bank linking; point a Stripe webhook at `/v1/stripe/webhook` for `setup_intent.succeeded`), `SUPPORT_EMAIL` (where Help messages go).
 
 The persistent disk needs a paid Render instance. SQLite is a single file, so run one instance.
 

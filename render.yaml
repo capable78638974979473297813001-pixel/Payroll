@@ -49,7 +49,9 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-      - key: STRIPE_SECRET_KEY
+      - key: STRIPE_SECRET_KEY      # sk_test_ first. A live key also needs STRIPE_ALLOW_LIVE=1.
+        sync: false
+      - key: STRIPE_ALLOW_LIVE
         sync: false
       - key: STRIPE_PUBLISHABLE_KEY
         sync: false

@@ -59,9 +59,11 @@ const AUTH_FAILURES_PER_MINUTE = 20;
 class Text {
   text: string;
   filename?: string;
-  constructor(text: string, filename?: string) {
+  type?: string;
+  constructor(text: string, filename?: string, type?: string) {
     this.text = text;
     this.filename = filename;
+    this.type = type;
   }
 }
 
@@ -174,6 +176,18 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
   };
 
   const routes: Route[] = [
+    route('GET', '/ready', 'none', () => {
+      // can it read and write? A load balancer asks this before sending people here.
+      store.tx(() => store.counters.put({ id: 'ready-probe', value: now().getTime() }));
+      return { ok: true };
+    }),
+    route('GET', '/robots.txt', 'none', (c) => new Text(`User-agent: *\nAllow: /$\nAllow: /terms\nAllow: /privacy\nAllow: /signup\nAllow: /login\nDisallow: /app\nDisallow: /setup\nDisallow: /v1/\n${config.publicBaseUrl ? `Sitemap: ${config.publicBaseUrl}/sitemap.xml\n` : ''}`, undefined, 'text/plain; charset=utf-8')),
+    route('GET', '/sitemap.xml', 'none', (c) => {
+      const base = config.publicBaseUrl ?? siteBase(c.req);
+      const day = now().toISOString().slice(0, 10);
+      const urls = ['/', '/terms', '/privacy', '/signup', '/login'].map((p) => `  <url><loc>${base}${p === '/' ? '' : p}</loc><lastmod>${day}</lastmod></url>`).join('\n');
+      return new Text(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`, undefined, 'application/xml; charset=utf-8');
+    }),
     route('GET', '/health', 'none', () => ({
       ok: true,
       stripe: { mode: stripeMode(), role: 'bank linking only' },
@@ -659,9 +673,10 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
       const isText = body instanceof Text;
       const payload = isText ? (body as Text).text : JSON.stringify(body);
       res.writeHead(code, {
-        'content-type': isText ? 'text/plain; charset=utf-8' : 'application/json; charset=utf-8',
-        'cache-control': 'no-store',
+        'content-type': isText ? (body as Text).type ?? 'text/plain; charset=utf-8' : 'application/json; charset=utf-8',
+        'cache-control': isText && (body as Text).type ? 'public, max-age=3600' : 'no-store',
         ...SECURITY_HEADERS,
+        ...(config.publicBaseUrl?.startsWith('https://') ? { 'strict-transport-security': 'max-age=31536000; includeSubDomains' } : {}),
         ...(isText && (body as Text).filename ? { 'content-disposition': `attachment; filename="${(body as Text).filename}"` } : {}),
         ...Object.fromEntries(Object.entries(headers).map(([k, val]) => [k, k.toLowerCase() === 'set-cookie' && val.includes('\n') ? val.split('\n') : val])),
       });
@@ -674,7 +689,7 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
 
       const url = new URL(req.url ?? '/', 'http://localhost');
       // The app itself: every GET outside the API is a file in web/, or a page the front end routes.
-      if ((method === 'GET' || method === 'HEAD') && !url.pathname.startsWith('/v1/') && url.pathname !== '/health') {
+      if ((method === 'GET' || method === 'HEAD') && !url.pathname.startsWith('/v1/') && !['/health', '/ready', '/robots.txt', '/sitemap.xml'].includes(url.pathname)) {
         if (serveStatic(webRoot, req, res, url.pathname)) {
           status = 200;
           return;

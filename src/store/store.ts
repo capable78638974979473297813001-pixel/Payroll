@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { notFound } from '../lib/errors.ts';
@@ -107,6 +107,23 @@ export class Store {
       [this.companies, this.employees, this.shifts, this.houseDays, this.payRuns, this.legs, this.ledger, this.apiKeys, this.taxDeposits, this.bankAccounts, this.bankLinks, this.achFiles, this.counters, this.auditLog, this.users, this.emailCodes, this.sessions, this.dashboards, this.contractors, this.jobs, this.posConnections, this.stripeEvents].map((c) => [c.name, c as unknown as Collection<Doc>]),
     );
     if (path) this.open(path);
+  }
+
+  /** A consistent copy of the whole database, made while it is in use. Returns the file written. */
+  backup(dir: string, at: Date): string {
+    if (!this.db) throw new Error('This store is in memory; there is nothing to back up.');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const file = `${dir}/totali-${at.toISOString().replace(/[:.]/g, '-').slice(0, 19)}.db`;
+    if (existsSync(file)) return file;
+    this.db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
+    return file;
+  }
+
+  /** Keep the newest `keep` backups and remove the rest. */
+  pruneBackups(dir: string, keep: number): void {
+    if (!existsSync(dir)) return;
+    const files = readdirSync(dir).filter((f) => /^totali-.*\.db$/.test(f)).sort();
+    for (const f of files.slice(0, Math.max(0, files.length - keep))) unlinkSync(`${dir}/${f}`);
   }
 
   private open(path: string): void {
