@@ -18,6 +18,7 @@ import { runMasteryTax, type MasteryCommand } from '../tax/masterytax.ts';
 import { tipSplit } from '../tax/tipSplit.ts';
 import { tipReport } from '../restaurant/reports.ts';
 import { suggestPeriods } from '../payroll/schedule.ts';
+import { ContractorService } from '../contractors/service.ts';
 import { BillingService } from '../billing/service.ts';
 import { StripeClient, stripeConfigured, stripeMode, type StripeBillingApi } from '../money/stripe.ts';
 import { updateSetup } from '../builder/edit.ts';
@@ -142,6 +143,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
   };
   const billing = new BillingService(store, deps.billingStripe !== undefined ? deps.billingStripe : stripeConfigured() ? new StripeClient() : null, now);
   const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
+  const contractors = new ContractorService(store, mailer, now);
   const onboarding = new OnboardingService(store, mailer, deps.banks, now, deps.log);
   const joinLimit = (c: { ip: string }) => { const wait = logins.hit(`join:${c.ip}`, 200, now().getTime()); if (wait) throw new ApiError(429, 'rate_limited', 'Too many tries. Wait a few minutes and try again.', { retryAfterSeconds: wait }); };
   const secureCookies = (req: IncomingMessage) => (config.publicBaseUrl ?? '').startsWith('https://') || (config.trustProxy && req.headers['x-forwarded-proto'] === 'https');
@@ -380,6 +382,16 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       if (!r.sent) throw new ApiError(503, 'support_unavailable', `We couldn’t send that just now. Email ${to} and we’ll reply.`);
       return { sent: true };
     }),
+    route('GET', `${C}/contractors`, 'company', (c) => contractors.list(c.params.cid, c.query.get('year') ? Number(c.query.get('year')) : undefined)),
+    route('GET', `${C}/contractors/export`, 'company', (c) => { const f = contractors.exportCsv(c.params.cid, Number(c.query.get('year') ?? now().getUTCFullYear())); return new Text(f.content, f.fileName); }),
+    route('POST', `${C}/contractors`, 'company', (c) => contractors.add(c.params.cid, c.json()), 201),
+    route('PATCH', `${C}/contractors/:xid`, 'company', (c) => contractors.update(c.params.cid, c.params.xid, c.json())),
+    route('DELETE', `${C}/contractors/:xid`, 'company', (c) => contractors.archive(c.params.cid, c.params.xid)),
+    route('POST', `${C}/contractors/:xid/payments`, 'company', (c) => contractors.addPayment(c.params.cid, c.params.xid, c.json()), 201),
+    route('DELETE', `${C}/contractors/:xid/payments/:pid`, 'company', (c) => contractors.removePayment(c.params.cid, c.params.xid, c.params.pid)),
+    route('POST', `${C}/contractors/:xid/w9-request`, 'company', async (c) => contractors.requestW9(c.params.cid, siteBase(c.req), c.params.xid)),
+    route('GET', '/v1/w9/:token', 'none', (c) => { joinLimit(c); return contractors.w9Status(c.params.token); }),
+    route('POST', '/v1/w9/:token', 'none', (c) => { joinLimit(c); return contractors.submitW9(c.params.token, c.json()); }),
     route('GET', `${C}/profile`, 'company', (c) => profileView(store.companies.require(c.params.cid, 'Company'))),
     route('PUT', `${C}/profile`, 'company', (c) => saveProfile(store, c.params.cid, c.json())),
     route('POST', `${C}/profile/documents`, 'company', (c) => addDocument(store, c.params.cid, c.json()), 201),

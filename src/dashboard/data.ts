@@ -177,7 +177,7 @@ export function dashboardData(store: Store, company: Company, today: string) {
     built,
     checklist,
     people: active.slice(0, 200).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`, role: roles.get(e.roleKey)?.label ?? e.roleKey, pay: e.payType.kind === 'hourly' ? { kind: 'hourly', cents: e.payType.rateCents } : { kind: 'salary', cents: e.payType.annualCents }, location: e.location ?? null, done: formsOf(e, wantsStateForm).done })),
-    contractors: { count: 0, w9: 0, ytdCents: 0 },
+    contractors: (() => { const rows = store.contractors.where((x) => x.companyId === company.id && !x.archivedAt); const y = today.slice(0, 4); return { count: rows.length, w9: rows.filter((x) => x.w9At).length, ytdCents: rows.reduce((n, x) => n + x.payments.filter((p) => p.date.startsWith(y)).reduce((m, p) => m + p.amountCents, 0), 0) }; })(),
     setup: [
       { id: 'ein', label: 'Add your EIN', done: !!company.ein, to: '/app/settings/company' },
       { id: 'bank', label: 'Choose the bank you pay from', done: !!company.payment.employerBank, to: '/app/settings/payments' },

@@ -12,6 +12,8 @@ import { runPayrollPage, runPage, stubPage } from './app/payroll.js';
 import { profilePage, peopleCards } from './app/people.js';
 import { RENDERERS } from './widgets.js';
 import { joinPage } from './pages/join.js';
+import { w9Page } from './pages/w9.js';
+import { contractorsPage } from './app/contractors.js';
 
 import { timeCards } from './app/time.js';
 Object.assign(RENDERERS, peopleCards, timeCards);
@@ -31,6 +33,8 @@ route('/app/billing', billingPage());
 route('/app/settings', settingsPage());
 route('/app/settings/:section', settingsPage());
 route('/join/:token', joinPage());
+route('/w9/:token', w9Page());
+route('/app/contractors', contractorsPage());
 route('/app/people/:id', profilePage());
 route('/app/payroll/run', runPayrollPage());
 route('/app/payroll/runs/:id', runPage());

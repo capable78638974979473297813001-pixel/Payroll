@@ -6,6 +6,27 @@ import type { EmployerContext, FederalW4, StateWithholding, TaxLine } from '../.
 
 export type PayFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
 
+/** Someone paid by invoice, not on payroll: tracked for the 1099, with a W-9 collected from them. */
+export interface Contractor {
+  id: string;
+  companyId: string;
+  name: string;
+  businessName?: string;
+  email?: string;
+  /** Collected on the W-9. The full number is encrypted; only the last four are ever shown. */
+  tinEncrypted?: string;
+  tinLast4?: string;
+  tinType?: 'ssn' | 'ein';
+  classification?: string;
+  address?: { street: string; city: string; state: string; zip: string };
+  w9At?: string;
+  inviteTokenHash?: string;
+  inviteExpiresAt?: string;
+  payments: Array<{ id: string; date: string; amountCents: number; note: string }>;
+  archivedAt?: string;
+  createdAt: string;
+}
+
 export interface CompanyProfile {
   dba?: string;
   entityType?: string;

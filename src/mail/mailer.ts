@@ -178,6 +178,15 @@ export function inviteEmail(a: { to: string; firstName: string; businessName: st
   return { to: a.to, subject: `${a.businessName}: your new-hire forms`, html, text: `${a.businessName} uses Totali for payroll. Fill in your new-hire forms (${a.forms.join(', ')}): ${a.link}\nThis link is just for you.` };
 }
 
+export function w9Email(a: { to: string; name: string; businessName: string; link: string }): Message {
+  const html = wrap(
+    `${escapeHtml(a.businessName)} needs your W-9`,
+    `${para(`Hi ${escapeHtml(a.name)}, ${escapeHtml(a.businessName)} pays you by invoice and needs a W-9 on file so they can report what they paid you. It takes about two minutes.`)}${button(a.link, 'Fill in your W-9')}`,
+    'This link is just for you. Don’t forward it. If you weren’t expecting this, you can ignore it.',
+  );
+  return { to: a.to, subject: `${a.businessName}: please fill in your W-9`, html, text: `Hi ${a.name}, ${a.businessName} needs a W-9 from you: ${a.link}\nThis link is just for you.` };
+}
+
 export function reminderEmail(a: { to: string; firstName: string; businessName: string; link: string; missing: string[] }): Message {
   const items = a.missing.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
   const html = wrap(
