@@ -10,7 +10,7 @@ import { draftPayRun } from '../src/payroll/payRuns.ts';
 import { payrollRegister, hoursReport, roster } from '../src/reports/service.ts';
 import { ApiError } from '../src/lib/errors.ts';
 import type { User } from '../src/accounts/types.ts';
-import './helpers.ts';
+import { posReady } from './helpers.ts';
 
 const D = '2026-10-30';
 function make() {
@@ -54,6 +54,7 @@ test('the list follows the work: a missing W-4, a draft run, an approved run wai
   assert.equal(d.nextPayroll.people.hourlyWithHours, 0);
   saveWeek(store, company, { periodStart: '2026-10-26', periodEnd: '2026-11-01', entries: [{ employeeId: a.id, regularMinutes: 2400 }] });
   assert.equal(data().nextPayroll.people.hourlyWithHours, 1);
+  posReady(store, company.id, '2026-10-26', '2026-11-01');
   const run = draftPayRun(store, company.id, { periodStart: '2026-10-26', periodEnd: '2026-11-01', checkDate: '2026-11-06' });
   d = data();
   assert.equal(d.nextPayroll.stage, 'draft');
@@ -69,6 +70,7 @@ test('reports are plain CSV: the register by pay date, hours and tips, and a ros
   const { store, company, mk } = make();
   const a = mk('Ana');
   saveWeek(store, company, { periodStart: '2026-10-19', periodEnd: '2026-10-25', entries: [{ employeeId: a.id, regularMinutes: 1950 }] });
+  posReady(store, company.id, '2026-10-19', '2026-10-25');
   const run = draftPayRun(store, company.id, { periodStart: '2026-10-19', periodEnd: '2026-10-25', checkDate: '2026-10-30' });
   assert.equal(payrollRegister(store, company.id, '2026-01-01', '2026-12-31').rows, 0, 'a draft is not in the register');
   store.tx(() => store.payRuns.put({ ...run, status: 'approved' }));

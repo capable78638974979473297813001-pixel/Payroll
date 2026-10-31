@@ -52,7 +52,7 @@ export function dashboardTab() {
 
     // ------------------------------------------------------------ the page
     function view(tab, { config, t, data, dash }) {
-      if (tab.id === config.tabs.find(x => x.kind === 'page').id && !st.editing && !st.detailed) return restaurantOverview(data, { customize: startEdit });
+      if (tab.id === config.tabs.find(x => x.kind === 'page').id && !st.editing && !st.detailed) return restaurantOverview(data, { customize: startEdit, periodStart: ctx.query.get('period') });
       const grid = h('div', { class: 'grid cards', 'data-testid': 'grid' });
       for (const w of tab.widgets) grid.append(cardElement(w, { config, t, data, dash, tools: st.editing ? tools(tab, w) : null }));
       if (!tab.widgets.length) grid.append(h('div', { class: 'card', style: { '--span': 12 } }, h('div', { class: 'empty' }, st.editing ? 'This tab is empty. Add a card to start.' : 'This tab is empty.', st.editing ? null : [' ', h('button', { class: 'link as-button', type: 'button', onClick: startEdit }, 'Customize')])));

@@ -8,6 +8,8 @@ import { daysBetween } from '../lib/dates.ts';
 import type { Store } from '../store/store.ts';
 import type { Employee } from '../domain/types.ts';
 import { getJson, PosError, str, num, type Fetch } from './http.ts';
+import { sevenToken } from './sevenAuth.ts';
+import { approvedToastLocation, toastApprovalUrl, type ToastPartner } from './toastPartner.ts';
 import { CLOVER_HOSTS } from './clover.ts';
 import { SQUARE_HOSTS } from './square.ts';
 import { toastAdapter } from './toast.ts';
@@ -20,7 +22,7 @@ import type { PosAdapter, PosConnection, PosProviderId, PosProviderInfo, PosSumm
 
 const ENV = { name: 'environment', label: 'Which Toast or Square', optional: true, options: [{ value: 'production', label: 'My real restaurant' }, { value: 'sandbox', label: 'A test account' }] };
 
-export type OAuthApps = Partial<Record<'clover' | 'square', { appId: string; secret: string }>>;
+export type OAuthApps = Partial<Record<'clover' | 'square' | 'sevenshifts', { appId: string; secret: string }>> & { toast?: ToastPartner };
 
 export const PROVIDERS: PosProviderInfo[] = [
   { id: 'toast', name: 'Toast', brings: ['Your staff', 'Hours from the time clock', 'Card tips and declared cash tips'],
@@ -49,6 +51,7 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 export class PosService {
   private store: Store; private now: () => Date; private f: Fetch; private hosts: Partial<Record<PosProviderId, string>>; private lastSync = new Map<string, number>();
   private oauth: OAuthApps; private pending = new Map<string, { companyId: string; provider: PosProviderId; until: number }>();
+  private toastPending = new Map<string, { reference: string; until: number }>();
   constructor(store: Store, now: () => Date = () => new Date(), f: Fetch = globalThis.fetch, hosts: Partial<Record<PosProviderId, string>> = {}, oauth: OAuthApps = {}) {
     this.store = store; this.now = now; this.f = f; this.hosts = hosts; this.oauth = oauth;
   }
@@ -70,7 +73,7 @@ export class PosService {
 
   catalog(companyId: string) {
     const c = this.connectionOf(companyId);
-    return { providers: PROVIDERS.map((p) => ((p.id === 'clover' || p.id === 'square') && this.oauth[p.id] ? { ...p, signIn: true } : p)), connection: c ? this.view(c) : null };
+    return { providers: PROVIDERS.map(p => ({ ...p, signIn: p.id !== 'file' && Boolean(this.oauth[p.id]), approvalFlow: p.id === 'toast' ? 'marketplace' : 'oauth', setupRequired: p.id === 'toast' ? 'Toast partner approval and marketplace listing' : p.id === 'sevenshifts' ? '7shifts partner OAuth client' : `${p.name} app registration` })), connection: c ? this.view(c) : null };
   }
 
   /** Check the details against the other system first. Only details that work are kept, and they are kept encrypted. */
@@ -89,7 +92,7 @@ export class PosService {
     }
     const checked = await this.adapter(provider, creds).check();
     const conn: PosConnection = { id: newId('pos'), companyId, provider, label: checked.label, credentialsEncrypted: encryptField(JSON.stringify(checked.creds ?? creds)), employeeMap: {}, connectedAt: this.iso() };
-    this.store.tx(() => this.store.posConnections.put(conn));
+    this.store.tx(() => { if (this.connectionOf(companyId)) throw conflict('one_source', 'A source is already connected.'); this.store.posConnections.put(conn); });
     return this.view(conn);
   }
 
@@ -102,13 +105,14 @@ export class PosService {
 
   /** Where to send the owner to approve Totali. Works once Totali's own app is registered with that vendor. */
   oauthStart(companyId: string, provider: PosProviderId, redirectUri: string) {
-    const app = provider === 'clover' || provider === 'square' ? this.oauth[provider] : undefined;
+    const app = provider === 'clover' || provider === 'square' || provider === 'sevenshifts' ? this.oauth[provider] : undefined;
     if (!app) throw conflict('sign_in_not_set_up', `Sign in with ${providerName(provider)} isn’t set up on this server yet.`);
     if (this.connectionOf(companyId)) throw conflict('one_source', 'Disconnect the current source first. Two sources would both report the same shift.');
     for (const [k, v] of this.pending) if (v.until < this.now().getTime()) this.pending.delete(k);
     const state = randomBytes(24).toString('base64url');
     this.pending.set(state, { companyId, provider, until: this.now().getTime() + 15 * 60_000 });
     const q = encodeURIComponent;
+    if (provider === 'sevenshifts') return { state, url: `https://app.7shifts.com/generate_token?client_id=${q(app.appId)}&state=${state}` };
     if (provider === 'square') {
       const host = this.hosts.square ?? SQUARE_HOSTS.production;
       return { state, url: `${host}/oauth2/authorize?client_id=${q(app.appId)}&scope=${['EMPLOYEES_READ', 'TIMECARDS_READ', 'PAYMENTS_READ', 'MERCHANT_PROFILE_READ'].join('+')}&session=false&state=${state}` };
@@ -119,7 +123,7 @@ export class PosService {
 
   /** The vendor sends the owner back with a code. Exchange it for tokens and keep them encrypted. */
   async oauthFinish(provider: PosProviderId, query: URLSearchParams, signedInCompanyId: string | null) {
-    const app = provider === 'clover' || provider === 'square' ? this.oauth[provider] : undefined;
+    const app = provider === 'clover' || provider === 'square' || provider === 'sevenshifts' ? this.oauth[provider] : undefined;
     if (!app) throw conflict('sign_in_not_set_up', `Sign in with ${providerName(provider)} isn’t set up on this server yet.`);
     const state = query.get('state') ?? '';
     const p = this.pending.get(state);
@@ -127,9 +131,13 @@ export class PosService {
     if (!p || p.provider !== provider || p.until < this.now().getTime()) throw badRequest('That sign-in link has expired. Start again from Settings.');
     if (signedInCompanyId !== p.companyId) throw new ApiError(403, 'wrong_company', 'Sign in to the same Totali account you started from, and try again.');
     const code = query.get('code');
-    if (!code || query.get('error')) throw badRequest(`${providerName(provider)} didn’t approve the connection.`);
+    if (query.get('error') || (provider !== 'sevenshifts' && !code)) throw badRequest(`${providerName(provider)} didn’t approve the connection.`);
     let creds: Record<string, string>;
-    if (provider === 'square') {
+    if (provider === 'sevenshifts') {
+      const companyGuid = query.get('guid') ?? '', companyId = query.get('company_id') ?? '';
+      if (!/^[a-zA-Z0-9-]{8,100}$/.test(companyGuid) || !/^\d{1,20}$/.test(companyId)) throw badRequest('7shifts did not return a valid company grant.');
+      creds = { ...(await sevenToken(this.f, app, this.now().getTime(), this.hosts.sevenshifts)), companyGuid, companyId };
+    } else if (provider === 'square') {
       const t = await getJson(this.f, 'Square', `${this.apiHost('square')}/oauth2/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: app.appId, client_secret: app.secret, code, grant_type: 'authorization_code' }) });
       creds = this.squareTokens({ environment: this.hosts.square ? 'sandbox' : 'production' }, t);
     } else {
@@ -141,7 +149,29 @@ export class PosService {
     const checked = await this.adapter(provider, creds).check();
     const stored = checked.creds ?? creds;
     const conn: PosConnection = { id: newId('pos'), companyId: p.companyId, provider, label: checked.label, credentialsEncrypted: encryptField(JSON.stringify(stored)), employeeMap: {}, connectedAt: this.iso() };
-    this.store.tx(() => this.store.posConnections.put(conn));
+    this.store.tx(() => { if (this.connectionOf(p.companyId)) throw conflict('one_source', 'A source is already connected.'); this.store.posConnections.put(conn); });
+    return this.view(conn);
+  }
+
+  toastStart(companyId: string) {
+    const app = this.oauth.toast;
+    if (!app) throw conflict('sign_in_not_set_up', 'Toast partner connection is not configured on this server.');
+    if (this.connectionOf(companyId)) throw conflict('one_source', 'Disconnect the current source first.');
+    for (const [id,p] of this.toastPending) if (p.until < this.now().getTime()) this.toastPending.delete(id);
+    const reference = randomBytes(24).toString('base64url');
+    this.toastPending.set(companyId, { reference, until: this.now().getTime() + 60 * 60_000 });
+    return { url: toastApprovalUrl(app.entryUrl), reference };
+  }
+
+  async toastComplete(companyId: string) {
+    const app = this.oauth.toast, pending = this.toastPending.get(companyId);
+    if (!app || !pending || pending.until < this.now().getTime()) throw badRequest('Toast connection request expired. Start again.');
+    const creds = await approvedToastLocation(this.f, app, pending.reference, this.hosts.toast);
+    if (this.store.posConnections.where(c => c.provider === 'toast' && this.creds(c).restaurantGuid === creds.restaurantGuid).length) throw conflict('already_connected', 'This Toast location is already connected.');
+    const checked = await this.adapter('toast', creds).check();
+    const conn: PosConnection = { id: newId('pos'), companyId, provider: 'toast', label: checked.label, credentialsEncrypted: encryptField(JSON.stringify(creds)), employeeMap: {}, connectedAt: this.iso() };
+    this.store.tx(() => { if (this.connectionOf(companyId)) throw conflict('one_source', 'A source is already connected.'); if (this.store.posConnections.where(c => c.provider === 'toast' && this.creds(c).restaurantGuid === creds.restaurantGuid).length) throw conflict('already_connected', 'This Toast location is already connected.'); this.store.posConnections.put(conn); });
+    this.toastPending.delete(companyId);
     return this.view(conn);
   }
 
@@ -160,6 +190,11 @@ export class PosService {
   private async adapterFor(c: PosConnection): Promise<PosAdapter> {
     let creds = this.creds(c);
     const nowMs = this.now().getTime();
+    if (c.provider === 'sevenshifts' && creds.authKind === 'oauth' && Number(creds.accessExpiresAt) * 1000 < nowMs + 60_000) {
+      if (!this.oauth.sevenshifts) throw new PosError('7shifts connection needs administrator setup.');
+      creds = { ...creds, ...(await sevenToken(this.f, this.oauth.sevenshifts, nowMs, this.hosts.sevenshifts)) };
+      this.store.tx(() => this.store.posConnections.put({ ...c, credentialsEncrypted: encryptField(JSON.stringify(creds)) }));
+    }
     if (c.provider === 'clover' && creds.refreshToken && this.oauth.clover && Number(creds.accessExpiresAt) * 1000 < nowMs + 60_000) {
       if (Number(creds.refreshExpiresAt) * 1000 < nowMs) throw new PosError('Clover’s sign-in has run out. Disconnect and connect Clover again.');
       const t = await getJson(this.f, 'Clover', `${this.apiHost('clover', creds.region)}/oauth/v2/refresh`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: this.oauth.clover.appId, refresh_token: creds.refreshToken }) });

@@ -14,7 +14,7 @@ const VERSION = '2026-01-01';
 
 export function sevenShiftsAdapter(creds: Record<string, string>, f: Fetch, hostOverride?: string): PosAdapter {
   const host = hostOverride ?? HOST;
-  const headers = { authorization: `Bearer ${creds.accessToken}`, 'x-api-version': VERSION };
+  const headers = { authorization: `Bearer ${creds.accessToken}`, 'x-api-version': VERSION, ...(creds.authKind === 'oauth' ? { 'x-company-guid': creds.companyGuid! } : {}) };
   let company = (creds.companyId ?? '').trim();
   const get = (path: string) => getJson(f, WHO, `${host}${path}`, { headers });
   const companyId = async () => {
@@ -33,7 +33,7 @@ export function sevenShiftsAdapter(creds: Record<string, string>, f: Fetch, host
     }
   }
   return {
-    async check() { const id = await companyId(); return { label: '7shifts', creds: { ...creds, companyId: id } }; },
+    async check() { const id = await companyId(); if (creds.authKind === 'oauth') { const permitted = arr((await get('/v2/companies')).data); if (!permitted.some(c => str(c.id) === id || str(obj(c.company).id) === id)) throw new PosError('7shifts grant does not match this company.'); } return { label: '7shifts', creds: { ...creds, companyId: id } }; },
     async people() {
       const id = await companyId();
       const out: PosPerson[] = [];

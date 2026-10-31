@@ -6,6 +6,7 @@ import type { Store } from '../store/store.ts';
 import { assertAdmin, assertCompanyAccess, authenticate, type Principal } from '../domain/auth.ts';
 import { companyView, createCompany, updateCompany } from '../domain/companies.ts';
 import type { Employee } from '../domain/types.ts';
+import { posWorkspace } from '../pos/readiness.ts';
 import { PosService, type OAuthApps } from '../pos/service.ts';
 import type { PosProviderId } from '../pos/types.ts';
 import { addEmployee, employeeView, importYtd, requireEmployee, setPayoutAccounts, terminateEmployee, updateEmployee } from '../domain/employees.ts';
@@ -153,7 +154,7 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
   const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
   const google = deps.google !== undefined ? deps.google : (() => { const g = googleFromEnv(); return g ? new GoogleAuth(g, fetch, now) : null; })();
   const OAUTH_COOKIE = 'totali_oauth';
-  const oauth = deps.oauth ?? { ...(process.env.CLOVER_APP_ID && process.env.CLOVER_APP_SECRET ? { clover: { appId: process.env.CLOVER_APP_ID, secret: process.env.CLOVER_APP_SECRET } } : {}), ...(process.env.SQUARE_APP_ID && process.env.SQUARE_APP_SECRET ? { square: { appId: process.env.SQUARE_APP_ID, secret: process.env.SQUARE_APP_SECRET } } : {}) };
+  const oauth = deps.oauth ?? { ...(process.env.SEVENSHIFTS_CLIENT_ID && process.env.SEVENSHIFTS_CLIENT_SECRET ? { sevenshifts: { appId: process.env.SEVENSHIFTS_CLIENT_ID, secret: process.env.SEVENSHIFTS_CLIENT_SECRET } } : {}), ...(process.env.TOAST_PARTNER_CLIENT_ID && process.env.TOAST_PARTNER_CLIENT_SECRET && process.env.TOAST_PARTNER_ENTRY_URL ? { toast: { appId: process.env.TOAST_PARTNER_CLIENT_ID, secret: process.env.TOAST_PARTNER_CLIENT_SECRET, entryUrl: process.env.TOAST_PARTNER_ENTRY_URL } } : {}), ...(process.env.CLOVER_APP_ID && process.env.CLOVER_APP_SECRET ? { clover: { appId: process.env.CLOVER_APP_ID, secret: process.env.CLOVER_APP_SECRET } } : {}), ...(process.env.SQUARE_APP_ID && process.env.SQUARE_APP_SECRET ? { square: { appId: process.env.SQUARE_APP_ID, secret: process.env.SQUARE_APP_SECRET } } : {}) };
   const pos = new PosService(store, now, deps.posFetch ?? globalThis.fetch, config.devTools ? deps.posHosts ?? {} : {}, oauth);
   const taxCache = new Map<string, { at: number; value: unknown }>();
   const contractors = new ContractorService(store, mailer, now);
@@ -456,9 +457,12 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
     route('GET', `${C}/reports/hours`, 'company', (c) => { const [a, b] = range(c); const f = hoursReport(store, c.params.cid, a, b); return new Text(f.content, f.fileName); }),
     route('GET', `${C}/reports/roster`, 'company', (c) => { const f = roster(store, c.params.cid); return new Text(f.content, f.fileName); }),
     route('GET', `${C}/reports/wc`, 'company', (c) => { const r = wcReport(store, store.companies.require(c.params.cid, 'Company'), Number(c.query.get('year') ?? now().getUTCFullYear())); return c.query.get('format') === 'csv' ? new Text(r.csv, r.fileName) : { year: r.year, rows: r.rows, note: r.note }; }),
+    route('GET', `${C}/pos/workspace`, 'company', (c) => { const [a,b] = range(c); if (a > b) throw badRequest('start must be on or before end'); return posWorkspace(store, c.params.cid, a, b); }),
     route('GET', `${C}/pos`, 'company', (c) => pos.catalog(c.params.cid)),
     route('POST', `${C}/pos/connect`, 'company', async (c) => pos.connect(c.params.cid, c.json()), 201),
     route('DELETE', `${C}/pos`, 'company', (c) => pos.disconnect(c.params.cid)),
+    route('POST', `${C}/pos/toast/start`, 'company', (c) => pos.toastStart(c.params.cid)),
+    route('POST', `${C}/pos/toast/complete`, 'company', async (c) => pos.toastComplete(c.params.cid)),
     route('GET', `${C}/pos/:provider/start`, 'company', (c) => ({ url: pos.oauthStart(c.params.cid, c.params.provider as PosProviderId, `${siteBase(c.req)}/v1/pos/${c.params.provider}/callback`).url })),
     route('GET', '/v1/pos/:provider/callback', 'none', async (c) => {
       const back = (q: string) => new Reply({}, { location: `/app/settings/pos?${q}` }, 302);
