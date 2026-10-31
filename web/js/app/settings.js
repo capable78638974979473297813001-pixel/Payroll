@@ -7,8 +7,9 @@ import { appPage } from './shell.js';
 import { app, base, loadApp, refreshData } from './state.js';
 import { bodyFor, summarize } from '../pages/setup.js';
 import { accessCard } from './access.js';
+import { posSection } from './pos.js';
 
-const SECTIONS = [['dashboard', 'Your dashboard'], ['company', 'Company'], ['schedule', 'Pay schedule'], ['state', 'State accounts'], ['people', 'People and roles'], ['access', 'Employee access'], ['payments', 'Paying your team'], ['account', 'Account']];
+const SECTIONS = [['dashboard', 'Your dashboard'], ['company', 'Company'], ['schedule', 'Pay schedule'], ['state', 'State accounts'], ['people', 'People and roles'], ['pos', 'Point of sale'], ['access', 'Employee access'], ['payments', 'Paying your team'], ['account', 'Account']];
 const italic = { fontFamily: 'Fraunces, serif', fontStyle: 'italic', color: 'var(--berry)' };
 
 export function settingsPage() {
@@ -16,7 +17,7 @@ export function settingsPage() {
     await refreshData();
     const section = ctx.params.section && SECTIONS.some(([id]) => id === ctx.params.section) ? ctx.params.section : 'dashboard';
     const nav = h('div', { class: 'subnav' }, ...SECTIONS.map(([id, label]) => link(id === 'dashboard' ? '/app/settings' : `/app/settings/${id}`, { class: id === section ? 'on' : '', 'data-section': id }, label)), link('/app/billing', { 'data-section': 'billing' }, 'Billing'));
-    const content = await ({ dashboard, company, schedule, state, people, access, payments, account })[section]();
+    const content = await ({ dashboard, company, schedule, state, people, pos: posSection, access, payments, account })[section]();
     return h('div', {}, h('div', { class: 'ph2' }, h('div', {}, h('h1', { class: 'pt' }, h('em', {}, 'Settings')), h('p', {}, 'Company, taxes and who has access'))),
       h('div', { class: 'grid', style: { gridTemplateColumns: '200px minmax(0,1fr)', alignItems: 'start' } }, h('div', {}, nav), content));
   } });

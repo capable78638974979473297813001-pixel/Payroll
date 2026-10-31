@@ -35,7 +35,9 @@ const submitter = config.ach.mode === 'sandbox' ? new SandboxBank() : config.ach
 const ach = new AchService(store, banks, submitter, config.ach.config);
 const mailer = mailerFromEnv(process.env, log);
 log(mailer.kind === 'resend' ? 'email: Resend' : 'email: no RESEND_API_KEY, so verification codes are not emailed (they are kept in an in-memory outbox' + (config.devTools ? ' and shown at /v1/dev/outbox)' : '; set TOTALI_DEV=1 to read them in development)'));
-const app = createApp({ store, banks, ach, config, log, mailer });
+// Tests point the POS adapters at a fake server. Only when the dev tools are on.
+const posHosts = config.devTools && process.env.TOTALI_DEV_POS_HOSTS ? (JSON.parse(process.env.TOTALI_DEV_POS_HOSTS) as Record<string, string>) : undefined;
+const app = createApp({ store, banks, ach, config, log, mailer, ...(posHosts ? { posHosts } : {}) });
 
 const timer = setInterval(() => void reconcile(ach, store, { autoDisburse: config.autoDisburse, log }), 60_000);
 timer.unref();

@@ -199,6 +199,9 @@ export function dashboardData(store: Store, company: Company, today: string) {
   const noW9 = store.contractors.where((x) => x.companyId === company.id && !x.archivedAt && !x.w9At).length;
   if (noW9) add({ id: 'w9', severity: 'info', title: `${noW9} ${noW9 === 1 ? 'contractor has' : 'contractors have'} no W-9`, detail: 'Request one so you can report what you paid them.', to: '/app/contractors' });
   if (a.has('unemployment_account') && !company.taxAccounts?.state?.[company.homeState]?.account) add({ id: 'uia', severity: 'info', title: 'Add your state unemployment number', detail: 'It goes on your filings.', to: '/app/settings/state' });
+  const posConn = store.posConnections.where((x) => x.companyId === company.id)[0];
+  if (!posConn && company.setup) add({ id: 'pos', severity: 'info', title: 'Connect your point of sale', detail: 'Pull staff, hours and tips from Toast, Square or 7shifts so nobody types them twice.', to: '/app/settings/pos' });
+  if (posConn?.lastSummary?.unmapped.length) add({ id: 'pos_unmapped', severity: 'soon', title: `${posConn.lastSummary.unmapped.length} ${posConn.lastSummary.unmapped.length === 1 ? 'person' : 'people'} on ${posConn.label.split(':')[0]} ${posConn.lastSummary.unmapped.length === 1 ? 'isn’t' : 'aren’t'} matched`, detail: 'Their hours were left out until you match them to your team.', to: '/app/settings/pos' });
   const rank = { urgent: 0, soon: 1, info: 2 } as const;
   todos.sort((x, y) => rank[x.severity] - rank[y.severity]);
 

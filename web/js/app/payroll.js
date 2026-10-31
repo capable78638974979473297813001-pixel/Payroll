@@ -4,6 +4,7 @@ import { link, navigate } from '../router.js';
 import { Button, Alert, Chip, Field, modal, setLoading, toast } from '../ui.js';
 import { session } from '../session.js';
 import { appPage } from './shell.js';
+import { pullCard } from './pos.js';
 import { app, base, refreshData } from './state.js';
 
 // ---------------------------------------------------------------- small pieces shared by the payroll screens
@@ -252,12 +253,14 @@ async function hoursStep(period, data) {
     });
   }
   drawExtras();
+  const posConn = (await api.get(`${base()}/pos`)).connection;
   const sched = data.company.schedule.frequency;
   const locs = data.company.locations.map((l) => l.name);
   const tipped = rows.some((r) => r.tipped);
   const side = h('div', { class: 'grid' },
     h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '10px' } }, 'This pay run'), h('dl', { class: 'kv', style: { gridTemplateColumns: '110px 1fr', fontSize: '13.5px' } }, h('dt', {}, 'Period'), h('dd', {}, rangeLabel(period.periodStart, period.periodEnd)), h('dt', {}, 'Pay date'), h('dd', {}, longDate(period.checkDate)), h('dt', {}, 'Schedule'), h('dd', {}, FREQ[sched] || sched), locs.length ? [h('dt', {}, 'Locations'), h('dd', {}, locs.join(', '))] : null)),
     tipped ? h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Tips this period'), h('div', { class: 'big2' }, h('div', {}, tipsTotal)), h('p', { class: 'cap' }, 'Tips paid through payroll. Cash tips someone already kept don’t need to be entered.')) : null,
+    posConn ? pullCard(posConn, period) : null,
     hasExtras || adjustments.length ? h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Bonuses and reimbursements'), h('button', { class: 'link as-button', type: 'button', 'data-testid': 'add-extra', onClick: addExtra }, 'Add')), extrasList) : null,
     sideAlerts, importBtn, template, file);
 

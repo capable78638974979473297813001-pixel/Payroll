@@ -66,6 +66,20 @@ Back at Totali, anyone with a login sees their name at the top of the landing pa
 
 The builder asks industry-specific questions. Some are optional and start on No: tip credit (only if tips is Yes), bonuses and reimbursements, deductions, and earlier-provider year-to-date. Each one adds a real screen: tip credit notice on the invite form, a bonuses card on Run payroll, a Deductions card on a person's Pay tab, and an opening-balances form on the same tab.
 
+### Point of sale and time clocks
+
+Totali is not a POS and does not take shifts or tips from anyone typing them in twice: it **reads** them from the system the restaurant already uses (Settings, Point of sale). One source at a time, because two would report the same shift.
+
+| System | What it reads | How it signs in |
+| --- | --- | --- |
+| Toast | staff (`/labor/v1/employees`), hours and both kinds of tips from time entries (`/labor/v1/timeEntries`) | the restaurant's own API credentials made in Toast Web (client ID, secret, restaurant GUID) |
+| Square | team members, Labor API timecards with declared cash tips, card tips from payments by team member | an access token from the owner's Square developer account |
+| 7shifts | users and time punches by business date | an access token from Company Settings, Developer Tools |
+
+Details are checked against the other system before they are kept, and are stored encrypted (`TOTALI_DATA_KEY`). A pull files each shift under the other system's id (`pos:<provider>:<id>`), so pulling again replaces rather than doubles; a shift that was removed there is removed here; a shift a pay run already locked never changes. A person's weekly box of hours is replaced by their real shifts once those arrive. People with the same email on both sides are matched for you; the rest are matched by hand, and anyone left unmatched is reported and left out. The adapters are in `src/pos/`, read-only, and take an injected `fetch`, so the tests (`test/pos.test.ts`) run them against fake servers. To point a running dev server at a fake one: `TOTALI_DEV=1 TOTALI_DEV_POS_HOSTS='{"sevenshifts":"http://127.0.0.1:9999"}'`.
+
+**Not tested against a live account.** The endpoints and field names were taken from each vendor's published documentation, and the tests prove the code against that documentation, not against Toast's, Square's or 7shifts' real servers. Run one real pull per provider before relying on it. Known soft spots: Square's `workday.date_range` field names, 7shifts' company lookup (`/v2/companies`) and whether its punch `tips` are card or cash. **Not built:** Clover, Revel, Lightspeed and others whose APIs are partner-gated or whose shift endpoints we could not confirm, and any scraping of a POS back office with the owner's password. For those, export hours as a spreadsheet and use Import hours on Run payroll.
+
 ### What isn't built yet
 
 Said plainly, so nobody finds out the hard way:

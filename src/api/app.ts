@@ -7,6 +7,8 @@ import { assertAdmin, assertCompanyAccess, authenticate, type Principal } from '
 import { companyView, createCompany, updateCompany } from '../domain/companies.ts';
 import type { Employee } from '../domain/types.ts';
 import { PortalService } from '../portal/service.ts';
+import { PosService } from '../pos/service.ts';
+import type { PosProviderId } from '../pos/types.ts';
 import type { PortalAccount } from '../portal/types.ts';
 import { addEmployee, employeeView, importYtd, requireEmployee, setPayoutAccounts, terminateEmployee, updateEmployee } from '../domain/employees.ts';
 import { deleteShift, listShifts, recordHouseDay, recordShift, recordShifts } from '../domain/timekeeping.ts';
@@ -124,7 +126,7 @@ export interface App {
   handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
 }
 
-export function createApp(deps: { store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer; billingStripe?: StripeBillingApi | null; google?: GoogleAuth | null }): App {
+export function createApp(deps: { posFetch?: typeof fetch; posHosts?: Partial<Record<PosProviderId, string>>; store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer; billingStripe?: StripeBillingApi | null; google?: GoogleAuth | null }): App {
   const { store, banks, ach, config } = deps;
   const mailer = deps.mailer ?? new OutboxMailer();
   const accounts = deps.accounts ?? new AccountService(store, mailer, { ...(deps.now ? { now: deps.now } : {}), ...(deps.log ? { log: deps.log } : {}) });
@@ -153,6 +155,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
   const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
   const google = deps.google !== undefined ? deps.google : (() => { const g = googleFromEnv(); return g ? new GoogleAuth(g, fetch, now) : null; })();
   const OAUTH_COOKIE = 'totali_oauth';
+  const pos = new PosService(store, now, deps.posFetch ?? globalThis.fetch, config.devTools ? deps.posHosts ?? {} : {});
   const portal = new PortalService(store, mailer, deps.banks, dashboards, now, deps.log);
   const EMP_COOKIE = 'totali_emp';
   const empCookie = (req: IncomingMessage, token: string, clear = false) => `${EMP_COOKIE}=${clear ? '' : token}; Path=/; HttpOnly; SameSite=Lax${clear ? '; Max-Age=0' : `; Max-Age=${30 * 86_400}`}${secureCookies(req) ? '; Secure' : ''}`;
@@ -450,6 +453,12 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('GET', `${C}/reports/wc`, 'company', (c) => { const r = wcReport(store, store.companies.require(c.params.cid, 'Company'), Number(c.query.get('year') ?? now().getUTCFullYear())); return c.query.get('format') === 'csv' ? new Text(r.csv, r.fileName) : { year: r.year, rows: r.rows, note: r.note }; }),
     route('GET', `${C}/portal/access`, 'company', (c) => portal.access(c.params.cid)),
     route('POST', `${C}/portal/rotate`, 'company', (c) => portal.rotate(c.params.cid)),
+    route('GET', `${C}/pos`, 'company', (c) => pos.catalog(c.params.cid)),
+    route('POST', `${C}/pos/connect`, 'company', async (c) => pos.connect(c.params.cid, c.json()), 201),
+    route('DELETE', `${C}/pos`, 'company', (c) => pos.disconnect(c.params.cid)),
+    route('GET', `${C}/pos/people`, 'company', async (c) => pos.people(c.params.cid)),
+    route('PUT', `${C}/pos/links`, 'company', (c) => pos.link(c.params.cid, c.json())),
+    route('POST', `${C}/pos/sync`, 'company', async (c) => pos.sync(c.params.cid, c.json())),
     route('GET', `${C}/portal/requests`, 'company', (c) => portal.requests(c.params.cid)),
     route('POST', `${C}/portal/requests/:aid/approve`, 'company', (c) => portal.approve(c.params.cid, c.params.aid, c.json())),
     route('POST', `${C}/portal/requests/:aid/decline`, 'company', (c) => portal.decline(c.params.cid, c.params.aid, c.json().reason)),
