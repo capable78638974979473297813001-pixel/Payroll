@@ -22,6 +22,7 @@ function settingsFor(industry: IndustryId, a: Answers) {
   const profile = getNiche(industry, nicheFor(industry, a));
   const settings = settingsFromProfile(profile);
   if (industry === 'restaurant') {
+    if (a.tips?.on && a.tipcredit) settings.policy.takesTipCredit = a.tipcredit.on;
     if (!a.tips?.on) {
       settings.policy = { takesTipCredit: false, pool: { enabled: false, roles: [], basis: 'hours' }, tipOuts: [], serviceCharge: 'none', serviceChargeRoles: [], cardFeeDeductionBps: null };
     } else if (a.tips.pool === 'none') {

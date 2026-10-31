@@ -78,7 +78,7 @@ async function dashboard() {
   const redraw = () => navigate(location.pathname);
   return h('div', { class: 'grid' },
     h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Your answers'), h('span', { class: 'cap' }, 'Change one and the dashboard follows')),
-      ...ind.questions.map((q) => rowKV(q.rail, summarize(q, answers[q.id], ctx), q.id === 'state' ? h('span', { class: 'cap', title: 'Every tax rate, form and year-to-date total follows your state.' }, 'Fixed') : h('button', { class: 'link as-button', type: 'button', 'data-edit': q.id, onClick: () => editAnswer(q.id, redraw) }, 'Edit'))),
+      ...ind.questions.filter((q) => !q.when || (answers[q.when.question] && answers[q.when.question].on)).map((q) => rowKV(q.rail, summarize(q, answers[q.id], ctx), q.id === 'state' ? h('span', { class: 'cap', title: 'Every tax rate, form and year-to-date total follows your state.' }, 'Fixed') : h('button', { class: 'link as-button', type: 'button', 'data-edit': q.id, onClick: () => editAnswer(q.id, redraw) }, 'Edit'))),
       h('div', { class: 'alert teal', style: { marginTop: '12px' } }, h('span', { class: 'dot' }), h('span', {}, 'Switching a section off removes its card. History stays saved. Your state is fixed once you start; for a different state, start a new company.'))),
     h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Who can do what'),
       h('div', { class: 'row' }, h('span', { class: 'l1' }, h('b', {}, 'Owner'), h('i', {}, 'Everything, including billing')), h('span', { class: 'cap' }, '1 person')),

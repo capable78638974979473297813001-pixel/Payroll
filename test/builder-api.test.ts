@@ -59,7 +59,7 @@ test('the industry list is public and carries every question and the supported s
   assert.equal(r.status, 200);
   assert.deepEqual(r.json.industries.map((i: { id: string }) => i.id), ['restaurant', 'hotel_lodging', 'construction_trades', 'office_studios', 'delivery_couriers']);
   assert.deepEqual(r.json.industries[0].tags, ['Tips', 'Shift hours', 'Tip pool']);
-  assert.equal(r.json.industries[0].questions.length, 6);
+  assert.equal(r.json.industries[0].questions.length, 10, 'six core questions, a tip credit question after tips, and three optional ones');
   assert.ok(r.json.states.some((s: { code: string; name: string }) => s.code === 'MI' && s.name === 'Michigan'));
   assert.equal(r.json.states.length, 51);
 });

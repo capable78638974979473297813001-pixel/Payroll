@@ -505,7 +505,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('POST', `${C}/pay-runs`, 'company', (c) => draftPayRun(store, c.params.cid, c.json()), 201),
     route('GET', `${C}/pay-runs`, 'company', (c) => ({ payRuns: store.payRuns.where((r) => r.companyId === c.params.cid).sort((a, b) => b.periodStart.localeCompare(a.periodStart)).map(({ paychecks, ...r }) => ({ ...r, paycheckCount: paychecks.length })) })),
     route('GET', `${C}/pay-runs/:rid`, 'company', (c) => getRun(store, c.params.cid, c.params.rid)),
-    route('POST', `${C}/pay-runs/:rid/recalculate`, 'company', (c) => recalculatePayRun(store, c.params.cid, c.params.rid)),
+    route('POST', `${C}/pay-runs/:rid/recalculate`, 'company', (c) => recalculatePayRun(store, c.params.cid, c.params.rid, c.json())),
     route('POST', `${C}/pay-runs/:rid/approve`, 'company', (c) => approvePayRun(store, c.params.cid, c.params.rid, c.json())),
     route('POST', `${C}/pay-runs/:rid/void`, 'company', (c) => voidPayRun(store, c.params.cid, c.params.rid)),
     route('GET', `${C}/pay-runs/:rid/timeline`, 'company', (c) => ach.timeline(c.params.cid, c.params.rid)),

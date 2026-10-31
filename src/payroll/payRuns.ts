@@ -356,11 +356,13 @@ export function getRun(store: Store, companyId: string, runId: string): PayRun {
 }
 
 /** Recompute a draft from the shifts as they stand now (a time entry was fixed). Approved runs never recompute. */
-export function recalculatePayRun(store: Store, companyId: string, runId: string): PayRun {
+export function recalculatePayRun(store: Store, companyId: string, runId: string, body?: unknown): PayRun {
   const run = getRun(store, companyId, runId);
   if (run.status !== 'draft') throw conflict('not_a_draft', `Only a draft can be recalculated; this run is ${run.status}.`);
   const company = store.companies.require(companyId, 'Company');
-  const fresh = buildPayRun(store, company, { periodStart: run.periodStart, periodEnd: run.periodEnd, checkDate: run.checkDate, adjustments: run.adjustments }, { id: run.id, createdAt: run.createdAt });
+  // The bonuses and reimbursements for this run may be sent again here, replacing the earlier list.
+  const sent = body && typeof body === 'object' && 'adjustments' in (body as object) ? parseDraftInput({ periodStart: run.periodStart, periodEnd: run.periodEnd, checkDate: run.checkDate, adjustments: (body as { adjustments: unknown }).adjustments }, company, store).adjustments : undefined;
+  const fresh = buildPayRun(store, company, { periodStart: run.periodStart, periodEnd: run.periodEnd, checkDate: run.checkDate, adjustments: sent ?? run.adjustments }, { id: run.id, createdAt: run.createdAt });
   return store.tx(() => store.payRuns.put(fresh));
 }
 

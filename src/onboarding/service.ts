@@ -61,7 +61,7 @@ export class OnboardingService {
     const pay = role.pay === 'hourly' ? { kind: 'hourly', rateCents: o.rateCents } : { kind: 'salary', annualCents: o.rateCents };
     let employee = addEmployee(this.store, companyId, {
       firstName: o.firstName, lastName: o.lastName, email, roleKey: role.key, hireDate: startDate, payType: pay, location: o.location, ...(o.tags !== undefined ? { tags: o.tags } : {}),
-      ...(role.tipped !== 'never' ? { tipCreditNoticeDate: startDate } : {}),
+      ...(role.tipped !== 'never' && o.tipCreditNotice === true ? { tipCreditNoticeDate: startDate } : {}),
     });
     const token = randomBytes(32).toString('base64url');
     employee = this.save(employee, { invitedAt: this.iso(), inviteEmail: email, inviteTokenHash: sha(token), inviteExpiresAt: new Date(this.now().getTime() + INVITE_DAYS * 86_400_000).toISOString(), requested: forms, startDate, reminders: [] });

@@ -37,6 +37,8 @@ export function updateSetup(store: Store, companyId: string, patch: unknown, dat
   }
   if (industry === 'restaurant' && answers.tips) {
     const pol = company.settings.policy;
+    if (answers.tips.on && answers.tipcredit) pol.takesTipCredit = answers.tipcredit.on;
+    if (!answers.tips.on) pol.takesTipCredit = false;
     if (!answers.tips.on || answers.tips.pool === 'none') pol.pool = { ...pol.pool, enabled: false };
     else pol.pool = { ...pol.pool, enabled: true, basis: answers.tips.pool };
   }

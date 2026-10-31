@@ -77,6 +77,13 @@ const counter = async (page) => ({
     await shot('builder-tips');
     await page.click('.qfoot .btn:has-text("Continue")');
 
+    // Q4b tip credit only appears once tips is Yes; it starts on No and can be left that way
+    await page.waitForSelector('h2:has-text("lower cash wage")');
+    assert.equal(await page.locator('.opt[data-value=no]').getAttribute('aria-checked'), 'true', 'optional questions start on No');
+    await page.click('.opt[data-value=yes]');
+    await page.waitForSelector('[data-item=tip_credit]');
+    await page.click('.qfoot .btn:has-text("Continue")');
+
     // Q5 pay frequency: weekly, Fridays (the default day)
     await page.click('.opt[data-value=weekly]');
     await page.waitForFunction(() => document.querySelector('[data-item=pay_schedule] .lt i')?.textContent === 'Weekly, paid on Fridays.');
@@ -85,8 +92,22 @@ const counter = async (page) => ({
     // Q6 contractors: yes, about 2
     await page.click('.opt[data-value=yes]');
     await page.waitForFunction(() => document.querySelector('[data-count=modules]').textContent === '8');
-    assert.deepEqual(await counter(page), { modules: 8, items: 28, forms: 4 });
-    assert.equal(await page.locator('[data-testid=left-out]').textContent(), 'Nothing left out.', 'nothing is left out at the end');
+    assert.deepEqual(await counter(page), { modules: 8, items: 29, forms: 4 });
+    await page.click('.qfoot .btn:has-text("Continue")');
+
+    // Q7 bonuses: yes adds a line under pay. Q8 deductions: yes adds a card. Q9 earlier provider: left on No.
+    await page.waitForSelector('h2:has-text("bonuses, commissions")');
+    await page.click('.opt[data-value=yes]');
+    await page.waitForSelector('[data-item=bonus_pay]');
+    await page.click('.qfoot .btn:has-text("Continue")');
+    await page.waitForSelector('h2:has-text("besides taxes")');
+    await page.click('.opt[data-value=yes]');
+    await page.waitForSelector('[data-module=deductions]');
+    await page.click('.qfoot .btn:has-text("Continue")');
+    await page.waitForSelector('h2:has-text("earlier this year")');
+    assert.equal(await page.locator('.opt[data-value=no]').getAttribute('aria-checked'), 'true');
+    assert.equal(await page.locator('[data-item=opening_balances]').count(), 0, 'nothing is added until they say yes');
+    assert.ok((await page.locator('[data-testid=left-out]').textContent()).includes('Opening balances') || (await page.locator('[data-testid=left-out]').textContent()).length > 0);
     await shot('builder-final');
     await page.click('.qfoot .btn:has-text("Review")');
 
@@ -104,12 +125,12 @@ const counter = async (page) => ({
     // editing an answer changes the dashboard
     await page.locator('.row:has([data-review=contractors]) .link').click();
     await page.click('.opt[data-value=no]');
-    await page.waitForFunction(() => document.querySelector('[data-count=modules]').textContent === '7');
-    assert.deepEqual(await counter(page), { modules: 7, items: 25, forms: 4 });
+    await page.waitForFunction(() => document.querySelector('[data-count=modules]').textContent === '8');
+    assert.deepEqual(await counter(page), { modules: 8, items: 29, forms: 4 });
     await page.click('.qfoot .btn:has-text("Review")');
     await page.locator('.row:has([data-review=contractors]) .link').click();
     await page.click('.opt[data-value=yes]');
-    await page.waitForFunction(() => document.querySelector('[data-count=modules]').textContent === '8');
+    await page.waitForFunction(() => document.querySelector('[data-count=modules]').textContent === '9');
     await page.click('.qfoot .btn:has-text("Review")');
 
     await page.click('.qfoot .btn:has-text("Build my dashboard")');

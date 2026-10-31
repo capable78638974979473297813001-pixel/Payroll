@@ -42,6 +42,10 @@ export interface Question {
   no?: string;
   /** The module this question is mostly about, shown in the help line of the preview. */
   adds?: string;
+  /** Not needed to build the dashboard: if it is skipped the answer is no. */
+  optional?: boolean;
+  /** Only asked when this earlier yes-or-no answer was yes. */
+  when?: { question: string };
 }
 
 const Q = {
@@ -50,41 +54,45 @@ const Q = {
   team: { id: 'team', rail: 'Team size', title: 'How many people do you pay?', help: 'Employees only. Contractors come later.', kind: 'team' as const },
   frequency: { id: 'frequency', rail: 'Pay frequency', title: 'How often do you pay your team?', help: 'This fills in your pay schedule and your next pay date.', kind: 'frequency' as const },
   contractors: { id: 'contractors', rail: 'Contractors', title: 'Do you pay independent contractors?', help: 'They get their own card, kept apart from payroll: 1099 tracking and W-9 collection.', kind: 'contractors' as const },
+  bonuses: { id: 'bonuses', rail: 'Bonuses', title: 'Do you pay bonuses, commissions or reimbursements?', help: 'Yes lets you add them to anyone while you run payroll. Reimbursements aren’t taxed.', kind: 'yesno' as const, yes: 'Yes', no: 'No', optional: true },
+  deductions: { id: 'deductions', rail: 'Deductions', title: 'Do you take anything out of pay besides taxes?', help: 'Health insurance, a 401(k), a garnishment. Yes adds deductions you set up for each person.', kind: 'yesno' as const, yes: 'Yes, for some people', no: 'No', optional: true },
+  prior: { id: 'prior', rail: 'Earlier this year', title: 'Did you pay your team earlier this year with another payroll service?', help: 'Yes lets you bring in what each person has been paid so far, so Social Security and unemployment limits come out right.', kind: 'yesno' as const, yes: 'Yes, bring it in', no: 'No, this is our first', optional: true },
 } satisfies Record<string, Question>;
 
 export const QUESTIONS: Record<IndustryId, Question[]> = {
   restaurant: [
     Q.state, Q.locations, Q.team,
     { id: 'tips', rail: 'Tipped staff', title: 'Do any of your staff earn tips?', help: 'Yes adds tip reporting, a tip pool and the tip rules for your state. No keeps all of that out of your way.', kind: 'tips' },
-    Q.frequency, Q.contractors,
+    { id: 'tipcredit', rail: 'Tip credit', title: 'Do you pay tipped staff a lower cash wage?', help: 'Yes means tips count toward the minimum wage, which needs a written notice to each person first. No pays everyone the full minimum wage.', kind: 'yesno', yes: 'Yes, a tip credit', no: 'No, the full minimum wage', optional: true, when: { question: 'tips' } },
+    Q.frequency, Q.contractors, Q.bonuses, Q.deductions, Q.prior,
   ],
   hotel_lodging: [
     Q.state, Q.locations, Q.team,
     { id: 'departments', rail: 'Departments', title: 'Do you organize your team into departments?', help: 'Front desk, housekeeping, banquets. Yes lets you tag each person and see labor cost by department.', kind: 'departments' },
     { id: 'seasonal', rail: 'Seasonal staff', title: 'Do you hire seasonal staff?', help: 'Yes tracks season start and end dates and tells you who is about to finish.', kind: 'yesno', yes: 'Yes, seasonal hiring', no: 'No' },
     { id: 'service', rail: 'Service charge', title: 'Do guests tip, or do you add service charges?', help: 'Yes adds tip entry and service charge distribution. A mandatory service charge paid to staff is wages.', kind: 'yesno', yes: 'Yes', no: 'No' },
-    Q.frequency, Q.contractors,
+    Q.frequency, Q.contractors, Q.bonuses, Q.deductions, Q.prior,
   ],
   construction_trades: [
     Q.state, Q.locations, Q.team,
     { id: 'jobs', rail: 'Job costing', title: 'Do you track labor cost by job?', help: 'Yes adds a job code to every hour and a cost-by-job report.', kind: 'yesno', yes: 'Yes, by job', no: 'No' },
     { id: 'crews', rail: 'Crews', title: 'Do you run crews?', help: 'Yes lets you tag people to crews and see hours by crew.', kind: 'yesno', yes: 'Yes, crews', no: 'No' },
     { id: 'wc', rail: 'Workers’ comp classes', title: 'Do you need payroll by workers’ comp class?', help: 'Yes adds a class code to each person and a payroll-by-class report for your insurer. Your insurer assigns the classes.', kind: 'yesno', yes: 'Yes', no: 'No' },
-    Q.frequency, Q.contractors,
+    Q.frequency, Q.contractors, Q.bonuses, Q.deductions, Q.prior,
   ],
   office_studios: [
     Q.state, Q.locations, Q.team,
     { id: 'paytypes', rail: 'Salaried and hourly', title: 'How do you pay people?', help: 'Salaried people are checked against the overtime exemption salary level. Hourly people get overtime.', kind: 'paytypes' },
     { id: 'timeoff', rail: 'Time off', title: 'Do you track time off?', help: 'Yes adds a time-off policy and balances per person.', kind: 'yesno', yes: 'Yes', no: 'No' },
     { id: 'multistate', rail: 'Multi-state', title: 'Does anyone work in a different state?', help: 'Yes lets you set a work state per person, and each is taxed by their own state.', kind: 'yesno', yes: 'Yes, more than one state', no: 'No, one state' },
-    Q.frequency, Q.contractors,
+    Q.frequency, Q.contractors, Q.bonuses, Q.deductions, Q.prior,
   ],
   delivery_couriers: [
     Q.state, Q.team,
     { id: 'trips', rail: 'Trips', title: 'Do you pay by the trip?', help: 'Yes adds a trip log and pay per trip.', kind: 'yesno', yes: 'Yes, by trip', no: 'No' },
     { id: 'mileage', rail: 'Mileage', title: 'Do you track mileage?', help: 'Yes adds a mileage log and report.', kind: 'yesno', yes: 'Yes', no: 'No' },
     { id: 'contractors', rail: 'Contractor drivers', title: 'Do you use contractor drivers?', help: 'They get their own card, kept apart from payroll: 1099 tracking and W-9 collection.', kind: 'contractors' },
-    Q.frequency,
+    Q.frequency, Q.bonuses, Q.deductions, Q.prior,
   ],
 };
 
@@ -123,6 +131,10 @@ export interface Answers {
   multistate?: { on: boolean };
   trips?: { on: boolean };
   mileage?: { on: boolean };
+  tipcredit?: { on: boolean };
+  bonuses?: { on: boolean };
+  deductions?: { on: boolean };
+  prior?: { on: boolean };
 }
 
 // ---------------------------------------------------------------- validating answers
@@ -418,6 +430,16 @@ function plan(industry: IndustryId, a: Answers, date: string): Plan {
     }
   }
 
+  // ---- the optional questions every business can answer
+  if (industry === 'restaurant' && a.tips?.on && a.tipcredit?.on) p.item('hours_tips', { id: 'tip_credit', label: 'Tip credit', note: 'Tips count toward minimum wage. Each tipped hire needs your written notice first', status: 'setup' }, 'tipcredit');
+  if (a.bonuses?.on) p.item('pay_run', { id: 'bonus_pay', label: 'Bonuses and reimbursements', note: 'Add them to anyone while you run payroll', status: 'manual' }, 'bonuses');
+  if (a.deductions?.on) {
+    p.module('deductions', 'Deductions', 'Taken out of pay besides taxes.', 'deductions');
+    p.item('deductions', { id: 'deduction_plans', label: 'Health and retirement', note: 'Set up on each person: premiums, 401(k) and similar', status: 'open' }, 'deductions');
+    p.item('deductions', { id: 'garnishments', label: 'Garnishments and repayments', note: 'Amounts taken after tax, set on each person', status: 'open' }, 'deductions');
+  }
+  if (a.prior?.on) p.item('team', { id: 'opening_balances', label: 'Opening balances', note: 'Bring in this year’s pay from your old service so tax limits are right', status: 'todo' }, 'prior');
+
   // ---- contractors
   if (a.contractors?.on) {
     const label = industry === 'delivery_couriers' ? 'Contractor drivers' : 'Contractors';
@@ -440,7 +462,7 @@ function fullest(industry: IndustryId, a: Answers): Answers {
     ...(a.frequency ? { frequency: a.frequency } : {}),
     contractors: on,
     departments: { on: true, names: [] },
-    seasonal: on, service: on, jobs: on, crews: on, wc: on, timeoff: on, multistate: on, trips: on, mileage: on,
+    seasonal: on, service: on, jobs: on, crews: on, wc: on, timeoff: on, multistate: on, trips: on, mileage: on, tipcredit: on, bonuses: on, deductions: on, prior: on,
   };
 }
 
@@ -493,10 +515,12 @@ export function build(industry: IndustryId, answers: Answers, date: string): Bui
   const soonSeen = new Set<string>();
   for (const s of p.soon) if (!soonSeen.has(s.id)) { soonSeen.add(s.id); leftOut.push(s); }
 
-  const answered = questions.filter((q) => has(q.id)).map((q) => q.id);
-  const next = questions.find((q) => !has(q.id))?.id ?? null;
+  // A question that depends on an earlier yes is only counted once that yes is given.
+  const asked = questions.filter((q) => !q.when || ((answers as Record<string, { on?: boolean } | undefined>)[q.when.question]?.on === true));
+  const answered = asked.filter((q) => has(q.id)).map((q) => q.id);
+  const next = asked.find((q) => !has(q.id))?.id ?? null;
   const required = ['state', 'team', 'frequency'];
-  return { industry, modules, counts: count(modules), leftOut, progress: { answered, total: questions.length, next, ready: required.every((r) => has(r)) && (questions.some((q) => q.id === 'locations') ? has('locations') : true) } };
+  return { industry, modules, counts: count(modules), leftOut, progress: { answered, total: asked.length, next, ready: required.every((r) => has(r)) && (questions.some((q) => q.id === 'locations') ? has('locations') : true) } };
 }
 
 export function questionsFor(industry: IndustryId): Question[] {

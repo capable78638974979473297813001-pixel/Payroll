@@ -117,16 +117,17 @@ test('the left-out strip says what is not added yet and why', () => {
   assert.match(none.leftOut.find((l) => l.id === 'tips')!.why, /Answer Tipped staff to add/);
   const said = build('restaurant', { tips: { on: false, pool: 'none' } }, D);
   assert.match(said.leftOut.find((l) => l.id === 'tips')!.why, /You said no/);
-  const done = build('restaurant', { state: 'MI', locations: DETROIT_FERNDALE, team: '11-25', tips: { on: true, pool: 'hours' }, frequency: { value: 'weekly', weekday: 'friday' }, contractors: { on: true } }, D);
+  const done = build('restaurant', { state: 'MI', locations: DETROIT_FERNDALE, team: '11-25', tips: { on: true, pool: 'hours' }, frequency: { value: 'weekly', weekday: 'friday' }, contractors: { on: true }, tipcredit: { on: true }, bonuses: { on: true }, deductions: { on: true }, prior: { on: true } }, D);
   assert.deepEqual(done.leftOut, [], 'nothing left out');
 });
 
 test('progress follows the rail and is ready once the required answers are in', () => {
   const r0 = build('restaurant', {}, D);
-  assert.deepEqual([r0.progress.next, r0.progress.total, r0.progress.ready], ['state', 6, false]);
+  assert.deepEqual([r0.progress.next, r0.progress.total, r0.progress.ready], ['state', 9, false]);
   const r1 = build('restaurant', { state: 'MI', locations: DETROIT_FERNDALE, team: '1-10', tips: { on: false, pool: 'none' }, frequency: { value: 'monthly' } }, D);
-  assert.equal(r1.progress.next, 'contractors');
+  assert.equal(r1.progress.next, 'contractors', 'the tip credit question is skipped when nobody earns tips');
   assert.equal(r1.progress.ready, true, 'contractors are optional');
+  assert.equal(build('restaurant', { state: 'MI', locations: DETROIT_FERNDALE, team: '1-10', tips: { on: true, pool: 'hours' } }, D).progress.next, 'tipcredit');
   assert.equal(build('restaurant', { state: 'MI' }, D).progress.ready, false);
 });
 

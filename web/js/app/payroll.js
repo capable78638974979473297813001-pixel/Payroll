@@ -1,7 +1,7 @@
 import { h, money, longDate, shortDate, plural, hoursFromMinutes } from '../dom.js';
 import { api } from '../api.js';
 import { link, navigate } from '../router.js';
-import { Button, Alert, Chip, modal, setLoading, toast } from '../ui.js';
+import { Button, Alert, Chip, Field, modal, setLoading, toast } from '../ui.js';
 import { session } from '../session.js';
 import { appPage } from './shell.js';
 import { app, base, refreshData } from './state.js';
@@ -103,6 +103,10 @@ async function hoursStep(period, data) {
   const week = await api.get(`${base()}/time/week?start=${period.periodStart}&end=${period.periodEnd}`);
   const weeks = Math.max(1, Math.ceil((Math.round((Date.parse(`${period.periodEnd}T12:00:00Z`) - Date.parse(`${period.periodStart}T12:00:00Z`)) / 86_400_000) + 1) / 7));
   const capMinutes = 2400 * weeks;
+  // bonuses, commissions and reimbursements for this run live on its draft, if there is one
+  const hasExtras = app.data.built.modules.some((m) => m.items.some((i) => i.id === 'bonus_pay'));
+  const earlier = (await api.get(`${base()}/pay-runs`)).payRuns.find((x) => x.status === 'draft' && x.periodStart === period.periodStart && x.periodEnd === period.periodEnd);
+  let adjustments = earlier ? (await api.get(`${base()}/pay-runs/${earlier.id}`)).adjustments : [];
   const rows = week.people.map((p) => ({ ...p, reg: minutesText(p.regularMinutes), ot: minutesText(p.overtimeMinutes), tips: centsText(p.tipsCents), errors: {} }));
   const tbody = h('tbody', {});
   const tipsTotal = h('span', { class: 'n' });
@@ -192,7 +196,7 @@ async function hoursStep(period, data) {
       await save();
       const all = await api.get(`${base()}/pay-runs`);
       const existing = all.payRuns.find((x) => x.status === 'draft' && x.periodStart === period.periodStart && x.periodEnd === period.periodEnd);
-      const run = existing ? await api.post(`${base()}/pay-runs/${existing.id}/recalculate`) : await api.post(`${base()}/pay-runs`, period);
+      const run = existing ? await api.post(`${base()}/pay-runs/${existing.id}/recalculate`, { adjustments }) : await api.post(`${base()}/pay-runs`, { ...period, adjustments });
       navigate(`/app/payroll/runs/${run.id}`);
     } catch (e) { formError.replaceChildren(Alert('error', e.message, e.details && e.details.issues ? e.details.issues.map((i) => i.message).join(' ') : undefined)); setLoading(next, false); }
   });
@@ -228,12 +232,33 @@ async function hoursStep(period, data) {
     const a = h('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: `hours-${period.periodStart}.csv` }); document.body.append(a); a.click(); a.remove();
   } }, 'Download a template with your people in it');
 
+  const extrasList = h('div', {});
+  const KINDS = [['BONUS', 'Bonus', 'supplemental'], ['COMMISSION', 'Commission', 'supplemental'], ['REIMB', 'Reimbursement', 'reimbursement']];
+  const drawExtras = () => extrasList.replaceChildren(...(adjustments.length ? adjustments.map((a, i) => h('div', { class: 'row', 'data-adjustment': i }, h('span', { class: 'l1' }, h('b', {}, `${a.label}`), h('i', {}, `${(rows.find((r) => r.employeeId === a.employeeId) || {}).name || 'Someone'} · ${a.category === 'reimbursement' ? 'Not taxed' : 'Taxed as pay'}`)), h('span', {}, h('b', {}, money(a.amountCents)), ' ', h('button', { class: 'link as-button', type: 'button', 'aria-label': `Remove ${a.label}`, onClick: () => { adjustments.splice(i, 1); drawExtras(); } }, 'Remove')))) : [h('p', { class: 'cap' }, 'None on this run.')]));
+  function addExtra() {
+    const who2 = Field({ label: 'Who', name: 'employeeId', select: true, value: rows[0] && rows[0].employeeId, options: rows.map((r) => ({ value: r.employeeId, label: r.name })) });
+    const kind = Field({ label: 'What kind', name: 'kind', select: true, value: 'BONUS', options: KINDS.map(([v, l]) => ({ value: v, label: l })) });
+    const label = Field({ label: 'For', name: 'label', placeholder: 'Holiday bonus, mileage for Oct 12' });
+    const amount = Field({ label: 'Amount', name: 'amount', placeholder: '250.00', inputmode: 'decimal' });
+    const err = h('div', {}); const go = Button({}, 'Add');
+    const m = modal({ title: 'Add a bonus or reimbursement', body: h('div', { class: 'f' }, h('p', { class: 'fine', style: { margin: 0 } }, 'Bonuses and commissions are taxed as pay. A reimbursement is paid back as is, with no tax.'), who2.el, kind.el, label.el, amount.el, err), actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Cancel'), go] });
+    go.addEventListener('click', () => {
+      const cents = dollarsToCents(amount.value);
+      if (!cents) return amount.setError('Enter an amount, like 250.00.');
+      if (!label.value.trim()) return label.setError('Say what it’s for.');
+      const k = KINDS.find(([v]) => v === kind.value);
+      adjustments.push({ employeeId: who2.value, code: k[0], label: label.value.trim().slice(0, 100), category: k[2], amountCents: cents });
+      m.close(); drawExtras();
+    });
+  }
+  drawExtras();
   const sched = data.company.schedule.frequency;
   const locs = data.company.locations.map((l) => l.name);
   const tipped = rows.some((r) => r.tipped);
   const side = h('div', { class: 'grid' },
     h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '10px' } }, 'This pay run'), h('dl', { class: 'kv', style: { gridTemplateColumns: '110px 1fr', fontSize: '13.5px' } }, h('dt', {}, 'Period'), h('dd', {}, rangeLabel(period.periodStart, period.periodEnd)), h('dt', {}, 'Pay date'), h('dd', {}, longDate(period.checkDate)), h('dt', {}, 'Schedule'), h('dd', {}, FREQ[sched] || sched), locs.length ? [h('dt', {}, 'Locations'), h('dd', {}, locs.join(', '))] : null)),
     tipped ? h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Tips this period'), h('div', { class: 'big2' }, h('div', {}, tipsTotal)), h('p', { class: 'cap' }, 'Tips paid through payroll. Cash tips someone already kept don’t need to be entered.')) : null,
+    hasExtras || adjustments.length ? h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Bonuses and reimbursements'), h('button', { class: 'link as-button', type: 'button', 'data-testid': 'add-extra', onClick: addExtra }, 'Add')), extrasList) : null,
     sideAlerts, importBtn, template, file);
 
   return h('div', {}, pageHead(['Run ', h('em', {}, 'payroll')], `${FREQ[sched] || 'Pay'} pay run for ${data.company.name}`, saveDraft), pstep(1),

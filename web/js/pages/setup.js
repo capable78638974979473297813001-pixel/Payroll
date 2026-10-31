@@ -159,7 +159,7 @@ export function bodyFor(q, current, ctx, change) {
       return { el: g.el, value: () => v, valid: () => !!v };
     }
     default: { // yesno
-      let on = current ? current.on : null;
+      let on = current ? current.on : (q.optional ? false : null);
       const g = optionList([{ value: 'yes', label: q.yes || 'Yes' }, { value: 'no', label: q.no || 'No' }], on === null ? null : on ? 'yes' : 'no', (x) => { on = x === 'yes'; change(); }, { columns: 2, label: q.rail });
       return { el: g.el, value: () => (on === null ? null : { on }), valid: () => on !== null };
     }
@@ -187,7 +187,7 @@ const HELP = {
 };
 
 export function summarize(q, v, ctx) {
-  if (v === undefined || v === null) return 'Not answered';
+  if (v === undefined || v === null) return q.optional ? 'No' : 'Not answered';
   switch (q.kind) {
     case 'state': { const s = ctx.meta.states.find((x) => x.code === v); return s ? s.name : v; }
     case 'locations': return v.map((l) => `${l.name}${l.state !== ctx.answers.state ? `, ${l.state}` : ''}`).join(', ');
@@ -284,9 +284,12 @@ export async function builder() {
   const ind = m.industries.find((i) => i.id === setup.industry);
   const def = IND[ind.id] || IND.restaurant;
   const business = session.user.businessName;
-  const questions = ind.questions;
-  const stepsAll = [...questions.map((q) => ({ id: q.id, rail: q.rail })), { id: 'review', rail: 'Review' }];
+  const allQuestions = ind.questions;
+  let questions = []; let stepsAll = [];
   const ctx = { meta: m, answers: { ...setup.answers }, industry: ind.id };
+  /** Some questions only make sense after an earlier yes (the tip credit, once someone earns tips). */
+  const rebuildSteps = () => { questions = allQuestions.filter((q) => !q.when || (ctx.answers[q.when.question] && ctx.answers[q.when.question].on === true)); stepsAll = [...questions.map((q) => ({ id: q.id, rail: q.rail })), { id: 'review', rail: 'Review' }]; };
+  rebuildSteps();
   let build = null; let prevIds = new Set(); let newIds = new Set(); let prevCounts = null; let note = `Every ${def.noun} starts here`;
   let stepIdx = Math.max(0, stepsAll.findIndex((s) => s.id === setup.step));
 
@@ -346,6 +349,7 @@ export async function builder() {
   async function saveLater() {
     try { await persist(stepsAll[stepIdx].id); toast('success', 'Saved. Log in any time to pick up where you left off.'); navigate('/'); } catch (e) { toast('error', e.message); }
   }
+  let fromReview = false; // an answer opened from the review goes straight back there
   function go(i) { stepIdx = Math.max(0, Math.min(stepsAll.length - 1, i)); drawStep(); }
 
   /** "This adds to your dashboard": what the current provisional answer put on the dashboard that was not there before. */
@@ -365,7 +369,7 @@ export async function builder() {
     const q = questions.find((x) => x.id === s.id);
     const provisional = { ...ctx.answers };
     let body; let adds = h('div', {});
-    const next = Button({ type: 'button', disabled: true }, stepIdx === questions.length - 1 ? 'Review' : 'Continue');
+    const next = Button({ type: 'button', disabled: true }, fromReview || stepIdx === questions.length - 1 ? 'Review' : 'Continue');
     const err = h('div', {});
     const change = () => {
       next.disabled = !body.valid();
@@ -380,9 +384,10 @@ export async function builder() {
         const chk = await api.post('/v1/builder/check', { industry: ind.id, question: q.id, value: body.value() });
         if (!chk.ok) { err.append(Alert('error', chk.error)); setLoading(next, false); return; }
         ctx.answers[q.id] = chk.value;
+        rebuildSteps();
         await refresh(ctx.answers, { commit: true });
         await persist(stepsAll[Math.min(stepIdx + 1, stepsAll.length - 1)].id);
-        go(stepIdx + 1);
+        if (fromReview) { fromReview = false; go(stepsAll.length - 1); } else go(stepIdx + 1);
       } catch (e) { err.append(Alert('error', e.message)); setLoading(next, false); }
     });
     const hand = Hand(q.id === 'state' ? 'Pick your state and watch the right side.' : 'Each answer adds or removes cards.', { style: { margin: '20px 0 0 8px', fontSize: '24px', transform: 'rotate(-1.5deg)', position: 'static' } });
@@ -392,7 +397,7 @@ export async function builder() {
         h('h2', { 'data-autofocus': '', tabindex: '-1' }, ...titleFor(q, business)),
         h('p', { class: 'q' }, HELP[q.id] && q.id !== 'frequency' ? HELP[q.id] : q.help),
         body.el, err, adds,
-        h('div', { class: 'qfoot' }, stepIdx > 0 ? TextLink('Back', { onClick: () => go(stepIdx - 1) }) : h('span'), next)),
+        h('div', { class: 'qfoot' }, stepIdx > 0 ? TextLink('Back', { onClick: () => { fromReview = false; go(stepIdx - 1); } }) : h('span'), next)),
       hand);
     left.querySelector('[data-autofocus]').focus();
     // Showing a step you already answered: show what it added, so Back is not a blank.
@@ -419,7 +424,7 @@ export async function builder() {
         h('div', { class: 'qn' }, 'ALL SET'),
         h('h2', { 'data-autofocus': '', tabindex: '-1' }, 'Your dashboard is ', h('em', {}, 'ready')),
         h('p', { class: 'q' }, 'Here’s what you told us. Change any answer and the dashboard changes with it.'),
-        ...questions.map((q, i) => h('div', { class: 'row' }, h('span', { class: 'l1' }, h('b', {}, q.rail)), h('span', { 'data-review': q.id, style: { fontFamily: 'Fraunces', fontStyle: 'italic', color: 'var(--berry)' } }, summarize(q, ctx.answers[q.id], ctx)), TextLink('Edit', { onClick: () => go(i), 'aria-label': `Edit ${q.rail}` }))),
+        ...questions.map((q, i) => h('div', { class: 'row' }, h('span', { class: 'l1' }, h('b', {}, q.rail)), h('span', { 'data-review': q.id, style: { fontFamily: 'Fraunces', fontStyle: 'italic', color: 'var(--berry)' } }, summarize(q, ctx.answers[q.id], ctx)), TextLink('Edit', { onClick: () => { fromReview = true; go(i); }, 'aria-label': `Edit ${q.rail}` }))),
         err,
         h('div', { class: 'qfoot' }, TextLink('Back', { onClick: () => go(questions.length - 1) }), finish)),
       h('div', { class: 'hand', style: { margin: '18px 0 0 6px', fontSize: '25px' } }, `${c.modules} modules, ${c.items} items.${missingEin ? ' One account number still to add.' : ''}`));

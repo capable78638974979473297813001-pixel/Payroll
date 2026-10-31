@@ -125,6 +125,11 @@ export const peopleCards = {
     const start = Field({ label: 'Start date', name: 'startDate', type: 'date', value: new Date().toISOString().slice(0, 10) });
     const formsWanted = { w4: true, stateForm: true, i9: true, deposit: true };
     const items = [['w4', 'W-4', 'Federal withholding'], ...(c.stateForm ? [['stateForm', c.stateForm, `Added because you’re in ${app.data.built ? app.data.built.answers[0] : c.state}`]] : []), ['i9', 'I-9', 'Section 1 by them, section 2 by you'], ['deposit', 'Direct deposit', 'Bank details for setup']];
+    const hasItem = (id) => app.data.built.modules.some((m) => m.items.some((i) => i.id === id));
+    const tipNotice = hasItem('tip_credit') ? h('label', { class: 'ck2', hidden: true }, h('input', { type: 'checkbox', name: 'tipCreditNotice', 'data-testid': 'tip-notice' }), h('span', {}, 'I gave them the tip credit notice in writing', h('small', {}, 'Required before we pay a tipped cash wage below the full minimum.'))) : null;
+    const tippedRole = () => (c.roles.find((r) => r.key === roleSel.value) || {}).tipped !== 'never';
+    const showNotice = () => { if (tipNotice) tipNotice.hidden = !tippedRole(); };
+    roleSel.input.addEventListener('change', showNotice); showNotice();
     const opts = h('div', { class: 'opts' });
     const drawOpts = () => opts.replaceChildren(...items.map(([id, label, help]) => h('button', { type: 'button', class: `opt ${formsWanted[id] ? 'on' : ''}`, role: 'checkbox', 'aria-checked': String(formsWanted[id]), 'data-form': id, onClick: () => { formsWanted[id] = !formsWanted[id]; if (id === 'w4' && !formsWanted.w4) formsWanted.stateForm = false; drawOpts(); } }, h('span', { class: 'cb' }), h('span', {}, label, h('small', {}, help)), id === 'stateForm' ? h('em', {}, c.state) : null)));
     drawOpts();
@@ -137,13 +142,13 @@ export const peopleCards = {
       setLoading(send, true);
       try {
         const forms = Object.entries(formsWanted).filter(([, on]) => on).map(([id]) => id);
-        const r = await api.post(`${base()}/onboarding/invite`, { firstName: first.value, lastName: last.value, email: email.value, roleKey: roleSel.value, location: locSel ? locSel.value : undefined, rateCents: cents, startDate: start.value, forms });
+        const r = await api.post(`${base()}/onboarding/invite`, { firstName: first.value, lastName: last.value, email: email.value, roleKey: roleSel.value, location: locSel ? locSel.value : undefined, rateCents: cents, startDate: start.value, forms, ...(tipNotice && tippedRole() ? { tipCreditNotice: tipNotice.querySelector('input').checked } : {}) });
         first.value = ''; last.value = ''; email.value = ''; rate.value = '';
         if (r.emailed) toast('success', `Invite sent to ${r.employee.firstName}.`); else linkModal(r.employee.firstName, r.link, 'Email isn’t set up on this server, so nothing was sent.');
         await refreshData(); peopleChanged(); navigate(location.pathname + location.search);
       } catch (e2) { const t = { firstName: first, lastName: last, email, roleKey: roleSel }[e2.details && e2.details.field]; if (t) t.setError(e2.message); else err.replaceChildren(Alert('error', e2.message)); }
       setLoading(send, false);
-    } }, h('div', { class: 'r2' }, first.el, last.el), email.el, h('div', { class: 'r2' }, roleSel.el, locSel ? locSel.el : h('div')), h('div', { class: 'r2' }, rate.el, start.el), h('div', {}, h('label', { class: 'lab' }, 'Forms they’ll fill in on their phone'), opts), err, send);
+    } }, h('div', { class: 'r2' }, first.el, last.el), email.el, h('div', { class: 'r2' }, roleSel.el, locSel ? locSel.el : h('div')), h('div', { class: 'r2' }, rate.el, start.el), tipNotice, h('div', {}, h('label', { class: 'lab' }, 'Forms they’ll fill in on their phone'), opts), err, send);
     return { title: 'Invite a new hire', body: form };
   },
 };
@@ -188,6 +193,25 @@ export function importPeopleModal() {
   });
 }
 
+/** Opening balances for someone who was paid elsewhere earlier this year (wage bases only; not their W-2). */
+export function ytdModal(e, done) {
+  const asOf = Field({ label: 'Balances as of', name: 'asOf', type: 'date', value: new Date().toISOString().slice(0, 10) });
+  const ss = Field({ label: 'Social Security wages so far this year', name: 'ss', placeholder: '18400.00', inputmode: 'decimal' });
+  const med = Field({ label: 'Medicare wages so far', name: 'med', placeholder: 'Same as Social Security if unsure', inputmode: 'decimal', optional: true });
+  const futa = Field({ label: 'Federal unemployment (FUTA) wages so far', name: 'futa', placeholder: '7000.00', inputmode: 'decimal', optional: true });
+  const err = h('div', {}); const go = Button({}, 'Save balances');
+  const m = modal({ title: `${e.firstName}’s earlier pay this year`, body: h('div', { class: 'f' }, h('p', { class: 'fine', style: { margin: 0 } }, 'Use the year-to-date numbers from their last pay stub at the old service. We use them so Social Security and unemployment stop at the yearly limit instead of starting over. This does not bring their earlier wages into your W-2s or quarterly filings. Keep the old provider’s records for those.'), asOf.el, ss.el, med.el, futa.el, err), actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Cancel'), go] });
+  go.addEventListener('click', async () => {
+    const ssC = dollarsToCents(ss.value);
+    if (ssC === null) return ss.setError('Enter a dollar amount, like 18400.00.');
+    const medC = med.value.trim() ? dollarsToCents(med.value) : ssC;
+    const futaC = futa.value.trim() ? dollarsToCents(futa.value) : Math.min(ssC, 700000);
+    if (medC === null || futaC === null) return err.replaceChildren(Alert('error', 'Those need to be dollar amounts.'));
+    setLoading(go, true);
+    try { await api.post(`${base()}/employees/${e.id}/ytd-import`, { asOf: asOf.value, socialSecurityWagesCents: ssC, medicareWagesCents: medC, futaWagesCents: futaC }); m.close(); toast('success', 'Saved.'); done(); } catch (e2) { err.replaceChildren(Alert('error', e2.message)); setLoading(go, false); }
+  });
+}
+
 // ---------------------------------------------------------------- one person
 const FILING = { single: 'Single or married filing separately', married_joint: 'Married filing jointly', married_separate: 'Married filing separately', head_of_household: 'Head of household' };
 
@@ -222,10 +246,46 @@ export function profilePage() {
       h('div', { class: 'grid', style: { gridTemplateColumns: 'minmax(0,1fr)', marginTop: '18px' } }, h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Recent pay'), paid.length ? link(`/app/payroll/runs/${paid[0].run.id}/stub/${id}`, { class: 'link' }, 'Latest stub') : null),
         paid.length ? h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th', {}, 'Period'), h('th', {}, 'Hours'), h('th', {}, 'Gross'), h('th', {}, 'Net'))), h('tbody', {}, ...paid.map(({ run, pc }) => h('tr', {}, h('td', {}, link(`/app/payroll/runs/${run.id}/stub/${id}`, { class: 'link' }, rangeLabel(run.periodStart, run.periodEnd))), h('td', {}, String(Math.round(pc.hours * 100) / 100)), h('td', {}, money(pc.taxableWagesCents)), h('td', {}, h('b', {}, money(pc.netPayCents)))))))
           : h('div', { class: 'empty' }, 'No pay yet. Their first pay run will show here.')))),
-      Pay: () => h('div', { class: 'card', style: { maxWidth: '640px' } }, h('h3', { class: 'ct', style: { marginBottom: '12px' } }, 'Pay'), kv(['Role', roleLabel], [e.payType.kind === 'hourly' ? 'Hourly rate' : 'Annual salary', e.payType.kind === 'hourly' ? money(e.payType.rateCents) : money(e.payType.annualCents)], ['Started', longDate(e.hireDate)], ['Direct deposit', e.payoutAccounts.length ? 'Set up' : 'Not set up']), h('div', { class: 'acts', style: { marginTop: '14px' } }, Button({ variant: 'ghost', size: 'sm', onClick: editModal }, 'Change role or pay'))),
+      Pay: () => h('div', { class: 'stack', style: { '--gap': '16px', maxWidth: '640px' } }, payCard(), hasMod('deductions') ? deductionsCard() : null, hasMod('opening_balances') ? ytdCard() : null),
+      PayOld: () => h('div', { class: 'card', style: { maxWidth: '640px' } }, h('h3', { class: 'ct', style: { marginBottom: '12px' } }, 'Pay'), kv(['Role', roleLabel], [e.payType.kind === 'hourly' ? 'Hourly rate' : 'Annual salary', e.payType.kind === 'hourly' ? money(e.payType.rateCents) : money(e.payType.annualCents)], ['Started', longDate(e.hireDate)], ['Direct deposit', e.payoutAccounts.length ? 'Set up' : 'Not set up']), h('div', { class: 'acts', style: { marginTop: '14px' } }, Button({ variant: 'ghost', size: 'sm', onClick: editModal }, 'Change role or pay'))),
       Taxes: () => h('div', { class: 'card', style: { maxWidth: '640px' } }, h('h3', { class: 'ct', style: { marginBottom: '12px' } }, 'Tax setup'), kv(['Filing status', FILING[e.federalW4.filingStatus] || e.federalW4.filingStatus], ['More than one job', e.federalW4.multipleJobs ? 'Yes' : 'No'], ['Dependent credit', money(e.federalW4.dependentCredit)], ['Extra withholding', money(e.federalW4.extraWithholding)], [`${e.workState.code} work state`, e.workState.certificate && e.workState.certificate.allowances !== undefined ? plural(e.workState.certificate.allowances, 'exemption') : 'Standard']), h('p', { class: 'cap', style: { marginTop: '12px' } }, 'These come from the forms they filled in. To change them, send a new W-4 link from Onboarding.')),
       Documents: () => h('div', { class: 'card', style: { maxWidth: '640px' } }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Forms'), ...paperRows(), row.i9NeedsSection2 ? h('div', { class: 'acts', style: { marginTop: '14px' } }, Button({ size: 'sm', onClick: () => i9Section2Modal(row) }, 'Do I-9 section 2')) : null, row.canRemind ? h('div', { class: 'acts', style: { marginTop: '10px' } }, Button({ variant: 'ghost', size: 'sm', onClick: () => sendReminder(row) }, 'Send a reminder')) : null),
     };
+    const hasMod = (id) => app.data.built.modules.some((m) => m.id === id || m.items.some((i) => i.id === id));
+    const payCard = () => pages.PayOld();
+    const PRE = { deferral_401k: '401(k)', deferral_403b: '403(b)', section125: 'Health plan', hsa: 'HSA', fsa: 'FSA', dependent_care: 'Dependent care', commuter: 'Commuter' };
+    const planLine = (d) => `${d.amount.kind === 'flat' ? money(d.amount.cents) : `${d.amount.percent}% of pay`}${d.category ? ', before tax' : ', after tax'}`;
+    function deductionsCard() {
+      const plans = e.deductionPlans || [];
+      return h('div', { class: 'card', 'data-card': 'deductions' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Deductions'), h('button', { class: 'link as-button', type: 'button', 'data-testid': 'add-deduction', onClick: () => deductionModal() }, 'Add')),
+        plans.length ? plans.map((d, i) => h('div', { class: 'row', 'data-deduction': d.code }, h('span', { class: 'l1' }, h('b', {}, d.code), h('i', {}, planLine(d))), h('button', { class: 'link as-button', type: 'button', 'aria-label': `Remove ${d.code}`, onClick: () => saveDeductions(plans.filter((_, j) => j !== i)) }, 'Remove'))) : h('p', { class: 'cap' }, 'None. Add a health plan, 401(k) or other amount to take from each paycheck.'));
+    }
+    async function saveDeductions(list) {
+      try { await api.patch(`${base()}/employees/${id}`, { deductionPlans: list.map((d) => ({ code: d.code, category: d.category, amount: d.amount.kind === 'flat' ? { kind: 'flat', cents: d.amount.cents } : { kind: 'percentOfGross', percent: d.amount.percent }, active: d.active })) }); e = await api.get(`${base()}/employees/${id}`); draw(); } catch (e2) { toast('error', e2.message); }
+    }
+    function deductionModal() {
+      const what = Field({ label: 'What is it', name: 'code', select: true, value: 'deferral_401k', options: [...Object.entries(PRE).map(([v2, l]) => ({ value: v2, label: l })), { value: 'other', label: 'Other (after tax)' }] });
+      const name = Field({ label: 'Name on the stub', name: 'label', placeholder: 'Dental', optional: true });
+      const mode = Field({ label: 'Taken as', name: 'mode', select: true, value: 'percent', options: [{ value: 'percent', label: 'A percent of pay' }, { value: 'flat', label: 'A dollar amount each check' }] });
+      const amt = Field({ label: 'Amount', name: 'amt', placeholder: '5 for 5%, or 25.00', inputmode: 'decimal' });
+      const err = h('div', {}); const go = Button({}, 'Add deduction');
+      const m = modal({ title: `Add a deduction for ${e.firstName}`, body: h('div', { class: 'f' }, h('p', { class: 'fine', style: { margin: 0 } }, 'Retirement and health amounts marked before tax lower the pay their income tax is figured on. Garnishments and court orders aren’t set up here yet.'), what.el, name.el, mode.el, amt.el, err), actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Cancel'), go] });
+      go.addEventListener('click', async () => {
+        const n = Number(amt.value.replace(/[$,%\s]/g, ''));
+        if (!Number.isFinite(n) || n <= 0) return amt.setError('Enter a number.');
+        if (mode.value === 'percent' && n > 100) return amt.setError('A percent can’t be over 100.');
+        const cat = what.value === 'other' ? null : what.value;
+        const code = (name.value.trim() || (PRE[what.value] || 'Deduction')).slice(0, 30);
+        const amount = mode.value === 'percent' ? { kind: 'percentOfGross', percent: n } : { kind: 'flat', cents: Math.round(n * 100) };
+        m.close(); await saveDeductions([...(e.deductionPlans || []), { code, category: cat, amount, active: true }]);
+      });
+    }
+    function ytdCard() {
+      const im = e.ytdImport;
+      return h('div', { class: 'card', 'data-card': 'ytd' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Earlier pay this year'),
+        h('p', { class: 'cap' }, im ? `Opening balances entered as of ${longDate(im.asOf)}.` : 'Paid somewhere else before Totali? Enter their year-to-date so yearly limits carry over.'),
+        paid.length ? null : h('div', { class: 'acts', style: { marginTop: '10px' } }, Button({ variant: 'ghost', size: 'sm', 'data-testid': 'ytd-open', onClick: () => ytdModal(e, async () => { e = await api.get(`${base()}/employees/${id}`); draw(); }) }, im ? 'Change balances' : 'Enter balances')));
+    }
     const draw = () => host.replaceChildren(h('div', { class: 'tabs2' }, ...tabs.map((x) => h('a', { class: tab === x ? 'on' : '', href: '#', 'data-tab-name': x, onClick: (ev) => { ev.preventDefault(); tab = x; draw(); } }, x))), pages[tab]());
     onChange(async () => { try { [e, ov] = await Promise.all([api.get(`${base()}/employees/${id}`), api.get(`${base()}/onboarding`)]); Object.assign(row, ov.people.find((p) => p.employeeId === id)); draw(); } catch { /* the page was left */ } });
 
