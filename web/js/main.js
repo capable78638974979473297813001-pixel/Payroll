@@ -13,6 +13,7 @@ import { profilePage, peopleCards } from './app/people.js';
 import { RENDERERS } from './widgets.js';
 import { joinPage } from './pages/join.js';
 import { w9Page } from './pages/w9.js';
+import { terms, privacy } from './pages/legal.js';
 import { contractorsPage } from './app/contractors.js';
 import { jobsPage } from './app/jobs.js';
 
@@ -36,6 +37,8 @@ route('/app/settings', settingsPage());
 route('/app/settings/:section', settingsPage());
 route('/join/:token', joinPage());
 route('/w9/:token', w9Page());
+route('/terms', terms);
+route('/privacy', privacy);
 route('/app/contractors', contractorsPage());
 route('/app/job-costing', jobsPage());
 route('/app/people/:id', profilePage());

@@ -14,6 +14,12 @@ const counter = async (page) => ({
   const shots = process.env.SHOTS;
   const shot = async (name) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
   try {
+    // the legal pages the signup checkbox links to exist, and say they are drafts
+    for (const [path, heading] of [['/terms', 'Terms of'], ['/privacy', 'Privacy']]) {
+      await page.goto(`${server.base}${path}`);
+      await page.waitForSelector(`h1:has-text("${heading}")`);
+      assert.ok((await page.locator('.legal-page').textContent()).includes('not been reviewed by a lawyer'));
+    }
     await signUpAndVerify(page, server.base);
     await page.waitForSelector('.indgrid .it');
     await shot('industry');

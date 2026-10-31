@@ -129,7 +129,7 @@
 .dash .stats b { font-family: var(--d-num-font); font-weight: var(--d-num-weight); }
 .dash .minis b { font: 600 18px Inter, sans-serif; font-variant-numeric: tabular-nums; }
 .dash .minis i { display: block; color: var(--d-faint); font: 11.5px Inter, sans-serif; }
-.dash .built { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 14px 18px; background: color-mix(in srgb, var(--d-bg) 70%, var(--d-card)); }
+.dash .grid.cards > .card.built, .dash .built { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 14px 18px; background: color-mix(in srgb, var(--d-bg) 70%, var(--d-card)); }
 .dash .built .chips2 { flex: 1; min-width: 200px; }
 
 /* ---------- edit mode ---------- */
@@ -172,3 +172,17 @@
 .hrow { display: flex; align-items: center; }
 .row-between { display: flex; justify-content: space-between; align-items: center; }
 .add-slot { align-items: center; justify-content: center; min-height: 120px; border: 2px dashed var(--d-line) !important; background: none !important; cursor: pointer; color: var(--d-muted); font: 600 14px Inter, sans-serif; }
+
+/* phones: every tab stays reachable (the design hides all but three), and the account menu holds Help and Settings */
+@media (max-width: 900px) {
+  .dash .nav .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .dash .nav .tabs::-webkit-scrollbar { display: none; }
+  .dash .nav .tabs a:nth-child(n+4) { display: inline-block; }
+  .dash .nav .tabs a { white-space: nowrap; }
+  .dash .nav .rt2 a.hl { display: none; }
+  .dash .nav .org { margin-left: auto; }
+  .dash .built { align-items: flex-start; }
+  .dash .built .chips2 { flex-basis: 100%; }
+  .dash .built .chip { border-radius: 99px; }
+}
+.dash .built .chips2 .chip { align-self: center; }

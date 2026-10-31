@@ -17,6 +17,53 @@ Everything else (the niches, tip and wage rules, pay runs, API) is Totali's own,
 
 **Read [docs/GAPS.md](docs/GAPS.md) before putting real money through this.** Nothing here has run against real Stripe or a real bank. In the default mode the employer's own bank sends the money, so Totali needs no sponsoring bank; sending through Totali's own bank needs one.
 
+## The web app
+
+`npm start`, then open http://localhost:8787. The server serves the app from `web/` (plain ES modules, no build step), built from the screens in `design/totali/`.
+
+**What you can do in it:** create an account (email code, or Google), pick an industry, answer a few questions and watch the dashboard build, then run payroll: enter hours and tips (or import a spreadsheet), review every paycheck, approve, open pay stubs, and download the payment file for your own bank. Invite new hires by email; they fill in their W-4, state form, I-9 section 1 and direct deposit on their phone from a private link. Time and tips by day, the tip pool, contractors with W-9s and a year-end export, job costing, crews and workers' comp classes, settings (including editing your setup answers), company setup, billing (card on file through Stripe) and help.
+
+**Customizable.** Every dashboard is a saved document: cards, sizes, order, tabs, colors, fonts, corners, density, navigation and the owner's own words are all settable (press *Customize*). There are no templates; two businesses start from what they said and diverge from there.
+
+### Run it locally
+
+```bash
+cp .env.example .env
+TOTALI_DEV=1 npm start     # with no RESEND_API_KEY, emailed codes and links appear in the app instead of being sent
+```
+
+### Browser tests
+
+Playwright and Chromium are used for end-to-end tests. Each script starts its own server on a free port:
+
+```bash
+for f in setup-flow dashboard payroll people settings time contractors jobs google; do node e2e/$f.e2e.cjs; done
+```
+
+### Deploy to Render
+
+`render.yaml` is a blueprint: one web service, a persistent disk for the database, and every secret listed with `sync: false`, so Render asks you for the value in its dashboard and nothing secret is in git.
+
+1. Render, *New*, *Blueprint*, pick this repo and branch. It asks for the secret values.
+2. **`TOTALI_DATA_KEY`**: 32 random bytes, base64 (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`). It encrypts SSNs and bank numbers. Back it up somewhere other than the disk; losing it makes them unrecoverable.
+3. **`PUBLIC_BASE_URL`**: the site's address, with `https://`. It makes cookies `Secure` and decides where links in emails point. Without it the server refuses to build email links.
+4. **`RESEND_API_KEY`** and **`RESEND_FROM`**: email. Verify your domain in Resend and use an address on it; until then Resend only delivers to its account owner.
+5. Optional: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (add `{PUBLIC_BASE_URL}/v1/auth/google/callback` as a redirect URI; the button is hidden without them), `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` / `STRIPE_WEBHOOK_SECRET` (cards on the Billing page; point a Stripe webhook at `/v1/stripe/webhook` for `setup_intent.succeeded`), `SUPPORT_EMAIL` (where Help messages go).
+
+The persistent disk needs a paid Render instance. SQLite is a single file, so run one instance.
+
+### What isn't built yet
+
+Said plainly, so nobody finds out the hard way:
+
+- **Time off, trips and mileage** (office, delivery): the builder lists them as "coming soon" and does not count them.
+- **Manager sign-ins.** Only the owner signs in. Employees use private links for their own forms but have no account to see stubs.
+- **Texting** invites. Invites go by email (or copy the link).
+- **State forms other than Michigan's MI-W4.** Other states use the federal W-4 numbers and the state's default withholding.
+- **Filing.** Totali keeps records and exports for your accountant (contractors, comp classes, job costs). It does not file 1099s.
+- **The terms and privacy pages are drafts** that no lawyer has read.
+- Nothing here has moved real money. See `docs/GAPS.md`.
+
 ## How a payroll run works
 
 ```
@@ -40,7 +87,7 @@ Node 22.18+ and Python 3.10+ (MasteryTax). No packages to install.
 
 ```bash
 cp .env.example .env     # then fill it in; set these in your host's secret store, not in git
-npm test                 # Totali: 280 tests, a few seconds
+npm test                 # Totali: ~400 tests, under a minute
 npm run typecheck        # types for src/, test/, scripts/
 npm run test:vendored    # the vendored engine's own suites (2,107 tests)
 npm run check:stripe     # read-only: what is not ready for bank linking and ACH

@@ -111,3 +111,5 @@ a.it { color: inherit; text-decoration: none; cursor: pointer; }
 .avmenu .who2 span { color: var(--mut); font-size: 12.5px; overflow-wrap: anywhere; }
 .avmenu a, .avmenu button { text-align: left; background: none; border: 0; padding: 8px 10px; border-radius: 7px; color: var(--ink); cursor: pointer; font: inherit; text-decoration: none; }
 .avmenu a:hover, .avmenu button:hover { background: var(--blush, #F8DAD3); color: var(--berry); }
+
+.legal-page { max-width: 780px; margin: 10px auto 90px; padding: 0 24px; }
