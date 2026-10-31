@@ -44,6 +44,8 @@ export interface PosProviderInfo {
   where: string;
   /** Something the owner should know before relying on it. */
   caution?: string;
+  /** The owner can sign in at the other system and approve Totali, instead of pasting a token. */
+  signIn?: boolean;
   fields: PosField[];
 }
 

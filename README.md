@@ -83,6 +83,8 @@ Details are checked against the other system before they are kept, and are store
 
 The dashboard shows what is connected: the *Hours and tips* card (Overview and Time) says which system the hours come from, when they were last pulled, how many shifts and tips came in, and who is left out; the Time and tips checklist shows Hours and Tip entry as automatic; and the to-do list nudges owners to connect, or to match people.
 
+Getting live access to the systems whose APIs are partner-gated (Clover first) is a set of applications only the company can make. What each needs, who to contact, and the text to paste are in `docs/PARTNER_APPLICATIONS.md`. Clover's sign-in is already built: once Clover approves Totali's app, set `CLOVER_APP_ID` and `CLOVER_APP_SECRET` and the owner gets a *Sign in with Clover* button.
+
 ### What isn't built yet
 
 Said plainly, so nobody finds out the hard way:

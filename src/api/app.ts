@@ -126,7 +126,7 @@ export interface App {
   handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
 }
 
-export function createApp(deps: { posFetch?: typeof fetch; posHosts?: Partial<Record<PosProviderId, string>>; store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer; billingStripe?: StripeBillingApi | null; google?: GoogleAuth | null }): App {
+export function createApp(deps: { clover?: { appId: string; secret: string } | null; posFetch?: typeof fetch; posHosts?: Partial<Record<PosProviderId, string>>; store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer; billingStripe?: StripeBillingApi | null; google?: GoogleAuth | null }): App {
   const { store, banks, ach, config } = deps;
   const mailer = deps.mailer ?? new OutboxMailer();
   const accounts = deps.accounts ?? new AccountService(store, mailer, { ...(deps.now ? { now: deps.now } : {}), ...(deps.log ? { log: deps.log } : {}) });
@@ -155,7 +155,8 @@ export function createApp(deps: { posFetch?: typeof fetch; posHosts?: Partial<Re
   const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
   const google = deps.google !== undefined ? deps.google : (() => { const g = googleFromEnv(); return g ? new GoogleAuth(g, fetch, now) : null; })();
   const OAUTH_COOKIE = 'totali_oauth';
-  const pos = new PosService(store, now, deps.posFetch ?? globalThis.fetch, config.devTools ? deps.posHosts ?? {} : {});
+  const clover = deps.clover !== undefined ? deps.clover : (process.env.CLOVER_APP_ID && process.env.CLOVER_APP_SECRET ? { appId: process.env.CLOVER_APP_ID, secret: process.env.CLOVER_APP_SECRET } : null);
+  const pos = new PosService(store, now, deps.posFetch ?? globalThis.fetch, config.devTools ? deps.posHosts ?? {} : {}, clover);
   const portal = new PortalService(store, mailer, deps.banks, dashboards, now, deps.log);
   const EMP_COOKIE = 'totali_emp';
   const empCookie = (req: IncomingMessage, token: string, clear = false) => `${EMP_COOKIE}=${clear ? '' : token}; Path=/; HttpOnly; SameSite=Lax${clear ? '; Max-Age=0' : `; Max-Age=${30 * 86_400}`}${secureCookies(req) ? '; Secure' : ''}`;
@@ -456,6 +457,12 @@ export function createApp(deps: { posFetch?: typeof fetch; posHosts?: Partial<Re
     route('GET', `${C}/pos`, 'company', (c) => pos.catalog(c.params.cid)),
     route('POST', `${C}/pos/connect`, 'company', async (c) => pos.connect(c.params.cid, c.json()), 201),
     route('DELETE', `${C}/pos`, 'company', (c) => pos.disconnect(c.params.cid)),
+    route('GET', `${C}/pos/clover/start`, 'company', (c) => ({ url: pos.cloverStart(c.params.cid, `${siteBase(c.req)}/v1/pos/clover/callback`).url })),
+    route('GET', '/v1/pos/clover/callback', 'none', async (c) => {
+      const back = (q: string) => new Reply({}, { location: `/app/settings/pos?${q}` }, 302);
+      try { await pos.cloverFinish(c.query, c.user?.companyId ?? null); return back('pos=connected'); }
+      catch (e) { return back(`pos_error=${encodeURIComponent(e instanceof Error ? e.message : 'Could not connect Clover.')}`); }
+    }),
     route('GET', `${C}/pos/people`, 'company', async (c) => pos.people(c.params.cid)),
     route('POST', `${C}/pos/report`, 'company', (c) => pos.importReport(c.params.cid, c.json())),
     route('PUT', `${C}/pos/links`, 'company', (c) => pos.link(c.params.cid, c.json())),

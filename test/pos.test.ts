@@ -242,3 +242,38 @@ test('Clover: staff, shifts in epoch milliseconds and card tips by employee, rea
   const shifts = f.calls.find((x) => /\/shifts/.test(x.url))!;
   assert.match(decodeURIComponent(shifts.url), /filter=in_time>=\d+&filter=in_time<=\d+&limit=1000&offset=0/);
 });
+
+test('Clover sign-in: the owner approves at Clover, the code becomes tokens, and tokens are renewed before they run out', async () => {
+  let tokenCalls = 0;
+  const f = fake([
+    [/POST .*\/oauth\/v2\/token/, () => { tokenCalls++; return { access_token: 'at-1', access_token_expiration: Math.floor(t / 1000) + 1800, refresh_token: 'rt-1', refresh_token_expiration: Math.floor(t / 1000) + 86_400 * 365 }; }],
+    [/POST .*\/oauth\/v2\/refresh/, () => ({ access_token: 'at-2', access_token_expiration: Math.floor(t / 1000) + 1800, refresh_token: 'rt-2', refresh_token_expiration: Math.floor(t / 1000) + 86_400 * 365 })],
+    [/GET .*\/v3\/merchants\/M9\/employees/, () => ({ elements: [{ id: 'c1', name: 'Ana Cruz' }] })],
+    [/GET .*\/v3\/merchants\/M9\/shifts/, () => ({ elements: [] })],
+  ]);
+  const { store, company, advance } = make(f.f);
+  const svc = new PosService(store, () => new Date(t), f.f, {}, { appId: 'APP1', secret: 'SECRET1' });
+  assert.equal(svc.catalog(company.id).providers.find((p) => p.id === 'clover')!.signIn, true, 'the button appears only when the app is set up');
+  const { url, state } = svc.cloverStart(company.id, 'https://totali.example/v1/pos/clover/callback');
+  assert.equal(url, `https://www.clover.com/oauth/v2/authorize?client_id=APP1&redirect_uri=${encodeURIComponent('https://totali.example/v1/pos/clover/callback')}&state=${state}`);
+  await assert.rejects(svc.cloverFinish(new URLSearchParams({ state: 'nope', code: 'c', merchant_id: 'M9' }), company.id), /expired/);
+  const again = svc.cloverStart(company.id, 'https://totali.example/cb');
+  await assert.rejects(svc.cloverFinish(new URLSearchParams({ state: again.state, code: 'c', merchant_id: 'M9' }), 'cmp_someone_else'), (e: unknown) => e instanceof ApiError && e.code === 'wrong_company');
+  const third = svc.cloverStart(company.id, 'https://totali.example/cb');
+  const conn = await svc.cloverFinish(new URLSearchParams({ state: third.state, code: 'the-code', merchant_id: 'M9' }), company.id);
+  assert.equal(conn.provider, 'clover');
+  const exchange = f.calls.find((c) => /oauth\/v2\/token/.test(c.url))!;
+  assert.equal(exchange.url, 'https://api.clover.com/oauth/v2/token');
+  assert.deepEqual(exchange.body, { client_id: 'APP1', client_secret: 'SECRET1', code: 'the-code' });
+  assert.equal(JSON.stringify(store.posConnections.all()).includes('at-1'), false, 'tokens are stored encrypted');
+  await assert.rejects(svc.cloverFinish(new URLSearchParams({ state: third.state, code: 'x', merchant_id: 'M9' }), company.id), /expired/, 'a state works once');
+  // thirty minutes later the access token has run out: it is renewed with the refresh token, once
+  await svc.people(company.id);
+  assert.equal(f.calls.filter((c) => /oauth\/v2\/refresh/.test(c.url)).length, 0, 'still fresh');
+  advance(31 * 60_000);
+  await svc.people(company.id);
+  const refresh = f.calls.find((c) => /oauth\/v2\/refresh/.test(c.url))!;
+  assert.deepEqual(refresh.body, { client_id: 'APP1', refresh_token: 'rt-1' });
+  assert.equal(f.calls.filter((c) => /merchants\/M9\/employees/.test(c.url)).at(-1)!.headers.authorization, 'Bearer at-2');
+  void tokenCalls;
+});

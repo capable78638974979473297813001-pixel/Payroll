@@ -94,6 +94,14 @@ function connectForm(cat, after) {
     const info = cat.providers.find((p) => p.id === pick);
     const fields = info.fields.map((f) => ({ f, el: Field({ label: f.label, name: f.name, type: f.secret ? 'password' : 'text', autocomplete: 'off', hint: f.hint, ...(f.options ? { select: true, options: f.options, value: f.options[0].value } : {}) }) }));
     const err = h('div', {}); const go = Button({ type: 'submit', 'data-testid': 'pos-connect' }, `Connect ${info.name}`);
+    if (info.signIn) {
+      const btn = Button({ type: 'button', 'data-testid': 'pos-signin' }, `Sign in with ${info.name}`);
+      btn.addEventListener('click', async () => { setLoading(btn, true); try { const r = await api.get(`${base()}/pos/${info.id}/start`); location.href = r.url; } catch (e) { err.replaceChildren(Alert('error', e.message)); setLoading(btn, false); } });
+      host.replaceChildren(
+        h('div', { class: 'opts', role: 'radiogroup', 'aria-label': 'Your system' }, ...cat.providers.map((p) => h('button', { type: 'button', class: `opt ${p.id === pick ? 'on' : ''}`, role: 'radio', 'aria-checked': String(p.id === pick), 'data-provider': p.id, onClick: () => { pick = p.id; draw(); } }, h('span', { class: 'rd' }), h('span', {}, p.name, h('small', {}, p.brings.join(', ')))))),
+        h('p', { class: 'cap', style: { margin: 0 } }, `You’ll sign in at ${info.name} and approve Totali to read your staff, hours and tips. Totali never sees your ${info.name} password.`), err, btn);
+      return;
+    }
     host.replaceChildren(
       h('div', { class: 'opts', role: 'radiogroup', 'aria-label': 'Your system' }, ...cat.providers.map((p) => h('button', { type: 'button', class: `opt ${p.id === pick ? 'on' : ''}`, role: 'radio', 'aria-checked': String(p.id === pick), 'data-provider': p.id, onClick: () => { pick = p.id; draw(); } }, h('span', { class: 'rd' }), h('span', {}, p.name, h('small', {}, p.brings.join(', ')))))),
       h('p', { class: 'cap', style: { margin: 0 } }, info.where),
@@ -132,9 +140,11 @@ async function matching(conn) {
 
 export async function posSection() {
   const cat = await api.get(`${base()}/pos`);
+  const q = new URLSearchParams(location.search);
+  const flash = q.get('pos_error') ? Alert('error', q.get('pos_error')) : q.get('pos') === 'connected' ? Alert('success', 'Connected.') : null;
   const redraw = () => navigate(location.pathname + location.search);
   if (!cat.connection) {
-    return h('div', { class: 'stack', style: { '--gap': '16px', maxWidth: '640px' } },
+    return h('div', { class: 'stack', style: { '--gap': '16px', maxWidth: '640px' } }, flash,
       h('div', { class: 'card' }, h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Connect your point of sale')),
         h('p', { class: 'cap', style: { marginTop: 0 } }, 'Totali doesn’t ring up sales. It reads your staff, their hours and their tips from the system you already use, so nobody types them twice. You can still enter hours by hand.'),
         connectForm(cat, redraw)),

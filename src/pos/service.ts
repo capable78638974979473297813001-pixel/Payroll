@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { ApiError, badRequest, conflict, notFound } from '../lib/errors.ts';
 import * as v from '../lib/validate.ts';
 import { newId } from '../lib/ids.ts';
@@ -6,7 +7,8 @@ import { recordShift } from '../domain/timekeeping.ts';
 import { daysBetween } from '../lib/dates.ts';
 import type { Store } from '../store/store.ts';
 import type { Employee } from '../domain/types.ts';
-import type { Fetch } from './http.ts';
+import { getJson, PosError, str, num, type Fetch } from './http.ts';
+import { CLOVER_HOSTS } from './clover.ts';
 import { toastAdapter } from './toast.ts';
 import { squareAdapter } from './square.ts';
 import { sevenShiftsAdapter } from './sevenshifts.ts';
@@ -43,8 +45,9 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
  */
 export class PosService {
   private store: Store; private now: () => Date; private f: Fetch; private hosts: Partial<Record<PosProviderId, string>>; private lastSync = new Map<string, number>();
-  constructor(store: Store, now: () => Date = () => new Date(), f: Fetch = globalThis.fetch, hosts: Partial<Record<PosProviderId, string>> = {}) {
-    this.store = store; this.now = now; this.f = f; this.hosts = hosts;
+  private clover: { appId: string; secret: string } | null; private pending = new Map<string, { companyId: string; until: number }>();
+  constructor(store: Store, now: () => Date = () => new Date(), f: Fetch = globalThis.fetch, hosts: Partial<Record<PosProviderId, string>> = {}, clover: { appId: string; secret: string } | null = null) {
+    this.store = store; this.now = now; this.f = f; this.hosts = hosts; this.clover = clover;
   }
   private iso() { return this.now().toISOString(); }
 
@@ -64,7 +67,7 @@ export class PosService {
 
   catalog(companyId: string) {
     const c = this.connectionOf(companyId);
-    return { providers: PROVIDERS, connection: c ? this.view(c) : null };
+    return { providers: PROVIDERS.map((p) => (p.id === 'clover' && this.clover ? { ...p, signIn: true } : p)), connection: c ? this.view(c) : null };
   }
 
   /** Check the details against the other system first. Only details that work are kept, and they are kept encrypted. */
@@ -85,6 +88,56 @@ export class PosService {
     const conn: PosConnection = { id: newId('pos'), companyId, provider, label: checked.label, credentialsEncrypted: encryptField(JSON.stringify(checked.creds ?? creds)), employeeMap: {}, connectedAt: this.iso() };
     this.store.tx(() => this.store.posConnections.put(conn));
     return this.view(conn);
+  }
+
+  // ------------------------------------------------------------------ Clover: the merchant signs in at Clover and approves Totali's app
+
+  private cloverHost(region?: string) { return this.hosts.clover ?? CLOVER_HOSTS[(region as keyof typeof CLOVER_HOSTS) ?? 'na'] ?? CLOVER_HOSTS.na; }
+
+  /** Where to send the owner to approve Totali at Clover. Only works once Totali's own Clover app is set up. */
+  cloverStart(companyId: string, redirectUri: string) {
+    if (!this.clover) throw conflict('clover_not_set_up', 'Clover sign-in isn’t set up on this server yet.');
+    if (this.connectionOf(companyId)) throw conflict('one_source', 'Disconnect the current source first. Two sources would both report the same shift.');
+    for (const [k, v] of this.pending) if (v.until < this.now().getTime()) this.pending.delete(k);
+    const state = randomBytes(24).toString('base64url');
+    this.pending.set(state, { companyId, until: this.now().getTime() + 15 * 60_000 });
+    const host = this.hosts.clover ? this.hosts.clover : 'https://www.clover.com';
+    return { url: `${host}/oauth/v2/authorize?client_id=${encodeURIComponent(this.clover.appId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`, state };
+  }
+
+  /** Clover sends the merchant back with a code. Exchange it for tokens and keep them encrypted. */
+  async cloverFinish(query: URLSearchParams, signedInCompanyId: string | null) {
+    if (!this.clover) throw conflict('clover_not_set_up', 'Clover sign-in isn’t set up on this server yet.');
+    const state = query.get('state') ?? '';
+    const p = this.pending.get(state);
+    this.pending.delete(state);
+    if (!p || p.until < this.now().getTime()) throw badRequest('That sign-in link has expired. Start again from Settings.');
+    if (signedInCompanyId !== p.companyId) throw new ApiError(403, 'wrong_company', 'Sign in to the same Totali account you started from, and try again.');
+    const code = query.get('code'); const merchantId = query.get('merchant_id');
+    if (!code || !merchantId) throw badRequest('Clover didn’t approve the connection.');
+    const t = await getJson(this.f, 'Clover', `${this.cloverHost()}/oauth/v2/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: this.clover.appId, client_secret: this.clover.secret, code }) });
+    const creds = this.cloverTokens({ merchantId, region: 'na' }, t);
+    const checked = await this.adapter('clover', creds).check();
+    const conn: PosConnection = { id: newId('pos'), companyId: p.companyId, provider: 'clover', label: checked.label, credentialsEncrypted: encryptField(JSON.stringify(creds)), employeeMap: {}, connectedAt: this.iso() };
+    this.store.tx(() => this.store.posConnections.put(conn));
+    return this.view(conn);
+  }
+
+  private cloverTokens(base: Record<string, string>, t: Record<string, unknown>): Record<string, string> {
+    if (!str(t.access_token)) throw new PosError('Clover didn’t give an access token.');
+    return { ...base, accessToken: str(t.access_token), accessExpiresAt: String(num(t.access_token_expiration)), refreshToken: str(t.refresh_token), refreshExpiresAt: String(num(t.refresh_token_expiration)) };
+  }
+
+  /** The adapter for a connection, with Clover's short-lived token renewed first when it is about to run out. */
+  private async adapterFor(c: PosConnection): Promise<PosAdapter> {
+    let creds = this.creds(c);
+    if (c.provider === 'clover' && creds.refreshToken && this.clover && Number(creds.accessExpiresAt) * 1000 < this.now().getTime() + 60_000) {
+      if (Number(creds.refreshExpiresAt) * 1000 < this.now().getTime()) throw new PosError('Clover’s sign-in has run out. Disconnect and connect Clover again.');
+      const t = await getJson(this.f, 'Clover', `${this.cloverHost(creds.region)}/oauth/v2/refresh`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: this.clover.appId, refresh_token: creds.refreshToken }) });
+      creds = this.cloverTokens(creds, t);
+      this.store.tx(() => this.store.posConnections.put({ ...c, credentialsEncrypted: encryptField(JSON.stringify(creds)) }));
+    }
+    return this.adapter(c.provider, creds);
   }
 
   disconnect(companyId: string) {
@@ -139,7 +192,7 @@ export class PosService {
   async people(companyId: string) {
     const c = this.require(companyId);
     if (c.provider === 'file') return { people: [], team: this.team(companyId).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`, email: e.email ?? null })) };
-    const list = await this.adapter(c.provider, this.creds(c)).people();
+    const list = await (await this.adapterFor(c)).people();
     const team = this.team(companyId);
     const taken = new Set(Object.values(c.employeeMap).filter((x): x is string => !!x));
     return {
@@ -185,7 +238,7 @@ export class PosService {
     if (this.now().getTime() - last < SYNC_GAP_MS) throw new ApiError(429, 'too_soon', 'Hold on a few seconds before pulling again.');
     this.lastSync.set(companyId, this.now().getTime());
     const company = this.store.companies.require(companyId, 'Company');
-    const adapter = this.adapter(c.provider, this.creds(c));
+    const adapter = await this.adapterFor(c);
     let read: Awaited<ReturnType<PosAdapter['shifts']>>; let people: Awaited<ReturnType<PosAdapter['people']>>;
     try {
       [read, people] = await Promise.all([adapter.shifts(from, to, zoneFor(company.homeState)), adapter.people()]);
