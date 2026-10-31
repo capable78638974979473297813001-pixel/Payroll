@@ -52,3 +52,29 @@ test('a database backup is a consistent copy that can be opened, and only the ne
   assert.equal(existsSync(files[0]!), false);
   assert.throws(() => new Store().backup(out, new Date()), /in memory/);
 });
+
+test('Render assigned URL is used consistently by startup checks and runtime config', async () => {
+  const { loadConfig } = await import('../src/config.ts');
+  const env = { ...GOOD, PUBLIC_BASE_URL: undefined, RENDER: 'true', RENDER_EXTERNAL_URL: ' https://totali-test.onrender.com/ ' };
+  assert.deepEqual(productionProblems(env).errors, []);
+  assert.equal(loadConfig(env).publicBaseUrl, 'https://totali-test.onrender.com');
+  const custom = { ...env, PUBLIC_BASE_URL: ' https://payroll.restaurant.example/ ' };
+  assert.equal(loadConfig(custom).publicBaseUrl, 'https://payroll.restaurant.example');
+  assert.deepEqual(productionProblems(custom).errors, []);
+  assert.equal(loadConfig({ ...env, PUBLIC_BASE_URL: '   ' }).publicBaseUrl, 'https://totali-test.onrender.com');
+});
+
+test('Render URL fallback keeps missing-URL and insecure-URL startup protections', async () => {
+  const { loadConfig } = await import('../src/config.ts');
+  for (const value of [undefined, '']) {
+    assert.match(productionProblems({ ...GOOD, PUBLIC_BASE_URL: undefined, RENDER: 'true', RENDER_EXTERNAL_URL: value }).errors.join(), /PUBLIC_BASE_URL is not set/);
+  }
+  for (const url of ['http://totali-test.onrender.com', 'https://localhost:8787']) {
+    assert.match(productionProblems({ ...GOOD, PUBLIC_BASE_URL: undefined, RENDER: 'true', RENDER_EXTERNAL_URL: url }).errors.join(), /public https/);
+  }
+  const invalidOverride = { ...GOOD, PUBLIC_BASE_URL: 'http://custom.example', RENDER: 'true', RENDER_EXTERNAL_URL: 'https://totali-test.onrender.com' };
+  assert.match(productionProblems(invalidOverride).errors.join(), /public https/);
+  assert.equal(loadConfig(invalidOverride).publicBaseUrl, 'http://custom.example');
+  assert.equal(loadConfig({ RENDER_EXTERNAL_URL: 'https://not-render.example' }).publicBaseUrl, undefined);
+  assert.match(productionProblems({ ...GOOD, PUBLIC_BASE_URL: undefined, RENDER: 'true', RENDER_EXTERNAL_URL: 'https://totali-test.onrender.com', TOTALI_DATA_KEY: undefined }).errors.join(), /TOTALI_DATA_KEY is not set/);
+});

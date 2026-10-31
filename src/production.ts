@@ -3,6 +3,8 @@
  * start if something that would lose or leak data, or break sign-in or billing, is missing. A warning is something to know
  * about but not a reason to stop.
  */
+import { publicBaseUrl } from './publicUrl.ts';
+
 export interface Problems { errors: string[]; warnings: string[] }
 
 export const isProduction = (env: NodeJS.ProcessEnv) => env.NODE_ENV === 'production' || Boolean((env.RENDER ?? '').trim());
@@ -14,8 +16,8 @@ export function productionProblems(env: NodeJS.ProcessEnv): Problems {
   if (!key) errors.push('TOTALI_DATA_KEY is not set: Social Security numbers and bank details cannot be stored. Make one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))" and keep a copy somewhere other than the server.');
   else if (Buffer.from(key, 'base64').length !== 32) errors.push('TOTALI_DATA_KEY must be 32 random bytes, base64-encoded.');
   if (!has('TOTALI_DATA_FILE')) errors.push('TOTALI_DATA_FILE is not set: data would live in memory and be lost on every restart.');
-  const base = (env.PUBLIC_BASE_URL ?? '').trim();
-  if (!base) errors.push('PUBLIC_BASE_URL is not set: emails, sign-in and payment pages need to know the site address.');
+  const base = publicBaseUrl(env);
+  if (!base) errors.push('PUBLIC_BASE_URL is not set: emails, sign-in and payment pages need to know the site address. On Render, RENDER_EXTERNAL_URL can provide it automatically.');
   else if (!/^https:\/\//.test(base) || /localhost|127\.0\.0\.1|\[::1\]/.test(base)) errors.push('PUBLIC_BASE_URL must be a public https address.');
   if (!has('RESEND_API_KEY') || !has('RESEND_FROM')) errors.push('RESEND_API_KEY and RESEND_FROM are not both set: nobody could verify their email, and new hires would get no link.');
   if (env.TOTALI_DEV === '1') errors.push('TOTALI_DEV=1 is set. It shows verification codes in the browser and must never be on in production.');
