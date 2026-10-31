@@ -29,7 +29,7 @@ export interface SetupDraft {
 export interface EmailCode {
   id: string;
   userId: string;
-  purpose: 'verify_email' | 'reset_password';
+  purpose: 'verify_email' | 'reset_password' | 'employee_login';
   /** Where the code was sent, so changing the address invalidates earlier codes. */
   email: string;
   salt: string;

@@ -53,7 +53,7 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   if (group) time.push(w('group_cost', 12, { groupBy: group }));
   tabs.push({ id: 'time', label: restaurant ? 'Time and tips' : 'Time', kind: 'page', widgets: time });
 
-  tabs.push({ id: 'onboarding', label: 'Onboarding', kind: 'page', widgets: [w('onboarding_board', 8), w('invite_form', 4), w('forms_status', 6), w('onboarding_progress', 6)] });
+  tabs.push({ id: 'onboarding', label: 'Onboarding', kind: 'page', widgets: [w('onboarding_board', 8), w('invite_form', 4), w('employee_access', 6), w('forms_status', 6), w('onboarding_progress', 6)] });
   tabs.push({ id: 'help', label: 'Help', kind: 'help', widgets: [] });
   tabs.push({ id: 'settings', label: 'Settings', kind: 'settings', widgets: [] });
 

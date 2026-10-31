@@ -5,6 +5,8 @@ import type { Config } from '../config.ts';
 import type { Store } from '../store/store.ts';
 import { assertAdmin, assertCompanyAccess, authenticate, type Principal } from '../domain/auth.ts';
 import { companyView, createCompany, updateCompany } from '../domain/companies.ts';
+import type { Employee } from '../domain/types.ts';
+import { PortalService } from '../portal/service.ts';
 import { addEmployee, employeeView, importYtd, requireEmployee, setPayoutAccounts, terminateEmployee, updateEmployee } from '../domain/employees.ts';
 import { deleteShift, listShifts, recordHouseDay, recordShift, recordShifts } from '../domain/timekeeping.ts';
 import { approvePayRun, draftPayRun, getRun, recalculatePayRun, voidPayRun } from '../payroll/payRuns.ts';
@@ -87,6 +89,7 @@ function cookieValue(header: string | undefined, name: string): string | undefin
 interface Ctx {
   req: IncomingMessage;
   user: User | null;
+  employee: Employee | null;
   params: Record<string, string>;
   query: URLSearchParams;
   raw: string;
@@ -100,7 +103,7 @@ interface Route {
   method: string;
   re: RegExp;
   keys: string[];
-  auth: 'none' | 'admin' | 'company' | 'user';
+  auth: 'none' | 'admin' | 'company' | 'user' | 'employee';
   handler: Handler;
   status: number;
 }
@@ -147,6 +150,9 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
   const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
   const google = deps.google !== undefined ? deps.google : (() => { const g = googleFromEnv(); return g ? new GoogleAuth(g, fetch, now) : null; })();
   const OAUTH_COOKIE = 'totali_oauth';
+  const portal = new PortalService(store, mailer, deps.banks, dashboards, now, deps.log);
+  const EMP_COOKIE = 'totali_emp';
+  const empCookie = (req: IncomingMessage, token: string, clear = false) => `${EMP_COOKIE}=${clear ? '' : token}; Path=/; HttpOnly; SameSite=Lax${clear ? '; Max-Age=0' : `; Max-Age=${30 * 86_400}`}${secureCookies(req) ? '; Secure' : ''}`;
   const contractors = new ContractorService(store, mailer, now);
   const jobs = new JobService(store, now);
   const range = (c: Ctx) => { const a = c.query.get('start'); const b = c.query.get('end'); if (!isIsoDate(a) || !isIsoDate(b)) throw badRequest('start and end must be YYYY-MM-DD'); return [a, b] as const; };
@@ -431,6 +437,40 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('PATCH', `${C}/jobs/:jid`, 'company', (c) => jobs.update(c.params.cid, c.params.jid, c.json())),
     route('DELETE', `${C}/jobs/:jid`, 'company', (c) => jobs.archive(c.params.cid, c.params.jid)),
     route('GET', `${C}/reports/wc`, 'company', (c) => { const r = wcReport(store, store.companies.require(c.params.cid, 'Company'), Number(c.query.get('year') ?? now().getUTCFullYear())); return c.query.get('format') === 'csv' ? new Text(r.csv, r.fileName) : { year: r.year, rows: r.rows, note: r.note }; }),
+    route('GET', `${C}/portal/access`, 'company', (c) => portal.access(c.params.cid)),
+    route('POST', `${C}/portal/rotate`, 'company', (c) => portal.rotate(c.params.cid)),
+    route('PUT', `${C}/portal/enabled`, 'company', (c) => portal.setEnabled(c.params.cid, c.json().enabled)),
+    route('POST', `${C}/employees/:eid/deposit-change`, 'company', (c) => portal.decideDeposit(c.params.cid, c.params.eid, c.json().approve)),
+    route('POST', '/v1/portal/start', 'none', async (c) => {
+      requireCsrf(c.req);
+      const wait = logins.hit(`portal:${c.ip}`, 30, now().getTime());
+      if (wait) throw new ApiError(429, 'rate_limited', `Too many tries from here. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
+      const o = c.json();
+      await portal.start(o.code, o.email);
+      return { ok: true, message: 'If that code and email match someone on the team, we sent a 6-digit code.' };
+    }),
+    route('POST', '/v1/portal/verify', 'none', (c) => {
+      requireCsrf(c.req);
+      const wait = logins.hit(`portalv:${c.ip}`, 60, now().getTime());
+      if (wait) throw new ApiError(429, 'rate_limited', `Too many tries from here. Try again in ${Math.ceil(wait / 60)} minutes.`, { retryAfterSeconds: wait });
+      const o = c.json();
+      const r = portal.verify(o.code, o.email, o.otp, c.req.headers['user-agent']);
+      return new Reply({ ok: true }, { 'set-cookie': empCookie(c.req, r.token) });
+    }),
+    route('POST', '/v1/portal/logout', 'none', (c) => {
+      requireCsrf(c.req);
+      const t = cookieValue(c.req.headers.cookie, EMP_COOKIE);
+      if (t) portal.logout(t);
+      return new Reply({ ok: true }, { 'set-cookie': empCookie(c.req, '', true) });
+    }),
+    route('GET', '/v1/portal/me', 'employee', (c) => portal.me(c.employee!)),
+    route('GET', '/v1/portal/stubs', 'employee', (c) => portal.stubs(c.employee!)),
+    route('GET', '/v1/portal/stubs/:rid', 'employee', (c) => portal.stub(c.employee!, c.params.rid)),
+    route('GET', '/v1/portal/hours', 'employee', (c) => { const a = c.query.get('start'); const b = c.query.get('end'); if (!isIsoDate(a) || !isIsoDate(b)) throw badRequest('start and end must be YYYY-MM-DD'); return portal.hours(c.employee!, a, b); }),
+    route('GET', '/v1/portal/w4', 'employee', (c) => portal.w4(c.employee!)),
+    route('PUT', '/v1/portal/w4', 'employee', (c) => portal.updateW4(c.employee!, c.json())),
+    route('POST', '/v1/portal/deposit', 'employee', async (c) => portal.requestDeposit(c.employee!, siteBase(c.req), c.json())),
+    route('DELETE', '/v1/portal/deposit', 'employee', (c) => portal.cancelDeposit(c.employee!)),
     route('GET', `${C}/profile`, 'company', (c) => profileView(store.companies.require(c.params.cid, 'Company'))),
     route('PUT', `${C}/profile`, 'company', (c) => saveProfile(store, c.params.cid, c.json())),
     route('POST', `${C}/profile/documents`, 'company', (c) => addDocument(store, c.params.cid, c.json()), 201),
@@ -680,6 +720,13 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
           if (method !== 'GET' && method !== 'HEAD' && r.auth !== 'none') requireCsrf(req);
         }
       }
+      let employee: Employee | null = null;
+      if (r.auth === 'employee') {
+        const et = cookieValue(req.headers.cookie, EMP_COOKIE);
+        employee = et ? portal.resolve(et) : null;
+        if (!employee) throw unauthorized('Sign in to see your pay stubs.');
+        if (method !== 'GET' && method !== 'HEAD') requireCsrf(req);
+      }
       if (r.auth === 'user') {
         if (!user) throw unauthorized('Sign in to continue.');
       } else if (r.auth === 'admin' || r.auth === 'company' || (r.auth === 'none' && req.headers.authorization)) {
@@ -700,6 +747,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       const ctx: Ctx = {
         req,
         user,
+        employee,
         params,
         query: url.searchParams,
         raw,

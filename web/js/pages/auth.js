@@ -220,7 +220,8 @@ export function login(ctx) {
     }
   } }, googleButton(), orRule(), googleError ? Alert('error', googleError) : null, email.el, pw.el, keep.el, err, btn);
   const card = [h('h1', {}, 'Welcome ', h('em', {}, 'back')), h('p', {}, 'Log in to your Totali account.'), form,
-    h('p', { class: 'fine', style: { marginTop: '20px' } }, 'Staying signed in lasts until you choose ', h('b', {}, 'Sign out'), ' in the top menu.')];
+    h('p', { class: 'fine', style: { marginTop: '20px' } }, 'Staying signed in lasts until you choose ', h('b', {}, 'Sign out'), ' in the top menu.'),
+    h('p', { class: 'fine', style: { marginTop: '8px' } }, 'On a team that uses Totali? ', link('/employee', { class: 'link' }, 'Employee sign in'), '.')];
   const aside = h('div', {}, photo('/assets/img/chef.jpg', 'Cooks plating dishes', '50% 40%'), Hand('Your pay run is where you left it.', { style: { left: '10px', top: '420px', width: '220px', fontSize: '26px', transform: 'rotate(-3deg)' } }));
   return { title: 'Log in — Totali', el: frame({ card, aside, nudge: ['New here?', '/signup', 'Create account'] }) };
 }

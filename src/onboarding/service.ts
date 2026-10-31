@@ -118,6 +118,7 @@ export class OnboardingService {
         tipped: (company.settings.roles.find((r) => r.key === e.roleKey)?.tipped ?? 'never') !== 'never',
         invitedAt: e.onboarding?.invitedAt ?? null, startDate: e.onboarding?.startDate ?? null, email: e.email ?? null,
         forms: { w4: f.w4, stateForm: requested ? (requested.includes('stateForm') ? !!e.onboarding?.stateForm : null) : null, i9: f.i9, deposit: f.deposit },
+        pendingDeposit: !!e.pendingDeposit,
         done: f.done || (requested ? this.missing(e, company).length === 0 : f.done),
         invited: !!requested, canRemind: !!requested && !!e.email && this.missing(e, company).length > 0,
         linkExpired: !!e.onboarding?.inviteExpiresAt && Date.parse(e.onboarding.inviteExpiresAt) < this.now().getTime(),

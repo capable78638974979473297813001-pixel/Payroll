@@ -61,6 +61,8 @@ export const WIDGETS: WidgetDef[] = [
     settings: [{ key: 'showLocation', label: 'Show work location', type: 'toggle', default: true }] },
   { type: 'tips_panel', label: 'Tips and tip pool', description: 'The week\'s card and cash tips, and how the pool splits.', category: 'Time', spans: [4, 6, 8, 12], defaultSpan: 4, needs: ['tip_reporting'], needsLabel: 'tips',
     settings: [] },
+  { type: 'employee_access', label: 'Employee sign-in code', description: 'The code you give your team so they can sign in to their own pay stubs and forms.', category: 'People', spans: [4, 6, 8, 12], defaultSpan: 4,
+    settings: [] },
   { type: 'built_from', label: 'Built from your answers', description: 'The answers your dashboard was built from, with a way to change them.', category: 'Setup', spans: [6, 8, 12], defaultSpan: 12,
     settings: [] },
   { type: 'welcome', label: 'Welcome banner', description: 'Your business name, a line of your own, and today\'s date.', category: 'General', spans: [6, 8, 12], defaultSpan: 12,

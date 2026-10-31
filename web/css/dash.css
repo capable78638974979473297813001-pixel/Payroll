@@ -186,3 +186,9 @@
   .dash .built .chip { border-radius: 99px; }
 }
 .dash .built .chips2 .chip { align-self: center; }
+
+@media (max-width: 900px) {
+  .dash.emp .nav .org { display: none; }
+  .dash.emp .nav .rt2 { margin-left: auto; }
+  .dash.emp .nav .rt2 .who-name { display: none; }
+}

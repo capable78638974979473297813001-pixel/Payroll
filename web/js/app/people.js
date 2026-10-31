@@ -5,6 +5,7 @@ import { Button, Alert, Chip, Field, modal, setLoading, toast } from '../ui.js';
 import { appPage } from './shell.js';
 import { app, base, refreshData } from './state.js';
 import { who, dollarsToCents, parseCsv, rangeLabel } from './payroll.js';
+import { accessCard } from './access.js';
 
 // ---------------------------------------------------------------- a tiny bus, so the cards on a page stay in step
 const bus = new EventTarget();
@@ -95,13 +96,20 @@ export const peopleCards = {
           h('tbody', {}, ...r.people.map((p) => {
             const remind = p.canRemind ? (() => { const b = h('button', { class: 'link as-button', type: 'button', 'data-remind': p.employeeId }, p.linkExpired ? 'Send a new link' : 'Send reminder'); b.addEventListener('click', () => sendReminder(p, b)); return b; })() : null;
             const s2 = p.i9NeedsSection2 ? h('button', { class: 'link as-button', type: 'button', 'data-i9': p.employeeId, onClick: () => i9Section2Modal(p) }, 'I-9 section 2') : null;
+            const bank = p.pendingDeposit ? h('span', { class: 'bank-change' }, Chip('Bank change', 'warn'), ' ', h('button', { class: 'link as-button', type: 'button', 'data-approve-bank': p.employeeId, onClick: async () => { try { await api.post(`${base()}/employees/${p.employeeId}/deposit-change`, { approve: true }); toast('success', `${p.name.split(' ')[0]}’s new account is approved. It’s verified before it’s used.`); peopleChanged(); } catch (e) { toast('error', e.message); } } }, 'Approve'), ' · ', h('button', { class: 'link as-button', type: 'button', 'data-decline-bank': p.employeeId, onClick: async () => { try { await api.post(`${base()}/employees/${p.employeeId}/deposit-change`, { approve: false }); toast('success', 'Declined.'); peopleChanged(); } catch (e) { toast('error', e.message); } } }, 'Decline')) : null;
             return h('tr', { 'data-employee': p.employeeId }, h('td', {}, link(`/app/people/${p.employeeId}`, { class: 'who-link' }, who(p.name, `${p.role}${p.location ? `, ${p.location}` : ''}`))),
-              h('td', { class: 'l hm' }, p.invited ? `Invited ${shortDate(p.invitedAt.slice(0, 10))}${p.startDate ? ` · starts ${shortDate(p.startDate)}` : ''}` : 'On payroll'), h('td', { class: 'l' }, paperwork(p)), h('td', { class: 'l' }, statusChip(p)), h('td', { class: 'l hm' }, remind, remind && s2 ? ' · ' : null, s2));
+              h('td', { class: 'l hm' }, p.invited ? `Invited ${shortDate(p.invitedAt.slice(0, 10))}${p.startDate ? ` · starts ${shortDate(p.startDate)}` : ''}` : 'On payroll'), h('td', { class: 'l' }, paperwork(p)), h('td', { class: 'l' }, statusChip(p)), h('td', { class: 'l hm' }, bank, bank && (remind || s2) ? ' · ' : null, remind, remind && s2 ? ' · ' : null, s2));
           }))) : h('div', { class: 'empty' }, 'Nobody to onboard yet. Invite a new hire on the right.'));
       } catch (e) { body.replaceChildren(Alert('error', e.message)); }
     };
     load(); onChange(load);
     return { title: null, head: h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Who’s finished'), cap), body };
+  },
+
+  employee_access() {
+    const body = h('div', {}, h('div', { class: 'empty' }, 'Loading…'));
+    accessCard().then((el) => body.replaceChildren(el)).catch((e) => body.replaceChildren(Alert('error', e.message)));
+    return { title: 'Employee sign-in code', body };
   },
 
   invite_form({ data }) {

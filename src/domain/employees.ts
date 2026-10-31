@@ -118,7 +118,7 @@ export function addEmployee(store: Store, companyId: string, body: unknown): Emp
     companyId,
     firstName: v.str(o, 'firstName', { max: 60 }),
     lastName: v.str(o, 'lastName', { max: 60 }),
-    ...(o.email !== undefined ? { email: v.str(o, 'email', { max: 200 }) } : {}),
+    ...(o.email !== undefined ? { email: v.str(o, 'email', { max: 200 }).trim().toLowerCase() } : {}),
     roleKey,
     hireDate,
     payType,
@@ -162,7 +162,7 @@ export function updateEmployee(store: Store, companyId: string, employeeId: stri
 
   if (o.firstName !== undefined) e.firstName = v.str(o, 'firstName', { max: 60 });
   if (o.lastName !== undefined) e.lastName = v.str(o, 'lastName', { max: 60 });
-  if (o.email !== undefined) e.email = v.str(o, 'email', { max: 200 });
+  if (o.email !== undefined) e.email = v.str(o, 'email', { max: 200 }).trim().toLowerCase();
   if (o.location !== undefined) { const loc = locationOf(company, o.location); if (loc) e.location = loc.name; else delete e.location; }
   if (o.season !== undefined) { const se = seasonOf(o.season); if (se) e.season = se; else delete e.season; }
   if (o.tags !== undefined) { const t = tagsOf(o.tags); if (t && Object.keys(t).length) e.tags = t; else delete e.tags; }

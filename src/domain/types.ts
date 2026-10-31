@@ -62,6 +62,9 @@ export interface Company {
   address?: string;
   /** Billing: the card on file (brand and last four only, held by Stripe) and who gets the invoices. */
   billing?: { stripeCustomerId?: string; email?: string; card?: { paymentMethodId: string; brand: string; last4: string; expMonth: number; expYear: number }; updatedAt?: string };
+  /** The code the owner gives employees so they can sign in to their own dashboard. Off switches it. */
+  joinCode?: string;
+  joinCodeOff?: boolean;
   /** Business verification (Company setup): who the business is and who owns it. */
   profile?: CompanyProfile;
   paySchedule: { frequency: PayFrequency; checkDateLagDays: number; /** The weekday employees are paid, when the business pays weekly or every other week. */ payWeekday?: string };
@@ -334,6 +337,8 @@ export interface Employee {
   location?: string;
   /** Free tags that group people: a department, a crew, a workers' comp class. */
   tags?: { department?: string; crew?: string; wcClass?: string };
+  /** A change of bank account an employee asked for. It takes effect only when the owner approves it. */
+  pendingDeposit?: { bankAccountId: string; requestedAt: string };
   /** For seasonal staff: when the season starts and ends. */
   season?: { start: string; end: string };
   ytd: ExtendedYearToDate;
