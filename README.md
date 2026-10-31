@@ -54,7 +54,7 @@ Before real customers, follow `docs/LAUNCH.md` (what only you can do, in order).
 
 1. Render, *New*, *Blueprint*, pick this repo and branch. It asks for the secret values.
 2. **`TOTALI_DATA_KEY`**: 32 random bytes, base64 (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`). It encrypts SSNs and bank numbers. Back it up somewhere other than the disk; losing it makes them unrecoverable.
-3. **`PUBLIC_BASE_URL`**: the site's address, with `https://`. It makes cookies `Secure` and decides where links in emails point. Without it the server refuses to build email links.
+3. **`PUBLIC_BASE_URL`**: optional on Render, which supplies `RENDER_EXTERNAL_URL` automatically. Set it to your `https://` address when using a custom domain. The same resolved URL is used by startup checks, Secure cookies, email links and OAuth callbacks. Outside Render, set it explicitly.
 4. **`RESEND_API_KEY`** and **`RESEND_FROM`**: email. Verify your domain in Resend and use an address on it; until then Resend only delivers to its account owner.
 5. Optional: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (add `{PUBLIC_BASE_URL}/v1/auth/google/callback` as a redirect URI; the button is hidden without them), `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` / `STRIPE_WEBHOOK_SECRET` (the subscription and bank linking; point a Stripe webhook at `/v1/stripe/webhook` for `setup_intent.succeeded`), `SUPPORT_EMAIL` (where Help messages go).
 

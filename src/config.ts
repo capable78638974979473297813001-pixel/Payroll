@@ -1,4 +1,5 @@
 import { validateRoutingNumber } from '../engine/payroll/directDeposit.ts';
+import { publicBaseUrl } from './publicUrl.ts';
 import type { AchConfig } from './money/ach.ts';
 
 export interface Config {
@@ -81,7 +82,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         trustSettlementDate: env.TOTALI_TRUST_SETTLEMENT_DATE === '1',
       },
     },
-    ...((env.PUBLIC_BASE_URL ?? '').trim() ? { publicBaseUrl: (env.PUBLIC_BASE_URL ?? '').trim().replace(/\/+$/, '') } : {}),
+    ...(publicBaseUrl(env) ? { publicBaseUrl: publicBaseUrl(env) } : {}),
     devTools: env.TOTALI_DEV === '1' && env.NODE_ENV !== 'production',
     ...((env.TOTALI_WEB_ROOT ?? '').trim() ? { webRoot: (env.TOTALI_WEB_ROOT ?? '').trim() } : {}),
     autoDisburse: env.TOTALI_AUTO_DISBURSE === '1',

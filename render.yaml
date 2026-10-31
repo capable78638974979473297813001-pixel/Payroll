@@ -27,8 +27,8 @@ services:
         generateValue: true
       - key: TOTALI_DATA_KEY        # 32 random bytes, base64. Back it up apart from the disk: losing it loses SSNs and bank numbers.
         sync: false
-      - key: PUBLIC_BASE_URL        # for example https://totali.onrender.com, or your own domain
-        sync: false
+      # Render supplies RENDER_EXTERNAL_URL automatically. For a custom domain,
+      # add PUBLIC_BASE_URL=https://your-domain.example in the service Environment.
       - key: RESEND_API_KEY
         sync: false
       - key: RESEND_FROM            # an address on a domain you have verified in Resend
