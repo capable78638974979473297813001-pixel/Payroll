@@ -79,3 +79,28 @@ test('a two-week period keeps each week under its own overtime line, and a new h
   const days = store.shifts.where((s) => s.employeeId === late.id).map((s) => s.workDate);
   assert.ok(days.length > 0 && days.every((d) => d >= '2026-10-22'), days.join());
 });
+
+test('hours by day: set a day, change it, clear it, and see the tip pool for that week', async () => {
+  const { daySummary, saveDay } = await import('../src/domain/weekEntry.ts');
+  const { store, company, server, cook } = setup();
+  saveDay(store, company, { employeeId: cook.id, date: '2026-10-20', minutes: 480 });
+  saveDay(store, company, { employeeId: cook.id, date: '2026-10-21', minutes: 360 });
+  saveDay(store, company, { employeeId: cook.id, date: '2026-10-20', minutes: 420 });
+  let sum = daySummary(store, company, FROM, TO);
+  const row = sum.people.find((p) => p.employeeId === cook.id)!;
+  assert.equal(row.perDay[1]!.minutes, 420);
+  assert.equal(row.totalMinutes, 780);
+  assert.equal(store.shifts.where((s) => s.employeeId === cook.id).length, 2, 'a changed day is not a second shift');
+  saveDay(store, company, { employeeId: cook.id, date: '2026-10-21', minutes: 0 });
+  assert.equal(daySummary(store, company, FROM, TO).people.find((p) => p.employeeId === cook.id)!.totalMinutes, 420);
+
+  recordShift(store, company.id, { employeeId: server.id, workDate: '2026-10-22', minutes: 360, chargedTipsCents: 20000 });
+  recordShift(store, company.id, { employeeId: server.id, workDate: '2026-10-23', minutes: 360 });
+  refused(() => saveDay(store, company, { employeeId: server.id, date: '2026-10-22', minutes: 0 }), 'has_tips');
+  recordShift(store, company.id, { employeeId: server.id, workDate: '2026-10-23', minutes: 60 });
+  refused(() => saveDay(store, company, { employeeId: server.id, date: '2026-10-23', minutes: 100 }), 'detailed_time_exists');
+  sum = daySummary(store, company, FROM, TO);
+  assert.equal(sum.tips.chargedCents, 20000);
+  assert.equal(sum.tips.totalCents, 20000);
+  assert.throws(() => saveDay(store, company, { employeeId: cook.id, date: '2025-01-01', minutes: 60 }), /wasn’t employed/);
+});

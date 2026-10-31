@@ -13,7 +13,8 @@ import { profilePage, peopleCards } from './app/people.js';
 import { RENDERERS } from './widgets.js';
 import { joinPage } from './pages/join.js';
 
-Object.assign(RENDERERS, peopleCards);
+import { timeCards } from './app/time.js';
+Object.assign(RENDERERS, peopleCards, timeCards);
 
 const root = document.getElementById('app');
 mount(root, h('div', { class: 'loading-screen' }, h('div', { class: 'spinner', role: 'status', 'aria-label': 'Loading' })));

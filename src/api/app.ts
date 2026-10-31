@@ -23,7 +23,7 @@ import { StripeClient, stripeConfigured, stripeMode, type StripeBillingApi } fro
 import { updateSetup } from '../builder/edit.ts';
 import { OnboardingService } from '../onboarding/service.ts';
 import { profileView, saveProfile, saveTaxAccounts, taxAccountsView, addDocument, removeDocument } from '../domain/profile.ts';
-import { weekSummary, saveWeek } from '../domain/weekEntry.ts';
+import { weekSummary, saveWeek, daySummary, saveDay } from '../domain/weekEntry.ts';
 import { getIndustry, getNiche, listIndustries } from '../industries/index.ts';
 import { isIsoDate } from '../lib/dates.ts';
 import { newId } from '../lib/ids.ts';
@@ -384,6 +384,12 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('PUT', `${C}/profile`, 'company', (c) => saveProfile(store, c.params.cid, c.json())),
     route('POST', `${C}/profile/documents`, 'company', (c) => addDocument(store, c.params.cid, c.json()), 201),
     route('DELETE', `${C}/profile/documents/:did`, 'company', (c) => removeDocument(store, c.params.cid, c.params.did)),
+    route('GET', `${C}/time/days`, 'company', (c) => {
+      const from = c.query.get('start'); const to = c.query.get('end');
+      if (!isIsoDate(from) || !isIsoDate(to)) throw badRequest('start and end must be YYYY-MM-DD');
+      return daySummary(store, store.companies.require(c.params.cid, 'Company'), from, to);
+    }),
+    route('PUT', `${C}/time/day`, 'company', (c) => saveDay(store, store.companies.require(c.params.cid, 'Company'), c.json())),
     route('GET', `${C}/time/week`, 'company', (c) => {
       const from = c.query.get('start'); const to = c.query.get('end');
       if (!isIsoDate(from) || !isIsoDate(to)) throw badRequest('start and end must be YYYY-MM-DD');

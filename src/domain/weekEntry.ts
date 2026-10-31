@@ -4,7 +4,7 @@ import { daysBetween, eachDay } from '../lib/dates.ts';
 import type { Store } from '../store/store.ts';
 import type { Company, Employee } from './types.ts';
 import { recordShift } from './timekeeping.ts';
-import { formsOf } from '../dashboard/data.ts';
+import { formsOf, tipPoolFor } from '../dashboard/data.ts';
 
 /**
  * The run-payroll grid enters a whole pay period at once: regular hours, overtime hours and tips for each person.
@@ -117,3 +117,47 @@ export function saveWeek(store: Store, company: Company, body: unknown) {
   return weekSummary(store, company, from, to);
 }
 
+
+// ---------------------------------------------------------------- the Time and tips page: hours by day
+
+/** A workweek, day by day: each person's minutes, the tips, and the tip pool's split. */
+export function daySummary(store: Store, company: Company, from: string, to: string) {
+  checkPeriod(from, to);
+  const days = eachDay(from, to);
+  const roles = new Map(company.settings.roles.map((r) => [r.key, r]));
+  const shifts = store.shifts.where((s) => s.companyId === company.id && s.workDate >= from && s.workDate <= to);
+  const people = store.employees.where((e) => e.companyId === company.id && employedInPeriod(e, from, to)).sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName)).map((e) => {
+    const mine = shifts.filter((s) => s.employeeId === e.id);
+    const perDay = days.map((d) => { const day = mine.filter((s) => s.workDate === d); return { minutes: day.reduce((n, s) => n + s.minutes, 0), shifts: day.length, locked: day.some((s) => !!s.lockedByRunId) }; });
+    return { employeeId: e.id, name: `${e.firstName} ${e.lastName}`, role: roles.get(e.roleKey)?.label ?? e.roleKey, location: e.location ?? null, hiredOn: e.hireDate, perDay, totalMinutes: perDay.reduce((n, d) => n + d.minutes, 0) };
+  }).filter((p) => p.totalMinutes > 0 || p.perDay.length > 0);
+  const charged = shifts.reduce((n, s) => n + s.chargedTipsCents, 0);
+  const cash = shifts.reduce((n, s) => n + s.cashTipsCents, 0);
+  return { periodStart: from, periodEnd: to, days, people, tips: { chargedCents: charged, cashCents: cash, totalCents: charged + cash, pool: tipPoolFor(store, company, from, to), poolOn: company.settings.policy.pool.enabled, basis: company.settings.policy.pool.basis } };
+}
+
+/** Set one person's hours for one day. A day with one shift changes that shift; a day with none gets one. */
+export function saveDay(store: Store, company: Company, body: unknown) {
+  const o = v.obj(body);
+  const emp = store.employees.get(v.str(o, 'employeeId'));
+  if (!emp || emp.companyId !== company.id) throw badRequest('That person isn’t on your team.');
+  const date = v.date(o, 'date');
+  const minutes = v.int(o, 'minutes', 0, 1440);
+  const name = `${emp.firstName} ${emp.lastName}`;
+  if (!employedInPeriod(emp, date, date)) throw badRequest(`${name} wasn’t employed on ${date}.`);
+  const day = store.shifts.where((s) => s.companyId === company.id && s.employeeId === emp.id && s.workDate === date);
+  if (day.some((s) => s.lockedByRunId)) throw conflict('period_closed', `${name}’s time on ${date} was already paid.`);
+  if (day.length > 1) throw conflict('detailed_time_exists', `${name} has more than one shift on ${date}. Change them one by one.`);
+  const closed = store.payRuns.where((r) => r.companyId === company.id && r.status !== 'draft' && r.status !== 'voided' && r.periodStart <= date && date <= r.periodEnd)[0];
+  if (closed) throw conflict('period_closed', `${date} is inside an approved pay run. Void it to change this day.`);
+  const [existing] = day;
+  store.tx(() => {
+    if (!existing) { if (minutes > 0) recordShift(store, company.id, { employeeId: emp.id, workDate: date, minutes, externalId: `day:${emp.id}:${date}` }); return; }
+    if (minutes === 0) {
+      if (existing.chargedTipsCents + existing.cashTipsCents > 0) throw conflict('has_tips', `${name} has tips on ${date}. Take those off first.`);
+      store.shifts.delete(existing.id); return;
+    }
+    store.shifts.put({ ...existing, minutes });
+  });
+  return { ok: true };
+}

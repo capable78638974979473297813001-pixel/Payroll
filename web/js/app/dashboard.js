@@ -61,6 +61,7 @@ export function dashboardTab() {
           first ? Button({ variant: 'ghost', size: 'sm', href: '/app/onboarding' }, 'Add employee') : null,
           tab.id === 'people' ? Button({ variant: 'ghost', size: 'sm', type: 'button', onClick: importPeopleModal }, 'Import from spreadsheet') : null,
           tab.id === 'people' ? Button({ size: 'sm', href: '/app/onboarding' }, 'Add employee') : null,
+          tab.id === 'time' ? Button({ size: 'sm', href: '/app/payroll/run' }, 'Run payroll') : null,
           tab.id === 'payroll' ? Button({ size: 'sm', href: '/app/payroll/run' }, 'Run payroll') : null,
           first ? Button({ size: 'sm', href: '/app/payroll/run' }, t('payroll') === 'Payroll' ? 'Run payroll' : `Run ${t('payroll').toLowerCase()}`) : null,
           st.editing ? null : Button({ variant: 'ghost', size: 'sm', type: 'button', onClick: startEdit, 'data-testid': 'customize' }, 'Customize'))), grid);

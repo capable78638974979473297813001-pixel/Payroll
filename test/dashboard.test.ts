@@ -40,16 +40,15 @@ test('the design\'s restaurant gets cards for what it said: tips, a tip pool, Mi
   const mods = c.tabs.find((t) => t.id === 'overview')!.widgets.filter((w) => w.type === 'module');
   assert.deepEqual(mods.map((w) => w.settings.module), ['pay_run', 'team', 'hours_tips', 'federal_taxes', 'new_hire_forms', 'state_mi', 'locations', 'contractors']);
   assert.deepEqual(mods.map((w) => w.span), [8, 4, 4, 4, 4, 4, 4, 4]);
-  for (const t of ['tips_week', 'tip_pool_card']) assert.ok(types(c, 'time').includes(t), t);
+  for (const t of ['time_week', 'tips_panel']) assert.ok(types(c, 'time').includes(t), t);
   for (const t of ['locations_card', 'contractors_card']) assert.ok(types(c, 'people').includes(t), t);
-  assert.ok(types(c, 'time').includes('tip_pool_card'));
 });
 
 test('a business with no tips and one location gets none of those cards', () => {
   const { svc, company } = business('restaurant', { ...FULL, locations: [LOCS[1]!], tips: { on: false, pool: 'none' }, contractors: { on: false } });
   const c = svc.get(company.id).config;
   const all = c.tabs.flatMap((t) => t.widgets.map((w) => w.type));
-  for (const t of ['tips_week', 'tip_pool_card', 'locations_card', 'contractors_card']) assert.ok(!all.includes(t), t);
+  for (const t of ['tips_panel', 'locations_card', 'contractors_card']) assert.ok(!all.includes(t), t);
   const mods = c.tabs.find((t) => t.id === 'overview')!.widgets.filter((w) => w.type === 'module').map((w) => w.settings.module);
   for (const m of ['locations', 'contractors']) assert.ok(!mods.includes(m as string), m);
   assert.equal(c.tabs.find((t) => t.id === 'time')!.label, 'Time and tips');
@@ -211,7 +210,7 @@ test('reverting drops cards the business can no longer have instead of failing',
   const saved = svc.save(company.id, c, d.rev);
   // The business stops tracking tips.
   store.tx(() => store.companies.put({ ...store.companies.get(company.id)!, setup: { ...store.companies.get(company.id)!.setup!, answers: { ...FULL, tips: { on: false, pool: 'none' } } } }));
-  const next = svc.save(company.id, { ...saved.config, tabs: saved.config.tabs.map((t) => ({ ...t, widgets: t.widgets.filter((w) => w.type !== 'tips_week' && w.type !== 'tip_pool_card') })) }, saved.rev);
+  const next = svc.save(company.id, { ...saved.config, tabs: saved.config.tabs.map((t) => ({ ...t, widgets: t.widgets.filter((w) => w.type !== 'tips_week' && w.type !== 'tip_pool_card' && w.type !== 'tips_panel') })) }, saved.rev);
   const back = svc.revert(company.id, saved.revisions[0]!.rev);
   assert.ok(!back.config.tabs.flatMap((t) => t.widgets).some((w) => w.type === 'tips_week'));
   assert.ok(next.rev < back.rev);

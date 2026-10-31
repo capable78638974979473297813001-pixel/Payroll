@@ -48,9 +48,7 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   if (has('contractors')) people.push(w('contractors_card', 6));
   tabs.push({ id: 'people', label: 'People', kind: 'page', widgets: people });
 
-  const time: DashboardWidget[] = [w('hours_week', 6), w('overtime_watch', 6)];
-  if (has('tip_reporting')) time.push(w('tips_week', 6));
-  if (has('tip_pool')) time.push(w('tip_pool_card', 6));
+  const time: DashboardWidget[] = has('tip_reporting') ? [w('time_week', 8), w('tips_panel', 4), w('overtime_watch', 6)] : [w('time_week', 12), w('overtime_watch', 6)];
   const group = has('dept_costs') ? 'department' : has('crew_hours') ? 'crew' : has('job_costs') ? 'job' : has('wc_payroll') ? 'wc' : null;
   if (group) time.push(w('group_cost', 12, { groupBy: group }));
   tabs.push({ id: 'time', label: restaurant ? 'Time and tips' : 'Time', kind: 'page', widgets: time });

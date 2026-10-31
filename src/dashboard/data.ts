@@ -46,6 +46,27 @@ function answerChips(company: Company, a: Record<string, unknown>): string[] {
   return out;
 }
 
+/** An estimate of one workweek's tip pool, shared by hours or by role points among the roles in the pool. Null when there is no pool or no card tips. */
+export function tipPoolFor(store: Store, company: Company, start: string, end: string): { basis: string; totalCents: number; rows: Array<{ employeeId: string; name: string; hours: number; shareCents: number }> } | null {
+  const policy = company.settings.policy;
+  const shifts = store.shifts.where((s) => s.companyId === company.id && s.workDate >= start && s.workDate <= end);
+  const charged = shifts.reduce((n, s) => n + s.chargedTipsCents, 0);
+  if (!policy.pool.enabled || charged <= 0) return null;
+  const roles = new Map(company.settings.roles.map((r) => [r.key, r]));
+  const weights = new Map<string, number>(); const minutes = new Map<string, number>();
+  for (const sh of shifts) {
+    if (!policy.pool.roles.includes(sh.roleKey)) continue;
+    const pts = policy.pool.basis === 'points' ? (roles.get(sh.roleKey)?.poolPoints ?? 1) : 1;
+    weights.set(sh.employeeId, (weights.get(sh.employeeId) ?? 0) + sh.minutes * pts);
+    minutes.set(sh.employeeId, (minutes.get(sh.employeeId) ?? 0) + sh.minutes);
+  }
+  const ids = [...weights.keys()];
+  if (ids.length === 0) return null;
+  const shares = allocate(charged, ids.map((id) => weights.get(id)!));
+  const nameOf = (id: string) => { const e = store.employees.get(id); return e ? `${e.firstName} ${e.lastName}` : id; };
+  return { basis: policy.pool.basis, totalCents: charged, rows: ids.map((id, i) => ({ employeeId: id, name: nameOf(id), hours: Math.round(((minutes.get(id) ?? 0) / 60) * 100) / 100, shareCents: shares[i]! })).sort((x, y) => y.shareCents - x.shareCents) };
+}
+
 /** Everything the dashboard's cards show, in one read. Empty where there is nothing yet. */
 export function dashboardData(store: Store, company: Company, today: string) {
   const a = availabilityFor(company, today);
@@ -97,20 +118,7 @@ export function dashboardData(store: Store, company: Company, today: string) {
     byDay: byDay.map((d) => ({ date: d.date, chargedTipsCents: d.chargedTipsCents, cashTipsCents: d.cashTipsCents })),
   };
 
-  // ---- an estimate of this week's tip pool, shared by hours or by role points among the roles in the pool
-  let tipPool: { basis: string; totalCents: number; rows: Array<{ name: string; shareCents: number }> } | null = null;
-  const policy = company.settings.policy;
-  if (policy.pool.enabled && tips.chargedCents > 0) {
-    const weights = new Map<string, number>();
-    for (const sh of shifts) {
-      if (!policy.pool.roles.includes(sh.roleKey)) continue;
-      const pts = policy.pool.basis === 'points' ? (roles.get(sh.roleKey)?.poolPoints ?? 1) : 1;
-      weights.set(sh.employeeId, (weights.get(sh.employeeId) ?? 0) + sh.minutes * pts);
-    }
-    const ids = [...weights.keys()];
-    const shares = allocate(tips.chargedCents, ids.map((id) => weights.get(id)!));
-    tipPool = { basis: policy.pool.basis, totalCents: tips.chargedCents, rows: ids.map((id, i) => ({ name: nameOf(id), shareCents: shares[i]! })).sort((x, y) => y.shareCents - x.shareCents) };
-  }
+  const tipPool = tipPoolFor(store, company, start, end);
 
   // ---- forms
   const forms = active.map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`, ...formsOf(e, wantsStateForm) }));
