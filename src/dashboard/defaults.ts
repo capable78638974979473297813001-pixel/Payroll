@@ -36,12 +36,12 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
 
   // The overview is the sections the setup built (pay run, team, taxes and so on), each with its live numbers and
   // checklist, in the order and sizes the owner would expect. The owner can move, resize, swap or remove any of them.
-  const overview: DashboardWidget[] = [w('built_from', 12), w('setup_progress', 12)];
+  const overview: DashboardWidget[] = [w('next_payroll_hero', 8), w('todo_list', 4), w('cost_trend', 6), w('tax_due', 6), w('built_from', 12)];
   const a2 = a as Availability & { build?: { modules: Array<{ id: string }> } };
   for (const m of a2.build?.modules ?? []) overview.push(w('module', m.id === 'pay_run' ? 8 : 4, { module: m.id }));
   tabs.push({ id: 'overview', label: 'Overview', kind: 'page', widgets: overview });
 
-  tabs.push({ id: 'payroll', label: 'Payroll', kind: 'page', widgets: [w('next_payroll', 6), w('payroll_history', 6), w('payroll_cost', 6), w('tax_summary', 6), w('compliance', 12)] });
+  tabs.push({ id: 'payroll', label: 'Payroll', kind: 'page', widgets: [w('next_payroll_hero', 12), w('payroll_history', 6), w('cost_trend', 6), w('payroll_cost', 6), w('tax_summary', 6)] });
 
   const people: DashboardWidget[] = [w('people_directory', 12), w('team_summary', 6), w('onboarding_progress', 6)];
   if (has('locations')) people.push(w('locations_card', 6));
@@ -54,6 +54,10 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   tabs.push({ id: 'time', label: restaurant ? 'Time and tips' : 'Time', kind: 'page', widgets: time });
 
   tabs.push({ id: 'onboarding', label: 'Onboarding', kind: 'page', widgets: [w('onboarding_board', 8), w('invite_form', 4), w('employee_access', 6), w('forms_status', 6), w('onboarding_progress', 6)] });
+  const taxTab: DashboardWidget[] = [w('tax_due', 12, { count: 20 }), w('compliance', 6)];
+  for (const st of a.states) taxTab.push(w('state_card', 6, { state: st }));
+  tabs.push({ id: 'taxes', label: 'Taxes', kind: 'page', widgets: taxTab });
+  tabs.push({ id: 'reports', label: 'Reports', kind: 'page', widgets: [w('reports_list', 12)] });
   tabs.push({ id: 'help', label: 'Help', kind: 'help', widgets: [] });
   tabs.push({ id: 'settings', label: 'Settings', kind: 'settings', widgets: [] });
 

@@ -21,6 +21,7 @@ import { tipSplit } from '../tax/tipSplit.ts';
 import { tipReport } from '../restaurant/reports.ts';
 import { suggestPeriods } from '../payroll/schedule.ts';
 import { GoogleAuth, googleFromEnv } from '../accounts/google.ts';
+import { payrollRegister, hoursReport, roster } from '../reports/service.ts';
 import { JobService, wcReport } from '../jobs/service.ts';
 import { ContractorService } from '../contractors/service.ts';
 import { BillingService } from '../billing/service.ts';
@@ -153,6 +154,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
   const portal = new PortalService(store, mailer, deps.banks, dashboards, now, deps.log);
   const EMP_COOKIE = 'totali_emp';
   const empCookie = (req: IncomingMessage, token: string, clear = false) => `${EMP_COOKIE}=${clear ? '' : token}; Path=/; HttpOnly; SameSite=Lax${clear ? '; Max-Age=0' : `; Max-Age=${30 * 86_400}`}${secureCookies(req) ? '; Secure' : ''}`;
+  const taxCache = new Map<string, { at: number; value: unknown }>();
   const contractors = new ContractorService(store, mailer, now);
   const jobs = new JobService(store, now);
   const range = (c: Ctx) => { const a = c.query.get('start'); const b = c.query.get('end'); if (!isIsoDate(a) || !isIsoDate(b)) throw badRequest('start and end must be YYYY-MM-DD'); return [a, b] as const; };
@@ -436,6 +438,9 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('GET', `${C}/jobs/export`, 'company', (c) => { const [a, b] = range(c); const f = jobs.exportCsv(c.params.cid, a, b); return new Text(f.content, f.fileName); }),
     route('PATCH', `${C}/jobs/:jid`, 'company', (c) => jobs.update(c.params.cid, c.params.jid, c.json())),
     route('DELETE', `${C}/jobs/:jid`, 'company', (c) => jobs.archive(c.params.cid, c.params.jid)),
+    route('GET', `${C}/reports/register`, 'company', (c) => { const [a, b] = range(c); const f = payrollRegister(store, c.params.cid, a, b); return new Text(f.content, f.fileName); }),
+    route('GET', `${C}/reports/hours`, 'company', (c) => { const [a, b] = range(c); const f = hoursReport(store, c.params.cid, a, b); return new Text(f.content, f.fileName); }),
+    route('GET', `${C}/reports/roster`, 'company', (c) => { const f = roster(store, c.params.cid); return new Text(f.content, f.fileName); }),
     route('GET', `${C}/reports/wc`, 'company', (c) => { const r = wcReport(store, store.companies.require(c.params.cid, 'Company'), Number(c.query.get('year') ?? now().getUTCFullYear())); return c.query.get('format') === 'csv' ? new Text(r.csv, r.fileName) : { year: r.year, rows: r.rows, note: r.note }; }),
     route('GET', `${C}/portal/access`, 'company', (c) => portal.access(c.params.cid)),
     route('POST', `${C}/portal/rotate`, 'company', (c) => portal.rotate(c.params.cid)),
@@ -612,7 +617,13 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       const num = (k: string) => (c.query.get(k) === null ? undefined : Number(c.query.get(k)));
       const asOf = c.query.get('asOf') ?? undefined;
       if (asOf !== undefined && !isIsoDate(asOf)) throw badRequest('asOf must be YYYY-MM-DD');
-      return runMasteryTax(store, c.params.cid, command, { year: num('year'), quarter: num('quarter'), state: c.query.get('state') ?? undefined, asOf });
+      const key = `${c.params.cid}|${command}|${c.query.toString()}|${store.payRuns.where((r) => r.companyId === c.params.cid).length}|${store.taxDeposits.where((d) => d.companyId === c.params.cid).length}|${now().toISOString().slice(0, 10)}`;
+      const hit = taxCache.get(key);
+      if (hit && hit.at > now().getTime() - 60_000) return hit.value;
+      const value = await runMasteryTax(store, c.params.cid, command, { year: num('year'), quarter: num('quarter'), state: c.query.get('state') ?? undefined, asOf });
+      taxCache.set(key, { at: now().getTime(), value });
+      if (taxCache.size > 200) taxCache.delete(taxCache.keys().next().value!);
+      return value;
     }),
 
     // ---- ops: what the bank tells Totali. Admin only: a company must never be able to confirm its own funds.

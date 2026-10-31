@@ -192,3 +192,40 @@
   .dash.emp .nav .rt2 { margin-left: auto; }
   .dash.emp .nav .rt2 .who-name { display: none; }
 }
+
+/* the owner's home: next payroll, what needs you */
+.dash .hero { display: grid; gap: 16px; }
+.dash .hero-top { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.dash .hero i, .dash .runby i { display: block; font: 12px Inter, sans-serif; color: var(--d-faint); font-style: normal; margin-bottom: 2px; }
+.dash .hero-n { display: block; font: 400 34px/1.1 var(--d-font-head); color: var(--d-accent); letter-spacing: -.01em; }
+.dash .runby { border-left: 1px solid var(--d-line); padding-left: 22px; }
+.dash .runby b { display: block; font: 600 20px Inter, sans-serif; letter-spacing: -.01em; }
+.dash .runby small { color: var(--d-muted); font: 13px Inter, sans-serif; }
+.dash .ready { list-style: none; display: grid; gap: 7px; font: 14px Inter, sans-serif; }
+.dash .ready li { display: flex; gap: 10px; align-items: baseline; }
+.dash .tick { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font: 700 11px Inter, sans-serif; flex: none; transform: translateY(2px); }
+.dash .ready li.good .tick, .dash .allgood .tick { background: var(--okbg); color: var(--d-good); }
+.dash .ready li.warn .tick { background: color-mix(in srgb, var(--d-warn) 18%, var(--d-card)); color: var(--d-warn); }
+.dash .allgood { display: flex; gap: 12px; align-items: center; padding: 6px 0; }
+.dash .allgood .tick { width: 30px; height: 30px; font-size: 15px; transform: none; }
+.dash .todos { list-style: none; margin: 0; padding: 0; }
+.dash .todos li { display: grid; grid-template-columns: 10px 1fr auto; gap: 12px; align-items: start; padding: 11px 0; border-top: 1px solid var(--hair); font: 14px/1.35 Inter, sans-serif; }
+.dash .todos li:first-child { border-top: 0; }
+.dash .todos .lt { display: flex; flex-direction: column; min-width: 0; }
+.dash .todos .lt b { font-weight: 600; }
+.dash .todos .lt i { font-style: normal; color: var(--d-muted); font-size: 13px; }
+.dash .todos .sev { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--d-faint); }
+.dash .todos li.urgent .sev { background: var(--tang, #F0613A); }
+.dash .todos li.soon .sev { background: var(--d-warn); }
+.dash .late { color: var(--d-bad); font: 600 12.5px Inter, sans-serif; }
+@media (max-width: 700px) { .dash .runby { border-left: 0; padding-left: 0; } }
+.dash .lastrun { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; border-top: 1px solid var(--hair); padding-top: 12px; margin-top: 2px; font: 13.5px Inter, sans-serif; color: var(--d-muted); }
+.dash .lastrun span { flex: 1; min-width: 220px; }
+.dash .lastrun i { display: inline; margin-right: 8px; }
+.dash .costbars { justify-content: flex-start; gap: 14px; }
+.dash .costbars span { flex: 0 0 64px; max-width: 64px; }
+.dash .bl.costbars span { text-align: center; line-height: 1.35; }
+.dash .bl.costbars b { color: var(--d-ink); font-weight: 600; }
+.dash .bars.costbars { height: 96px; }
+.dash td { vertical-align: top; }
+.dash [data-tax] td:nth-child(3), .dash [data-tax] td:nth-child(4) { white-space: nowrap; }

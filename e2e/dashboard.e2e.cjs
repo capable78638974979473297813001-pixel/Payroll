@@ -16,10 +16,10 @@ const typesOnPage = (page) => page.locator('.grid.cards > .card[data-widget]').e
     await buildCompany(page, server.base);
 
     // ---- the starting dashboard follows the business
-    assert.deepEqual(await page.locator('.nav .tabs a').allTextContents(), ['Overview', 'Payroll', 'People', 'Time and tips', 'Onboarding']);
+    assert.deepEqual(await page.locator('.nav .tabs a').allTextContents(), ['Overview', 'Payroll', 'People', 'Time and tips', 'Onboarding', 'Taxes', 'Reports']);
     assert.deepEqual(await page.locator('.nav .rt2 a.hl').allTextContents(), ['Help', 'Settings']);
     const start = await typesOnPage(page);
-    assert.deepEqual(start.slice(0, 2), ['built_from', 'setup_progress']);
+    assert.deepEqual(start.slice(0, 4), ['next_payroll_hero', 'todo_list', 'cost_trend', 'tax_due']);
     assert.equal(start.filter((t) => t === 'module').length, 8, 'the design\'s eight sections');
     assert.equal(await page.locator('.nav .org').textContent(), 'MMaple & Main Diner', 'the initial mark and the business name');
     assert.equal(await cssVar(page, '--d-accent'), '#8e1f4e');
@@ -30,6 +30,8 @@ const typesOnPage = (page) => page.locator('.grid.cards > .card[data-widget]').e
     // empty states, not errors
     assert.ok((await page.locator('[data-module=pay_run]').textContent()).includes('Run payroll'));
     assert.ok((await page.locator('[data-module=federal_taxes]').textContent()).includes('after your first pay run'));
+    assert.ok((await page.locator('[data-type=next_payroll_hero]').textContent()).includes('Run it by'), 'the home says when to run payroll by');
+    assert.ok((await page.locator('[data-type=todo_list]').textContent()).includes('Add your EIN'), 'and what to do first');
     await shot('dash-start', true);
 
     // ---- customize: look

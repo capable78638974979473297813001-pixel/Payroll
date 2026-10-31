@@ -2,6 +2,8 @@ import { h, money, hoursFromMinutes, longDate, shortDate, plural } from './dom.j
 import { link } from './router.js';
 import { Button, Chip, StatusChip, toast } from './ui.js';
 import { api } from './api.js';
+import { base } from './app/state.js';
+import { modal, Field, setLoading, Alert } from './ui.js';
 import { session } from './session.js';
 
 const svgNs = 'http://www.w3.org/2000/svg';
@@ -288,3 +290,101 @@ export const RENDERERS = {
     return { title: `Finish setting up · ${data.setup.length - left.length} of ${data.setup.length}`, body: h('ul', { class: 'row-list' }, ...data.setup.map((s) => h('li', {}, h('span', { style: { display: 'flex', gap: '10px', alignItems: 'center' } }, h('span', { class: `dchip ${s.done ? 'good' : 'warn'}` }, s.done ? 'Done' : 'To do'), s.label), s.done ? null : link(s.to, { class: 'link' }, 'Go')))) };
   },
 };
+
+// ---------------------------------------------------------------- the owner's home: what is next, what needs you, what it costs
+const dayText = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+const inDays = (n) => (n === 0 ? 'today' : n === 1 ? 'tomorrow' : n < 0 ? `${-n} ${n === -1 ? 'day' : 'days'} ago` : `in ${n} days`);
+const STAGE = { not_started: ['Not started', 'line'], draft: ['In progress', 'warn'], approved: ['Approved', 'ok'], paid: ['Paid', 'ok'] };
+
+const TAX_NAMES = { 'US-941': 'Federal payroll tax (Form 941)', 'US-940': 'Federal unemployment (Form 940)' };
+const taxName = (g, state) => TAX_NAMES[g] || (/-WH$/.test(g) ? `${state} income tax withholding` : /-UI$/.test(g) ? `${state} unemployment tax` : /-LOCAL$|-CITY$/.test(g) ? `${g.split('-')[0]} city income tax` : g);
+
+function recordTaxModal(row, done) {
+  const date = Field({ label: 'Date you paid', name: 'date', type: 'date', value: new Date().toISOString().slice(0, 10) });
+  const amount = Field({ label: 'Amount paid', name: 'amount', value: row.Outstanding.replace(/,/g, ''), inputmode: 'decimal' });
+  const ref = Field({ label: 'Confirmation number', name: 'reference', placeholder: 'From EFTPS or your state', hint: 'So you can find it later.' });
+  const err = h('div', {}); const go = Button({}, 'Record payment');
+  const m = modal({ title: `Record a payment: ${row.name}`, body: h('div', { class: 'f' }, h('p', { class: 'fine', style: { margin: 0 } }, 'Totali doesn’t send this money. You pay the IRS or the state yourself, then record it here so it stops showing as due.'), date.el, amount.el, ref.el, err), actions: [Button({ variant: 'ghost', onClick: () => m.close() }, 'Cancel'), go] });
+  go.addEventListener('click', async () => {
+    const cents = Math.round(Number(amount.value.replace(/[$,]/g, '')) * 100);
+    if (!Number.isFinite(cents) || cents <= 0) return amount.setError('Enter the amount you paid.');
+    if (!ref.value.trim()) return ref.setError('Add the confirmation number.');
+    setLoading(go, true);
+    try { await api.post(`${base()}/tax/recorded-deposits`, { depositGroup: row.Group, date: date.value, amountCents: cents, reference: ref.value }); m.close(); toast('success', 'Recorded.'); done(); } catch (e) { err.replaceChildren(Alert('error', e.message)); setLoading(go, false); }
+  });
+}
+
+const HOME = {
+  next_payroll_hero({ data }) {
+    const n = data.nextPayroll; const [label, kind] = STAGE[n.stage];
+    const ok = (good, text, to) => h('li', { class: good ? 'good' : 'warn' }, h('span', { class: 'tick' }, good ? '✓' : '!'), to ? link(to, { class: 'pl-name' }, text) : text);
+    const p = n.people;
+    const checks = [
+      p.active ? ok(true, `${plural(p.active, 'person', 'people')} on payroll`) : ok(false, 'Nobody is on payroll yet', '/app/onboarding'),
+      p.hourly ? ok(p.hourlyWithHours === p.hourly, `Hours entered for ${p.hourlyWithHours} of ${p.hourly} hourly ${p.hourly === 1 ? 'person' : 'people'}`, '/app/payroll/run') : null,
+      p.missingW4 ? ok(false, `${plural(p.missingW4, 'person', 'people')} without a W-4 will be left out`, '/app/onboarding') : (p.active ? ok(true, 'Every W-4 is on file') : null),
+      p.noDeposit ? ok(false, `${plural(p.noDeposit, 'person', 'people')} without direct deposit`, '/app/onboarding') : null,
+    ].filter(Boolean);
+    const when = n.runByPassed ? 'Past due. Pay late, or run it now.' : n.stage === 'paid' ? '' : `${inDays(n.daysToRunBy)}`;
+    const action = n.stage === 'draft' ? Button({ href: `/app/payroll/runs/${n.runId}` }, 'Continue payroll') : n.stage === 'approved' ? Button({ href: `/app/payroll/runs/${n.runId}` }, 'Pay your team') : n.stage === 'paid' ? Button({ variant: 'ghost', href: `/app/payroll/runs/${n.runId}` }, 'See this run') : Button({ href: `/app/payroll/run?start=${n.period.periodStart}` }, 'Run payroll');
+    return { className: 'hero-card', head: h('div', { class: 'card-head' }, h('h3', { class: 'card-title' }, 'Next payroll'), h('span', { class: `chip ${kind}` }, label)),
+      body: h('div', { class: 'hero' },
+        h('div', { class: 'hero-top' }, h('div', {}, h('i', {}, 'Pay date'), h('span', { class: 'hero-n' }, dayText(n.period.checkDate)), h('p', { class: 'sub' }, `For ${shortDate(n.period.periodStart)} to ${shortDate(n.period.periodEnd)} · ${inDays(n.daysUntil)}`)),
+          n.stage === 'paid' ? null : h('div', { class: 'runby' }, h('i', {}, 'Run it by'), h('b', {}, dayText(n.runBy)), h('small', {}, when))),
+        h('ul', { class: 'ready' }, ...checks), h('div', { class: 'acts' }, action, n.stage === 'not_started' ? Button({ variant: 'ghost', href: `/app/payroll/run?start=${n.period.periodStart}` }, 'Enter hours') : null),
+        data.latest ? h('div', { class: 'lastrun' }, h('span', {}, h('i', {}, 'Last payroll'), `${dayText(data.latest.checkDate)} · ${plural(data.latest.employees, 'person', 'people')} · ${money(data.latest.netCents)} take-home`), link(`/app/payroll/runs/${data.latest.id}`, { class: 'link' }, 'See it'), link('/app/payroll', { class: 'link' }, 'All payroll')) : null) };
+  },
+
+  todo_list({ data, settings }) {
+    const t = data.todos.slice(0, settings.count || 6);
+    if (!t.length) return { title: 'To do', body: h('div', { class: 'allgood' }, h('span', { class: 'tick' }, '✓'), h('div', {}, h('b', {}, 'You’re all caught up'), h('p', { class: 'sub' }, 'Nothing needs you right now.'))) };
+    return { title: `To do · ${data.todos.length}`, body: h('ul', { class: 'todos' }, ...t.map((x) => h('li', { class: x.severity, 'data-todo': x.id }, h('span', { class: 'sev', title: { urgent: 'Do this first', soon: 'Soon', info: 'When you can' }[x.severity] }), h('span', { class: 'lt' }, h('b', {}, x.title), h('i', {}, x.detail)), link(x.to, { class: 'link' }, 'Open')))) };
+  },
+
+  cost_trend({ data, settings }) {
+    const runs = data.runs.filter(Boolean).slice(0, settings.runs || 6).reverse();
+    if (!runs.length) return { title: 'Payroll cost', body: empty('Each pay run’s cost shows here after your first one.') };
+    const max = Math.max(...runs.map((r) => r.totalCostCents), 1); const avg = Math.round(runs.reduce((n, r) => n + r.totalCostCents, 0) / runs.length);
+    const last = runs[runs.length - 1];
+    return { title: 'Payroll cost', body: h('div', { class: 'stack', style: { '--gap': '10px' } }, h('div', { class: 'big2' }, h('div', {}, h('i', {}, `Last run, ${shortDate(last.checkDate)}`), h('span', { class: 'n' }, money(last.totalCostCents))), h('div', { class: 'cap', style: { textAlign: 'right' } }, `Average ${money(avg)}`, h('br'), 'wages plus employer taxes')),
+      h('div', { class: 'bars costbars', role: 'img', 'aria-label': runs.map((r) => `${shortDate(r.checkDate)} ${money(r.totalCostCents)}`).join(', ') }, ...runs.map((r, i) => h('span', { class: i === runs.length - 1 ? 't' : '', title: `${shortDate(r.checkDate)}: ${money(r.totalCostCents)}`, style: { height: `${Math.max(6, Math.round((r.totalCostCents / max) * 100))}%` } }))),
+      h('div', { class: 'bl costbars' }, ...runs.map((r) => h('span', {}, shortDate(r.checkDate).replace(' ', '\u00a0'), h('br'), h('b', {}, money(r.totalCostCents).replace(/\.00$/, '')))))) };
+  },
+
+  tax_due({ data, settings }) {
+    const body = h('div', {}, h('div', { class: 'empty' }, 'Loading…'));
+    const state = data.built ? data.built.answers[0] : data.company.state;
+    const load = async () => {
+      try {
+        const r = await api.get(`${base()}/tax/deposits`);
+        const today = data.asOf;
+        const rows = (r.result || []).filter((x) => x.Status !== 'paid' && Number(x.Outstanding) > 0).map((x) => ({ ...x, name: taxName(x.Group, state), days: Math.round((Date.parse(x.Due) - Date.parse(today)) / 864e5) })).sort((a, b) => a.Due.localeCompare(b.Due));
+        const show = rows.slice(0, settings.count || 5);
+        body.replaceChildren(show.length ? h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th', { class: 'l' }, 'What'), h('th', { class: 'l hm' }, 'Period'), h('th', {}, 'Due'), h('th', {}, 'Amount'), h('th', { class: 'l' }))),
+          h('tbody', {}, ...show.map((x) => h('tr', { 'data-tax': x.Group }, h('td', { class: 'l' }, x.name), h('td', { class: 'l hm' }, x.Period), h('td', {}, h('b', {}, dayText(x.Due)), h('br'), h('span', { class: x.days < 0 ? 'late' : 'cap' }, x.days < 0 ? `${-x.days} days late` : inDays(x.days))), h('td', {}, money(Math.round(Number(x.Outstanding) * 100))), h('td', { class: 'l' }, h('button', { class: 'link as-button', type: 'button', 'data-record': x.Group, onClick: () => recordTaxModal(x, load) }, 'Record payment')))))) : h('div', { class: 'empty' }, 'Nothing is due. You’re up to date.'),
+          ...(rows.length > show.length ? [h('p', { class: 'cap' }, `${rows.length - show.length} more on the `, link('/app/taxes', { class: 'link' }, 'Taxes page'), '.')] : []),
+          h('p', { class: 'cap', style: { marginTop: '10px' } }, 'Totali works out what you owe and when. You pay the IRS and your state yourself, then record it here.'));
+      } catch (e) { body.replaceChildren(e.code === 'no_approved_runs' ? h('div', { class: 'empty' }, 'Due dates appear after your first approved pay run.') : Alert('error', e.message === 'Failed to fetch' ? 'Couldn’t load tax dates.' : e.message)); }
+    };
+    load();
+    return { title: 'Taxes due', body };
+  },
+
+  reports_list({ data }) {
+    const year = new Date().getFullYear();
+    const from = Field({ label: 'From', name: 'from', type: 'date', value: `${year}-01-01` }); const to = Field({ label: 'To', name: 'to', type: 'date', value: data.asOf });
+    const has = (id) => data.built.modules.some((m) => m.id === id);
+    const get = (name, path, file) => async () => { try { await api.download(`${base()}${path}`, file); } catch (e) { toast('error', e.message); } };
+    const rng = () => `start=${from.value}&end=${to.value}`;
+    const items = [
+      ['Payroll register', 'Every paycheck in the range: hours, gross, taxes, deductions, net.', () => get('register', `/reports/register?${rng()}`, `payroll-register-${from.value}.csv`)()],
+      ['Hours and tips', 'Each person’s hours and tips in the range.', () => get('hours', `/reports/hours?${rng()}`, `hours-and-tips-${from.value}.csv`)()],
+      ['Team roster', 'Everyone on your team, with pay and start dates. SSNs show the last four only.', () => get('roster', '/reports/roster', 'team-roster.csv')()],
+      ...(has('contractors') ? [['Contractor payments', `What you paid each contractor in ${year}, and who has a W-9.`, () => get('c', `/contractors/export?year=${year}`, `contractors-${year}.csv`)()]] : []),
+      ...(has('job_costing') ? [['Job costing', 'Hours and labor cost by job and cost code.', () => get('j', `/jobs/export?${rng()}`, `job-costing-${from.value}.csv`)()]] : []),
+      ...(has('workers_comp') ? [['Payroll by workers’ comp class', `Gross pay by class for ${year}, for your insurer’s audit.`, () => get('w', `/reports/wc?year=${year}&format=csv`, `payroll-by-class-${year}.csv`)()]] : []),
+    ];
+    return { title: null, head: h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Download a report'), h('span', { class: 'cap' }, 'Plain CSV. Opens in any spreadsheet.')), body: h('div', {}, h('div', { class: 'r2', style: { maxWidth: '460px', marginBottom: '8px' } }, from.el, to.el), ...items.map(([t, d, fn]) => h('div', { class: 'row', 'data-report': t }, h('span', { class: 'l1' }, h('b', {}, t), h('i', {}, d)), h('button', { class: 'link as-button', type: 'button', onClick: fn }, 'Download')))) };
+  },
+};
+Object.assign(RENDERERS, HOME);

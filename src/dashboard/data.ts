@@ -1,4 +1,5 @@
 import { addDays, daysBetween, workweekStart } from '../lib/dates.ts';
+import { addBankingDays, onOrBeforeBankingDay } from '../lib/bizdays.ts';
 import { allocate } from '../lib/money.ts';
 import { checklistFor, getNiche } from '../industries/index.ts';
 import type { Store } from '../store/store.ts';
@@ -155,6 +156,48 @@ export function dashboardData(store: Store, company: Company, today: string) {
   }
   const taxLines = [...lines.values()].filter((l) => l.amountCents !== 0).sort((p, q) => q.amountCents - p.amountCents);
 
+  // ---- the next payroll: when it is due, the last day to run it, and what is not ready
+  const np = nextPayday(company, today, runs);
+  const nextRun = np.runId ? store.payRuns.get(np.runId) : undefined;
+  const lead = company.payment.employerBank?.leadBankingDays ?? 1;
+  const target = onOrBeforeBankingDay(np.period.checkDate);
+  const runBy = addBankingDays(target, -lead);
+  const periodShifts = store.shifts.where((s) => s.companyId === company.id && s.workDate >= np.period.periodStart && s.workDate <= np.period.periodEnd);
+  const withHours = new Set(periodShifts.map((s) => s.employeeId));
+  const hourly = active.filter((e) => e.payType.kind === 'hourly');
+  const nextPayroll = {
+    period: np.period, daysUntil: np.daysUntil, runBy, daysToRunBy: daysBetween(today, runBy), runByPassed: runBy < today,
+    stage: nextRun ? (nextRun.status === 'draft' ? 'draft' : 'approved') : np.state === 'paid' ? 'paid' : 'not_started',
+    runId: np.runId ?? null, runStatus: nextRun?.status ?? null,
+    people: { active: active.length, hourly: hourly.length, hourlyWithHours: hourly.filter((e) => withHours.has(e.id)).length, missingW4: forms.filter((f) => !f.w4).length, noDeposit: active.filter((e) => !e.payoutAccounts.length).length },
+  };
+
+  // ---- what needs doing, most urgent first
+  type Todo = { id: string; severity: 'urgent' | 'soon' | 'info'; title: string; detail: string; to: string };
+  const todos: Todo[] = [];
+  const add = (t: Todo) => todos.push(t);
+  const md = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const names = (xs: Array<{ name: string }>) => (xs.length <= 2 ? xs.map((x) => x.name).join(' and ') : `${xs[0]!.name} and ${xs.length - 1} others`);
+  if (!company.ein) add({ id: 'ein', severity: 'urgent', title: 'Add your EIN', detail: 'You can’t approve a pay run without it.', to: '/app/settings/company' });
+  if (nextRun && nextRun.status === 'draft') add({ id: 'draft', severity: nextPayroll.runByPassed ? 'urgent' : 'soon', title: 'Finish your pay run', detail: `The run for ${md(nextRun.periodStart)} to ${md(nextRun.periodEnd)} is waiting for review.`, to: `/app/payroll/runs/${nextRun.id}` });
+  for (const r of runs.filter((x) => x.status === 'approved' && x.checkDate >= addDays(today, -14))) add({ id: `pay_${r.id}`, severity: r.checkDate <= today ? 'urgent' : 'soon', title: 'Pay your team', detail: `Download the payment file for ${md(r.periodStart)} to ${md(r.periodEnd)} and release it at your bank.`, to: `/app/payroll/runs/${r.id}` });
+  if (!company.payment.employerBank) add({ id: 'bank', severity: 'soon', title: 'Set up how you pay', detail: 'Tell Totali your bank so it can write the payment file.', to: '/app/settings/payments' });
+  const noW4 = forms.filter((f) => !f.w4);
+  if (noW4.length) add({ id: 'w4', severity: 'soon', title: `${noW4.length === 1 ? `${noW4[0]!.name} has` : `${names(noW4)} have`} no W-4`, detail: 'They’re left out of pay runs until it’s on file.', to: '/app/onboarding' });
+  const i9 = active.filter((e) => e.onboarding?.i9?.section1At && !e.onboarding.i9.section2At).map((e) => ({ name: `${e.firstName} ${e.lastName}` }));
+  if (i9.length) add({ id: 'i9', severity: 'soon', title: `I-9 section 2 for ${names(i9)}`, detail: 'Look at their documents in person. It’s due within 3 business days of their start.', to: '/app/onboarding' });
+  const bank = active.filter((e) => e.pendingDeposit).map((e) => ({ name: `${e.firstName} ${e.lastName}` }));
+  if (bank.length) add({ id: 'bank_change', severity: 'soon', title: `${names(bank)} asked to change ${bank.length === 1 ? 'their' : 'a'} bank account`, detail: 'Nothing changes until you approve it.', to: '/app/onboarding' });
+  const waiting = forms.filter((f) => f.w4 && !f.done).length;
+  if (waiting && !noW4.length) add({ id: 'paperwork', severity: 'info', title: `${waiting} ${waiting === 1 ? 'person has' : 'people have'} paperwork to finish`, detail: 'Send a reminder from Onboarding.', to: '/app/onboarding' });
+  if (!active.length) add({ id: 'first', severity: 'soon', title: 'Add your first person', detail: 'Invite them and they fill in their own forms on their phone.', to: '/app/onboarding' });
+  if (company.setup && !company.profile?.submittedAt && company.ein) add({ id: 'profile', severity: 'info', title: 'Finish company setup', detail: 'Owners, address and documents.', to: '/app/settings/company' });
+  const noW9 = store.contractors.where((x) => x.companyId === company.id && !x.archivedAt && !x.w9At).length;
+  if (noW9) add({ id: 'w9', severity: 'info', title: `${noW9} ${noW9 === 1 ? 'contractor has' : 'contractors have'} no W-9`, detail: 'Request one so you can report what you paid them.', to: '/app/contractors' });
+  if (a.has('unemployment_account') && !company.taxAccounts?.state?.[company.homeState]?.account) add({ id: 'uia', severity: 'info', title: 'Add your state unemployment number', detail: 'It goes on your filings.', to: '/app/settings/state' });
+  const rank = { urgent: 0, soon: 1, info: 2 } as const;
+  todos.sort((x, y) => rank[x.severity] - rank[y.severity]);
+
   // ---- state cards
   const stateCards = a.build.modules.filter((m) => m.id.startsWith('state_')).map((m) => ({ code: m.id.slice(6).toUpperCase(), name: m.label, items: m.items }));
 
@@ -188,6 +231,8 @@ export function dashboardData(store: Store, company: Company, today: string) {
     tipPool,
     onboarding,
     stateCards,
+    nextPayroll,
+    todos: todos.slice(0, 8),
     groups,
     seasonal: { ending: seasonal, count: seasonalCount },
     built,
