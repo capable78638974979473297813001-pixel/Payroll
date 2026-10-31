@@ -175,7 +175,7 @@ async function account() {
   });
   return h('div', { class: 'grid', style: { maxWidth: '640px' } },
     h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'You'), rowKV('Name', `${u.firstName} ${u.lastName}`), rowKV('Email', u.email)),
-    h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '10px' } }, 'Change your password'), h('div', { class: 'f' }, current.el, h('div', {}, next.el), bar, err, h('div', { class: 'acts' }, save))));
+    !u.hasPassword ? h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '6px' } }, 'Password'), h('p', { class: 'cap' }, 'You sign in with Google, so there’s no password. To add one, use “Forgot it?” on the log in page and we’ll email you a code.')) : h('div', { class: 'card' }, h('h3', { class: 'ct', style: { marginBottom: '10px' } }, 'Change your password'), h('div', { class: 'f' }, current.el, h('div', {}, next.el), bar, err, h('div', { class: 'acts' }, save))));
 }
 
 // ---------------------------------------------------------------- company setup (business verification)

@@ -2,7 +2,7 @@ import { mount, h } from './dom.js';
 import { route, setGuard, start } from './router.js';
 import { loadSession, session } from './session.js';
 import { landing } from './pages/landing.js';
-import { signup, verify, login, forgot, nextPath } from './pages/auth.js';
+import { signup, verify, login, forgot, business, nextPath } from './pages/auth.js';
 import { industry, builder } from './pages/setup.js';
 import { dashboardTab } from './app/dashboard.js';
 import { helpPage } from './app/help.js';
@@ -27,6 +27,7 @@ route('/signup', signup);
 route('/signup/verify', verify);
 route('/login', login);
 route('/forgot', forgot);
+route('/signup/business', business);
 route('/setup/industry', industry);
 route('/setup/builder', builder);
 route('/app/help', helpPage());
@@ -49,8 +50,9 @@ setGuard(async (ctx, pattern) => {
   const u = session.user;
   if (pattern === '/login' || pattern === '/signup' || pattern === '/forgot') return u && u.emailVerified ? nextPath(u) : null;
   if (pattern === '/signup/verify') return !u ? '/signup' : u.emailVerified ? nextPath(u) : null;
-  if (pattern.startsWith('/app')) return !u ? '/login' : !u.emailVerified ? '/signup/verify' : !u.companyId ? '/setup/industry' : null;
-  if (pattern.startsWith('/setup')) return !u ? '/login' : !u.emailVerified ? '/signup/verify' : u.companyId ? '/app' : null;
+  if (pattern === '/signup/business') return !u ? '/signup' : !u.emailVerified ? '/signup/verify' : u.profileComplete ? nextPath(u) : null;
+  if (pattern.startsWith('/app')) return !u ? '/login' : !u.emailVerified ? '/signup/verify' : !u.profileComplete ? '/signup/business' : !u.companyId ? '/setup/industry' : null;
+  if (pattern.startsWith('/setup')) return !u ? '/login' : !u.emailVerified ? '/signup/verify' : !u.profileComplete ? '/signup/business' : u.companyId ? '/app' : null;
   return null;
 });
 

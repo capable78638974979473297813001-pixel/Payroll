@@ -18,6 +18,7 @@ import { runMasteryTax, type MasteryCommand } from '../tax/masterytax.ts';
 import { tipSplit } from '../tax/tipSplit.ts';
 import { tipReport } from '../restaurant/reports.ts';
 import { suggestPeriods } from '../payroll/schedule.ts';
+import { GoogleAuth, googleFromEnv } from '../accounts/google.ts';
 import { JobService, wcReport } from '../jobs/service.ts';
 import { ContractorService } from '../contractors/service.ts';
 import { BillingService } from '../billing/service.ts';
@@ -117,7 +118,7 @@ export interface App {
   handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
 }
 
-export function createApp(deps: { store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer; billingStripe?: StripeBillingApi | null }): App {
+export function createApp(deps: { store: Store; banks: BankService; ach: AchService; config: Config; log?: (msg: string) => void; now?: () => Date; accounts?: AccountService; mailer?: Mailer; billingStripe?: StripeBillingApi | null; google?: GoogleAuth | null }): App {
   const { store, banks, ach, config } = deps;
   const mailer = deps.mailer ?? new OutboxMailer();
   const accounts = deps.accounts ?? new AccountService(store, mailer, { ...(deps.now ? { now: deps.now } : {}), ...(deps.log ? { log: deps.log } : {}) });
@@ -144,6 +145,8 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
   };
   const billing = new BillingService(store, deps.billingStripe !== undefined ? deps.billingStripe : stripeConfigured() ? new StripeClient() : null, now);
   const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
+  const google = deps.google !== undefined ? deps.google : (() => { const g = googleFromEnv(); return g ? new GoogleAuth(g, fetch, now) : null; })();
+  const OAUTH_COOKIE = 'totali_oauth';
   const contractors = new ContractorService(store, mailer, now);
   const jobs = new JobService(store, now);
   const range = (c: Ctx) => { const a = c.query.get('start'); const b = c.query.get('end'); if (!isIsoDate(a) || !isIsoDate(b)) throw badRequest('start and end must be YYYY-MM-DD'); return [a, b] as const; };
@@ -174,7 +177,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
 
     // ---- accounts: signup, email verification, sign in
     route('GET', '/v1/auth/config', 'none', () => ({
-      google: false,
+      google: !!google,
       mail: mailer.kind,
       devTools: !!config.devTools,
       stripePublishableKey: (process.env.STRIPE_PUBLISHABLE_KEY ?? '').trim() || null,
@@ -210,6 +213,30 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
       const o = c.json();
       await accounts.resetPassword(o.email, o.code, o.password);
       return { ok: true };
+    }),
+    route('GET', '/v1/auth/google', 'none', (c) => {
+      if (!google) throw notFound('Route');
+      const wait = logins.hit(`google:${c.ip}`, 30, now().getTime());
+      if (wait) throw new ApiError(429, 'rate_limited', 'Too many tries. Wait a few minutes.', { retryAfterSeconds: wait });
+      const g = google.begin(`${siteBase(c.req)}/v1/auth/google/callback`);
+      return new Reply({}, { location: g.url, 'set-cookie': `${OAUTH_COOKIE}=${g.secret}; Path=/v1/auth; HttpOnly; SameSite=Lax; Max-Age=600${secureCookies(c.req) ? '; Secure' : ''}` }, 302);
+    }),
+    route('GET', '/v1/auth/google/callback', 'none', async (c) => {
+      if (!google) throw notFound('Route');
+      const secret = cookieValue(c.req.headers.cookie, OAUTH_COOKIE);
+      const clear = `${OAUTH_COOKIE}=; Path=/v1/auth; HttpOnly; SameSite=Lax; Max-Age=0`;
+      const back = (msg: string) => new Reply({}, { location: `/login?google_error=${encodeURIComponent(msg)}`, 'set-cookie': clear }, 302);
+      try {
+        const profile = await google.finish(c.query, secret, `${siteBase(c.req)}/v1/auth/google/callback`);
+        const r = accounts.signInWithGoogle(profile);
+        // two cookies: the session, and the cleared handshake
+        return new Reply({}, { location: '/app', 'set-cookie': sessionCookie(c.req, r.token) + '\n' + clear }, 302);
+      } catch (e) { return back(e instanceof ApiError ? e.message : 'Google sign-in failed.'); }
+    }),
+    route('POST', '/v1/auth/complete-profile', 'user', (c) => {
+      requireCsrf(c.req);
+      const u = accounts.completeProfile((c.principal as { userId: string }).userId, c.json());
+      return { user: publicUser(u) };
     }),
     route('POST', '/v1/auth/change-password', 'user', async (c) => {
       requireCsrf(c.req);
@@ -271,6 +298,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
     route('POST', '/v1/builder/finish', 'user', (c) => {
       const user = c.user!;
       if (!user.emailVerifiedAt) throw forbidden('Verify your email first.');
+      if (!user.businessName || !user.termsAcceptedAt) throw new ApiError(409, 'profile_incomplete', 'Add your business name and agree to the terms first.');
       const draft = user.setup;
       if (!draft?.industry) throw new ApiError(409, 'setup_incomplete', 'Pick an industry and answer the questions first.');
       const industry = assertIndustry(draft.industry);
@@ -605,7 +633,7 @@ export function createApp(deps: { store: Store; banks: BankService; ach: AchServ
         'cache-control': 'no-store',
         ...SECURITY_HEADERS,
         ...(isText && (body as Text).filename ? { 'content-disposition': `attachment; filename="${(body as Text).filename}"` } : {}),
-        ...headers,
+        ...Object.fromEntries(Object.entries(headers).map(([k, val]) => [k, k.toLowerCase() === 'set-cookie' && val.includes('\n') ? val.split('\n') : val])),
       });
       res.end(payload);
     };

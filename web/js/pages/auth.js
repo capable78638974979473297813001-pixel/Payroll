@@ -11,6 +11,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export function nextPath(user) {
   if (!user) return '/';
   if (!user.emailVerified) return '/signup/verify';
+  if (!user.profileComplete) return '/signup/business';
   if (!user.companyId) return '/setup/industry';
   return '/app';
 }
@@ -24,13 +25,15 @@ function frame({ aside, card, nudge }) {
 
 const photo = (src, alt, pos) => h('figure', { class: 'photo' }, h('img', { src, alt, style: { objectPosition: pos } }));
 
+const googleOn = () => !!(session.config && session.config.google);
 function orRule() {
-  return h('div', { class: 'or' }, 'or with email');
+  return googleOn() ? h('div', { class: 'or' }, 'or with email') : null;
 }
 
+/** Shown only when this server has Google credentials: a button that does nothing would just be a trap. */
 function googleButton() {
-  const on = !!(session.config && session.config.google);
-  return h('button', { class: 'oauth', type: 'button', disabled: !on, title: on ? '' : 'Google sign-in isn’t set up on this server yet.', onClick: () => { window.location.href = '/v1/auth/google'; } }, h('i'), 'Continue with Google');
+  if (!googleOn()) return null;
+  return h('button', { class: 'oauth', type: 'button', 'data-testid': 'google', onClick: () => { window.location.href = '/v1/auth/google'; } }, h('i'), 'Continue with Google');
 }
 
 // ---------------------------------------------------------------- create account
@@ -195,7 +198,8 @@ export async function verify() {
 }
 
 // ---------------------------------------------------------------- log in
-export function login() {
+export function login(ctx) {
+  const googleError = ctx && ctx.query.get('google_error');
   const email = Field({ label: 'Work email', name: 'email', type: 'email', autocomplete: 'email', placeholder: 'you@company.com', autofocus: true });
   const pw = Field({ label: h('span', {}, 'Password', h('small', { style: { float: 'right' } }, link('/forgot', { class: 'link', style: 'font-size:12.5px' }, 'Forgot it?'))), name: 'password', type: 'password', autocomplete: 'current-password', rightSlot: 'Show' });
   const keep = Checkbox({ label: 'Keep me signed in on this device', name: 'remember', checked: true });
@@ -214,7 +218,7 @@ export function login() {
       err.replaceChildren(Alert('error', e2.message));
       setLoading(btn, false);
     }
-  } }, googleButton(), orRule(), email.el, pw.el, keep.el, err, btn);
+  } }, googleButton(), orRule(), googleError ? Alert('error', googleError) : null, email.el, pw.el, keep.el, err, btn);
   const card = [h('h1', {}, 'Welcome ', h('em', {}, 'back')), h('p', {}, 'Log in to your Totali account.'), form,
     h('p', { class: 'fine', style: { marginTop: '20px' } }, 'Staying signed in lasts until you choose ', h('b', {}, 'Sign out'), ' in the top menu.')];
   const aside = h('div', {}, photo('/assets/img/chef.jpg', 'Cooks plating dishes', '50% 40%'), Hand('Your pay run is where you left it.', { style: { left: '10px', top: '420px', width: '220px', fontSize: '26px', transform: 'rotate(-3deg)' } }));
@@ -265,4 +269,22 @@ export function forgot() {
   const card = [h('h1', {}, 'Reset your ', h('em', {}, 'password')), h('p', {}, 'We’ll email a code to the address on your account.'), body];
   const aside = h('div', {}, photo('/assets/img/chef.jpg', 'Cooks plating dishes', '50% 40%'), Hand('It happens. We’ll have you back in a minute.', { style: { left: '10px', top: '420px', width: '200px', fontSize: '26px', transform: 'rotate(-3deg)' } }));
   return { title: 'Reset password — Totali', el: frame({ card, aside, nudge: ['Remembered it?', '/login', 'Log in'] }) };
+}
+
+// ---------------------------------------------------------------- after Google: the two things it can't tell us
+export function business() {
+  const biz = Field({ label: 'Business name', name: 'businessName', placeholder: 'Harbor Street Kitchen', autocomplete: 'organization', autofocus: true });
+  const terms = Checkbox({ name: 'terms', onChange: () => update(), label: h('span', {}, 'I agree to the ', h('a', { href: '/terms', target: '_blank', rel: 'noopener' }, 'Terms'), ' and ', h('a', { href: '/privacy', target: '_blank', rel: 'noopener' }, 'Privacy Policy'), ' of OMNIA TAX LLC.') });
+  const err = h('div', {}); const go = Button({ size: 'lg', full: true, type: 'submit', disabled: true }, 'Continue');
+  const update = () => { go.disabled = !(biz.value.trim() && terms.checked); };
+  biz.input.addEventListener('input', update);
+  const form = h('form', { class: 'f', novalidate: true, onSubmit: async (e) => {
+    e.preventDefault(); err.replaceChildren(); setLoading(go, true);
+    try { const r = await api.post('/v1/auth/complete-profile', { businessName: biz.value, acceptTerms: terms.checked }); session.user = r.user; navigate(nextPath(r.user)); }
+    catch (e2) { if (e2.details && e2.details.field === 'businessName') biz.setError(e2.message); else err.replaceChildren(Alert('error', e2.message)); setLoading(go, false); update(); }
+  } }, biz.el, terms.el, err, go);
+  const u = session.user;
+  const card = [Steps3(2), h('h1', {}, `One more thing, ${u.firstName}`), h('p', {}, 'Your Google account is confirmed. What’s the business called?'), form];
+  const aside = h('div', {}, photo('/assets/img/waiter.jpg', 'A server carrying plates', '50% 30%'), Hand('Takes about five minutes. Stop any time, we save as you go.', { style: { left: '-20px', top: '70px', width: '200px', fontSize: '26px' } }));
+  return { title: 'Your business — Totali', el: frame({ card, aside, nudge: ['Signed in as', '/app', u.email] }) };
 }

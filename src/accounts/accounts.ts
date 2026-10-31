@@ -26,12 +26,14 @@ export interface PublicUser {
   lastName: string;
   businessName: string;
   emailVerified: boolean;
+  profileComplete: boolean;
+  hasPassword: boolean;
   companyId: string | null;
   setup: SetupDraft | null;
 }
 
 export function publicUser(u: User): PublicUser {
-  return { id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName, businessName: u.businessName, emailVerified: !!u.emailVerifiedAt, companyId: u.companyId ?? null, setup: u.setup ?? null };
+  return { id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName, businessName: u.businessName, emailVerified: !!u.emailVerifiedAt, profileComplete: !!u.businessName && !!u.termsAcceptedAt, hasPassword: !!u.passwordHash, companyId: u.companyId ?? null, setup: u.setup ?? null };
 }
 
 const clean = (s: unknown, field: string, max: number): string => {
@@ -96,6 +98,32 @@ export class AccountService {
     const token = this.createSession(user.id);
     const sent = await this.sendCode(user.id);
     return { user: this.store.users.require(user.id, 'User'), sent, token };
+  }
+
+  /**
+   * Someone came back from Google with a verified email. An existing account signs in (and is marked verified, since
+   * Google just proved the address); a new one is made without a password, and finishes its business name and terms next.
+   */
+  signInWithGoogle(profile: { email: string; givenName: string; familyName: string }): { user: User; token: string; created: boolean } {
+    const email = normalizeEmail(profile.email);
+    const existing = this.findByEmail(email);
+    const at = this.iso();
+    // An account made with this address but never verified may belong to someone who doesn't own it. Google just proved
+    // the real owner, so that password is thrown away and any browser signed in with it is signed out.
+    if (existing && !existing.emailVerifiedAt) this.store.tx(() => { for (const s of this.store.sessions.where((x) => x.userId === existing.id)) this.store.sessions.delete(s.id); });
+    const user = this.store.tx(() => this.store.users.put(existing
+      ? { ...existing, emailVerifiedAt: existing.emailVerifiedAt ?? at, ...(existing.emailVerifiedAt ? {} : { passwordHash: '' }) }
+      : { id: newId('usr'), email, firstName: profile.givenName, lastName: profile.familyName || '-', businessName: '', passwordHash: '', termsAcceptedAt: '', termsVersion: '', emailVerifiedAt: at, createdAt: at }));
+    return { user, token: this.createSession(user.id), created: !existing };
+  }
+
+  /** The two things Google can't tell us. */
+  completeProfile(userId: string, body: Record<string, unknown>): User {
+    const user = this.store.users.get(userId);
+    if (!user) throw unauthorized('Sign in again.');
+    const businessName = clean(body.businessName, 'business name', 120);
+    if (body.acceptTerms !== true) throw badRequest('Agree to the Terms and Privacy Policy to continue.', { field: 'acceptTerms' });
+    return this.store.tx(() => this.store.users.put({ ...user, businessName, termsAcceptedAt: user.termsAcceptedAt || this.iso(), termsVersion: TERMS_VERSION }));
   }
 
   /** Send a fresh code. Earlier codes stop working. Refused inside the resend gap and past the hourly limit. */
