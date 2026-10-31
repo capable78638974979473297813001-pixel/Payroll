@@ -70,6 +70,7 @@ export function subline(data, today = new Date()) {
   const locs = data.company.locations || [];
   const day = today.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const bits = [day];
+  if (data.company.nicheLabel) bits.push(data.company.nicheLabel);
   if (locs.length > 1) bits.push(`${locs.length} locations in ${data.built ? data.built.answers[0] : data.company.state}`);
   else bits.push(data.built ? data.built.answers[0] : data.company.state);
   bits.push(plural(data.team.active, 'person', 'people'));

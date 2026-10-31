@@ -230,3 +230,19 @@ export const posCards = {
       h('div', { class: 'acts' }, link('/app/payroll/run', { class: 'btn sm' }, file ? 'Import for this pay run' : 'Pull for this pay run'), link('/app/settings/pos', { class: 'link' }, 'Point of sale settings'))) };
   },
 };
+
+/** The guided setup: what is done, what is next, how long it takes. It disappears when the last step is done. */
+export const guideCards = {
+  setup_guide({ data }) {
+    const g = data.guide;
+    if (g.done === g.total) return { title: null, className: 'hidden-card', body: h('span', { 'data-testid': 'setup-done', hidden: true }) };
+    const next = g.steps.find((x) => !x.done);
+    return { title: null, className: 'setupguide', head: h('div', { class: 'ch' }, h('h3', { class: 'ct' }, 'Get set up'), h('span', { class: 'cap', 'data-testid': 'setup-progress' }, `${g.done} of ${g.total} done · about ${g.minutes} minutes left`)),
+      body: h('div', { class: 'stack', style: { '--gap': '4px' }, 'data-testid': 'setup-guide' },
+        h('div', { class: 'prg' }, h('span', { style: { width: `${(g.done / g.total) * 100}%` } })),
+        ...g.steps.map((x) => h('div', { class: `row setup-row ${x.done ? 'is-done' : x === next ? 'is-next' : ''}`, 'data-step': x.id },
+          h('span', { class: 'setup-mark', 'aria-hidden': 'true' }, x.done ? '✓' : ''),
+          h('span', { class: 'l1' }, h('b', {}, x.title), h('i', {}, x.done ? 'Done' : x.detail)),
+          x.done ? null : h('span', {}, link(x.to, { class: x === next ? 'btn sm' : 'link' }, x === next ? 'Start' : 'Open'))))) };
+  },
+};

@@ -36,7 +36,7 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
 
   // The overview is the sections the setup built (pay run, team, taxes and so on), each with its live numbers and
   // checklist, in the order and sizes the owner would expect. The owner can move, resize, swap or remove any of them.
-  const overview: DashboardWidget[] = [w('next_payroll_hero', 8), w('todo_list', 4), w('cost_trend', 6), w('tax_due', 6), w('pos_status', 12), w('built_from', 12)];
+  const overview: DashboardWidget[] = [w('setup_guide', 12), w('next_payroll_hero', 8), w('todo_list', 4), w('week_snapshot', 12), w('cost_trend', 6), w('tax_due', 6), w('pos_status', 12), w('built_from', 12)];
   const a2 = a as Availability & { build?: { modules: Array<{ id: string }> } };
   for (const m of a2.build?.modules ?? []) overview.push(w('module', m.id === 'pay_run' ? 8 : 4, { module: m.id }));
   tabs.push({ id: 'overview', label: 'Overview', kind: 'page', widgets: overview });
@@ -48,7 +48,7 @@ export function defaultConfig(company: Company, a: Availability): DashboardConfi
   if (has('contractors')) people.push(w('contractors_card', 6));
   tabs.push({ id: 'people', label: 'People', kind: 'page', widgets: people });
 
-  const time: DashboardWidget[] = has('tip_reporting') ? [w('pos_status', 8), w('tips_panel', 4), w('overtime_watch', 6)] : [w('pos_status', 12), w('overtime_watch', 6)];
+  const time: DashboardWidget[] = has('tip_reporting') ? [w('pos_status', 8), w('tips_panel', 4), w('labor_by_role', 12), w('overtime_watch', 6)] : [w('pos_status', 12), w('labor_by_role', 12), w('overtime_watch', 6)];
   const group = has('dept_costs') ? 'department' : has('crew_hours') ? 'crew' : has('job_costs') ? 'job' : has('wc_payroll') ? 'wc' : null;
   if (group) time.push(w('group_cost', 12, { groupBy: group }));
   tabs.push({ id: 'time', label: restaurant ? 'Time and tips' : 'Time', kind: 'page', widgets: time });

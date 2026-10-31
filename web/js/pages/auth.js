@@ -23,6 +23,15 @@ function frame({ aside, card, nudge }) {
     h('main', { class: 'auth' }, h('div', { class: 'acard ui' }, ...[card].flat()), h('div', { class: 'avis' }, aside)));
 }
 
+/** What happens next, with where you are marked. Shown beside the signup steps so nobody wonders how long this is. */
+const NEXT = [['Create your account', 'Your name, your email and a password.'], ['Confirm your email', 'We send a 6-digit code.'], ['Tell us about your restaurant', 'A few questions build your dashboard: your state, locations, tips and pay schedule.'], ['Finish setting up', 'Add your EIN, how you pay, and your team. Then run payroll.']];
+function nextSteps(at) {
+  return h('div', { class: 'nextsteps' },
+    h('h2', {}, 'Here’s how setup works'),
+    h('ol', {}, ...NEXT.map(([t, d], i) => h('li', { class: i < at ? 'done' : i === at ? 'now' : '' }, h('span', { class: 'n' }, i < at ? '✓' : String(i + 1)), h('span', {}, h('b', {}, t), h('i', {}, d))))),
+    h('p', { class: 'trust' }, 'Social Security numbers and bank details are encrypted. You don’t need a credit card to start.'));
+}
+
 const photo = (src, alt, pos) => h('figure', { class: 'photo' }, h('img', { src, alt, style: { objectPosition: pos } }));
 
 const googleOn = () => !!(session.config && session.config.google);
@@ -77,9 +86,7 @@ export function signup(ctx) {
   biz.el, email.el, pw.el, terms.el, formError, submit);
 
   const card = [Steps3(0), h('h1', {}, 'Create your ', h('em', {}, 'account')), h('p', {}, 'Start with you. We’ll ask about the business next.'), form];
-  const aside = h('div', {}, photo('/assets/img/waiter.jpg', 'A server carrying plates', '50% 30%'),
-    Hand('Takes about five minutes. Stop any time, we save as you go.', { style: { left: '-20px', top: '70px', width: '200px', fontSize: '26px' } }),
-    Hand('', { style: { left: '30px', top: '200px' }, arrow: {} }));
+  const aside = nextSteps(0);
   return { title: 'Create account | Totali', el: frame({ card, aside, nudge: ['Already have an account?', '/login', 'Log in'] }) };
 }
 
@@ -190,10 +197,7 @@ export async function verify() {
     h('form', { novalidate: true, onSubmit: (e) => { e.preventDefault(); doVerify(); } }, codeBoxes.el, errorLine, info, submit),
     h('p', { class: 'fine', style: { marginTop: '16px' } }, 'Nothing there? Check spam, or ', resendBtn, resendNote, '. Wrong address? ', changeLink, '.')];
 
-  const mail = h('div', { class: 'mail', style: { position: 'absolute', left: '40px', top: '30px' } },
-    h('div', { class: 'mh2' }, h('b', { style: { color: 'var(--ink)' } }, 'Totali'), ' <no-reply@totali.example>', h('br'), `To: ${email}`, h('br'), 'Subject: Your Totali code'),
-    h('div', { class: 'mb' }, `Hi ${user.firstName},`, h('br'), 'Use this code to finish creating your account.', h('div', { class: 'code' }, '481 025'), h('span', { class: 'fine' }, 'It expires in 15 minutes. If you didn’t ask for it, ignore this email.'), h('br'), h('br'), h('span', { class: 'fine' }, 'OMNIA TAX LLC · sample email')));
-  const aside = h('div', {}, mail, Hand('This is what lands in your inbox.', { style: { left: '60px', top: '370px', width: '260px', fontSize: '26px', transform: 'rotate(-3deg)' } }));
+  const aside = nextSteps(1);
   return { title: 'Check your email | Totali', el: frame({ card, aside, nudge: ['Wrong account?', '/signup', 'Start over'] }), cleanup: () => clearInterval(timer) };
 }
 
@@ -286,6 +290,6 @@ export function business() {
   } }, biz.el, terms.el, err, go);
   const u = session.user;
   const card = [Steps3(2), h('h1', {}, `One more thing, ${u.firstName}`), h('p', {}, 'Your Google account is confirmed. What’s the business called?'), form];
-  const aside = h('div', {}, photo('/assets/img/waiter.jpg', 'A server carrying plates', '50% 30%'), Hand('Takes about five minutes. Stop any time, we save as you go.', { style: { left: '-20px', top: '70px', width: '200px', fontSize: '26px' } }));
+  const aside = nextSteps(2);
   return { title: 'Your business | Totali', el: frame({ card, aside, nudge: ['Signed in as', '/app', u.email] }) };
 }

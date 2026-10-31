@@ -114,6 +114,35 @@ export function dashboardData(store: Store, company: Company, today: string) {
     weekStart: start, weekEnd: end, totalMinutes: regular + overtime, regularMinutes: regular, overtimeMinutes: overtime, byDay: byDay.map((d) => ({ date: d.date, minutes: d.minutes })),
     people: [...perPerson].map(([id, minutes]) => ({ employeeId: id, name: nameOf(id), minutes })).sort((p, q) => q.minutes - p.minutes).slice(0, 25),
   };
+  // what this week is costing, by role and by place. Wages are an estimate: hourly pay with overtime at time and a half, and
+  // a salaried person's week as a fifty-second of the year. It leaves out the tip credit, taxes and benefits.
+  const roleLabel = new Map(company.settings.roles.map((r) => [r.key, r.label]));
+  const wagesOf = (id: string, minutes: number) => {
+    const e = store.employees.get(id);
+    if (!e) return 0;
+    if (e.payType.kind === 'salary') return Math.round(e.payType.annualCents / 52);
+    const reg = Math.min(minutes, 2400); const ot = Math.max(0, minutes - 2400);
+    return Math.round((e.payType.rateCents * reg) / 60 + (e.payType.rateCents * 1.5 * ot) / 60);
+  };
+  const roleRows = new Map<string, { role: string; label: string; minutes: number; wagesCents: number; tipsCents: number; people: Set<string> }>();
+  const placeRows = new Map<string, { name: string; minutes: number; wagesCents: number }>();
+  for (const [id, minutes] of perPerson) {
+    const e = store.employees.get(id);
+    if (!e) continue;
+    const w = wagesOf(id, minutes);
+    const r = roleRows.get(e.roleKey) ?? { role: e.roleKey, label: roleLabel.get(e.roleKey) ?? e.roleKey, minutes: 0, wagesCents: 0, tipsCents: 0, people: new Set<string>() };
+    r.minutes += minutes; r.wagesCents += w; r.people.add(id); roleRows.set(e.roleKey, r);
+    const pl = placeRows.get(e.location ?? '') ?? { name: e.location ?? 'Main', minutes: 0, wagesCents: 0 };
+    pl.minutes += minutes; pl.wagesCents += w; placeRows.set(e.location ?? '', pl);
+  }
+  for (const sh of shifts) { const e = store.employees.get(sh.employeeId); const r = e ? roleRows.get(e.roleKey) : undefined; if (r) r.tipsCents += sh.chargedTipsCents + sh.cashTipsCents; }
+  const week = {
+    wagesCents: [...roleRows.values()].reduce((n, r) => n + r.wagesCents, 0),
+    workers: perPerson.size,
+    overtimeShare: regular + overtime > 0 ? Math.round((overtime / (regular + overtime)) * 1000) / 10 : 0,
+    byRole: [...roleRows.values()].map((r) => ({ role: r.role, label: r.label, people: r.people.size, minutes: r.minutes, wagesCents: r.wagesCents, tipsCents: r.tipsCents })).sort((x, y) => y.wagesCents - x.wagesCents),
+    byPlace: [...placeRows.values()].sort((x, y) => y.wagesCents - x.wagesCents),
+  };
   const tips = {
     chargedCents: byDay.reduce((n, d) => n + d.chargedTipsCents, 0),
     cashCents: byDay.reduce((n, d) => n + d.cashTipsCents, 0),
@@ -196,6 +225,19 @@ export function dashboardData(store: Store, company: Company, today: string) {
   const posConn = store.posConnections.where((x) => x.companyId === company.id)[0];
   if (!posConn && company.setup) add({ id: 'pos', severity: 'info', title: 'Connect your point of sale', detail: 'Pull staff, hours and tips from Toast, Square or 7shifts so nobody types them twice.', to: '/app/settings/pos' });
   if (posConn?.lastSummary?.unmapped.length) add({ id: 'pos_unmapped', severity: 'soon', title: `${posConn.lastSummary.unmapped.length} ${posConn.lastSummary.unmapped.length === 1 ? 'person' : 'people'} on ${posConn.label.split(':')[0]} ${posConn.lastSummary.unmapped.length === 1 ? 'isn’t' : 'aren’t'} matched`, detail: 'Their hours were left out until you match them to your team.', to: '/app/settings/pos' });
+  // the guided setup, in the order a new restaurant does it. Each step is done from what the account really has.
+  const stateName = (() => { try { return stateFacts(company.homeState, today).name; } catch { return company.homeState; } })();
+  const setupSteps = [
+    { id: 'company', title: 'Add your company details', detail: 'Your EIN, owners and address. Payroll can’t be approved without the EIN.', done: !!company.ein && !!company.profile?.submittedAt, to: '/app/settings/company', minutes: 10 },
+    ...(a.has('unemployment_account') ? [{ id: 'state', title: `Add your ${stateName} unemployment account number`, detail: 'It goes on your state filings.', done: !!company.taxAccounts?.state?.[company.homeState]?.account, to: '/app/settings/state', minutes: 3 }] : []),
+    { id: 'bank', title: 'Set up how you pay your team', detail: 'Tell Totali your bank so it can write the payment file.', done: !!company.payment.employerBank, to: '/app/settings/payments', minutes: 5 },
+    { id: 'team', title: 'Add your team', detail: 'Invite them by email. They fill in their own W-4, I-9 and direct deposit.', done: active.length > 0, to: '/app/onboarding', minutes: 5 },
+    { id: 'hours', title: 'Connect where hours and tips come from', detail: 'Your point of sale or time clock, or an exported report.', done: !!posConn || store.shifts.where((x) => x.companyId === company.id).length > 0, to: '/app/settings/pos', minutes: 5 },
+    { id: 'first', title: 'Run your first payroll', detail: 'Review the hours, check the taxes, approve.', done: runs.some((r) => r.status !== 'draft'), to: '/app/payroll/run', minutes: 10 },
+  ];
+  const setup = { steps: setupSteps, done: setupSteps.filter((x) => x.done).length, total: setupSteps.length, minutes: setupSteps.filter((x) => !x.done).reduce((n, x) => n + x.minutes, 0) };
+  // while the setup list is on screen it already says these, so the to-do list leaves them out
+  if (setup.done < setup.total) { const covered = new Set(['ein', 'bank', 'first', 'uia', 'pos', 'profile']); for (let i = todos.length - 1; i >= 0; i--) if (covered.has(todos[i]!.id)) todos.splice(i, 1); }
   const rank = { urgent: 0, soon: 1, info: 2 } as const;
   todos.sort((x, y) => rank[x.severity] - rank[y.severity]);
 
@@ -221,7 +263,7 @@ export function dashboardData(store: Store, company: Company, today: string) {
 
   return {
     asOf: today,
-    company: { id: company.id, name: company.legalName, state: company.homeState, schedule: { frequency: company.paySchedule.frequency, payWeekday: company.paySchedule.payWeekday ?? null }, workweekStartDay: company.settings.workweekStartDay, industry: company.industry, niche: company.niche, hasEin: !!company.ein, takesTipCredit: company.settings.policy.takesTipCredit, stateForm: STATE_FORMS[company.homeState] ?? null, roles: company.settings.roles.map((r) => ({ key: r.key, label: r.label, pay: r.pay, tipped: r.tipped })), paymentSetUp: !!company.payment.employerBank, locations: company.locations ?? [] },
+    company: { id: company.id, name: company.legalName, state: company.homeState, schedule: { frequency: company.paySchedule.frequency, payWeekday: company.paySchedule.payWeekday ?? null }, workweekStartDay: company.settings.workweekStartDay, industry: company.industry, niche: company.niche, nicheLabel: (() => { try { return getNiche(company.industry, company.niche).label; } catch { return null; } })(), hasEin: !!company.ein, takesTipCredit: company.settings.policy.takesTipCredit, stateForm: STATE_FORMS[company.homeState] ?? null, roles: company.settings.roles.map((r) => ({ key: r.key, label: r.label, pay: r.pay, tipped: r.tipped })), paymentSetUp: !!company.payment.employerBank, locations: company.locations ?? [] },
     nextPayday: nextPayday(company, today, runs),
     runs: runs.slice(0, 10).map((r) => totalsOf(r)),
     latest: totalsOf(latest),
@@ -236,6 +278,8 @@ export function dashboardData(store: Store, company: Company, today: string) {
     pos: posConn
       ? { connected: true, provider: posConn.provider, label: posConn.label, lastSyncAt: posConn.lastSyncAt ?? null, lastError: posConn.lastError ?? null, summary: posConn.lastSummary ? { from: posConn.lastSummary.from, to: posConn.lastSummary.to, shifts: posConn.lastSummary.shifts, people: posConn.lastSummary.people, minutes: posConn.lastSummary.minutes, tipsCents: posConn.lastSummary.tipsCents, unmapped: posConn.lastSummary.unmapped.length, problems: posConn.lastSummary.problems.length } : null }
       : { connected: false, provider: null, label: null, lastSyncAt: null, lastError: null, summary: null },
+    week,
+    guide: setup,
     todos: todos.slice(0, 8),
     groups,
     seasonal: { ending: seasonal, count: seasonalCount },

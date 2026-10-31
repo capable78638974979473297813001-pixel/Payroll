@@ -41,8 +41,8 @@ const empty = (text, to, cta) => h('div', { class: 'empty' }, text, to ? [' ', l
 const ACTIONS = {
   run_payroll: { label: 'Run payroll', to: '/app/payroll/run', primary: true },
   invite_hire: { label: 'Invite a new hire', to: '/app/onboarding' },
-  enter_hours: { label: 'Enter hours and tips', to: '/app/time/hours' },
-  import_hours: { label: 'Import a spreadsheet', to: '/app/time/hours?import=1' },
+  enter_hours: { label: 'Pull hours and tips', to: '/app/payroll/run' },
+  import_hours: { label: 'Import a report', to: '/app/settings/pos' },
   add_person: { label: 'Add a person', to: '/app/onboarding' },
   pay_stubs: { label: 'Pay stubs', to: '/app/payroll/stubs' },
 };
@@ -262,7 +262,7 @@ export const RENDERERS = {
   hours_week({ data, settings }) {
     const hs = data.hours;
     return { title: 'Hours this week', body: h('div', { class: 'stack', style: { '--gap': '12px' } }, h('div', { style: { display: 'flex', gap: '32px', alignItems: 'baseline' } }, h('div', {}, h('div', { class: 'big accent' }, hoursFromMinutes(hs.totalMinutes)), h('div', { class: 'sub' }, `${shortDate(hs.weekStart)} to ${shortDate(hs.weekEnd)}`)), h('div', {}, h('div', { class: 'big sm' }, hoursFromMinutes(hs.overtimeMinutes)), h('div', { class: 'sub' }, 'Overtime'))),
-      settings.chart === 'none' ? null : hs.totalMinutes === 0 ? empty('No hours entered this week.', '/app/time/hours', 'Enter hours') : barChart(hs.byDay.map((d) => d.minutes / 60), hs.byDay.map((d) => dayLabel(d.date)), { line: settings.chart === 'line', fmt: (v) => `${v.toFixed(1)} hours` })) };
+      settings.chart === 'none' ? null : hs.totalMinutes === 0 ? empty('No hours this week yet.', '/app/settings/pos', 'Connect your POS') : barChart(hs.byDay.map((d) => d.minutes / 60), hs.byDay.map((d) => dayLabel(d.date)), { line: settings.chart === 'line', fmt: (v) => `${v.toFixed(1)} hours` })) };
   },
   overtime_watch({ data, settings }) {
     const lim = (settings.threshold || 36) * 60;
@@ -272,11 +272,11 @@ export const RENDERERS = {
   tips_week({ data, settings }) {
     const t = data.tips;
     return { title: 'Tips this week', body: h('div', { class: 'stack', style: { '--gap': '12px' } }, h('div', { style: { display: 'flex', gap: '32px', alignItems: 'baseline' } }, h('div', {}, h('div', { class: 'big accent' }, money(t.chargedCents + t.cashCents)), h('div', { class: 'sub' }, 'Total')), h('div', {}, h('div', { class: 'big sm' }, money(t.chargedCents)), h('div', { class: 'sub' }, 'Card')), h('div', {}, h('div', { class: 'big sm' }, money(t.cashCents)), h('div', { class: 'sub' }, 'Cash'))),
-      settings.chart === 'none' ? null : t.chargedCents + t.cashCents === 0 ? empty('No tips entered this week.', '/app/time/hours', 'Enter tips') : barChart(t.byDay.map((d) => (d.chargedTipsCents + d.cashTipsCents) / 100), t.byDay.map((d) => dayLabel(d.date)), { fmt: (v) => `$${v.toFixed(2)}` })) };
+      settings.chart === 'none' ? null : t.chargedCents + t.cashCents === 0 ? empty('No tips this week yet.', '/app/settings/pos', 'Connect your POS') : barChart(t.byDay.map((d) => (d.chargedTipsCents + d.cashTipsCents) / 100), t.byDay.map((d) => dayLabel(d.date)), { fmt: (v) => `$${v.toFixed(2)}` })) };
   },
   tip_pool_card({ data, settings }) {
     const p = data.tipPool;
-    if (!p || !p.rows.length) return { title: 'Tip pool', body: empty('Enter this week\'s hours and tips to see the split.', '/app/time/hours', 'Enter hours') };
+    if (!p || !p.rows.length) return { title: 'Tip pool', body: empty('Once hours and tips come in this week, the split shows here.', '/app/settings/pos', 'Connect your POS') };
     return { title: `Tip pool · by ${p.basis === 'points' ? 'role' : 'hours'}`, body: h('div', { class: 'stack', style: { '--gap': '10px' } }, h('div', { class: 'sub' }, `An estimate of ${money(p.totalCents)} across ${plural(p.rows.length, 'person', 'people')}. Pay runs apply tip-outs and the tip credit rules.`), h('ul', { class: 'row-list' }, ...p.rows.slice(0, settings.rows || 8).map((r) => h('li', {}, h('span', {}, r.name), h('b', { class: 'amt' }, money(r.shareCents)))))) };
   },
   group_cost({ data, settings }) {
@@ -334,7 +334,7 @@ const HOME = {
       body: h('div', { class: 'hero' },
         h('div', { class: 'hero-top' }, h('div', {}, h('i', {}, 'Pay date'), h('span', { class: 'hero-n' }, dayText(n.period.checkDate)), h('p', { class: 'sub' }, `For ${shortDate(n.period.periodStart)} to ${shortDate(n.period.periodEnd)} · ${inDays(n.daysUntil)}`)),
           n.stage === 'paid' ? null : h('div', { class: 'runby' }, h('i', {}, 'Run it by'), h('b', {}, dayText(n.runBy)), h('small', {}, when))),
-        h('ul', { class: 'ready' }, ...checks), h('div', { class: 'acts' }, action, n.stage === 'not_started' ? Button({ variant: 'ghost', href: `/app/payroll/run?start=${n.period.periodStart}` }, 'Enter hours') : null),
+        h('ul', { class: 'ready' }, ...checks), h('div', { class: 'acts' }, action, n.stage === 'not_started' ? Button({ variant: 'ghost', href: `/app/payroll/run?start=${n.period.periodStart}` }, 'Review hours') : null),
         data.latest ? h('div', { class: 'lastrun' }, h('span', {}, h('i', {}, 'Last payroll'), `${dayText(data.latest.checkDate)} · ${plural(data.latest.employees, 'person', 'people')} · ${money(data.latest.netCents)} take-home`), link(`/app/payroll/runs/${data.latest.id}`, { class: 'link' }, 'See it'), link('/app/payroll', { class: 'link' }, 'All payroll')) : null) };
   },
 

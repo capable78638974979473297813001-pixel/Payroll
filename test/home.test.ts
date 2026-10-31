@@ -5,6 +5,7 @@ import { dashboardData } from '../src/dashboard/data.ts';
 import { createCompanyFromSetup } from '../src/builder/finish.ts';
 import { addEmployee } from '../src/domain/employees.ts';
 import { saveWeek } from '../src/domain/weekEntry.ts';
+import { recordShift } from '../src/domain/timekeeping.ts';
 import { draftPayRun } from '../src/payroll/payRuns.ts';
 import { payrollRegister, hoursReport, roster } from '../src/reports/service.ts';
 import { ApiError } from '../src/lib/errors.ts';
@@ -19,16 +20,20 @@ function make() {
   return { store, company, mk, data: () => dashboardData(store, store.companies.get(company.id)!, D) };
 }
 
-test('a brand-new company is told what to do first, most urgent first', () => {
-  const { data } = make();
+test('a brand-new company gets a guided setup in the order a restaurant does it, and it fills in as things are done', () => {
+  const { data, store, company, mk } = make();
   const d = data();
-  const ids = d.todos.map((t) => t.id);
-  assert.deepEqual(ids.slice(0, 2), ['ein', 'bank'].filter((x) => ids.includes(x)).slice(0, 2));
-  assert.equal(d.todos[0]!.severity, 'urgent');
-  assert.ok(ids.includes('first'), 'and to add someone');
-  assert.ok(d.todos.every((t) => t.to.startsWith('/app')));
+  assert.deepEqual(d.guide.steps.map((x) => x.id).filter((x) => x !== 'state'), ['company', 'bank', 'team', 'hours', 'first']);
+  assert.equal(d.guide.done, 0);
+  assert.ok(d.guide.minutes > 0);
+  assert.ok(d.guide.steps.every((x) => x.to.startsWith('/app')));
+  assert.deepEqual(d.todos.map((t) => t.id).filter((id) => ['ein', 'bank', 'first', 'uia', 'pos'].includes(id)), [], 'the to-do list leaves out what the guide already says');
   assert.equal(d.nextPayroll.stage, 'not_started');
   assert.equal(d.nextPayroll.runByPassed, false);
+  mk('Ana');
+  assert.equal(data().guide.steps.find((x) => x.id === 'team')!.done, true);
+  store.tx(() => store.companies.put({ ...store.companies.get(company.id)!, payment: { ...store.companies.get(company.id)!.payment, employerBank: { bankAccountId: 'bank_x' } } as never }));
+  assert.equal(data().guide.steps.find((x) => x.id === 'bank')!.done, true);
 });
 
 test('the run-by date is the last banking day your bank can still pay on time', () => {
@@ -57,7 +62,7 @@ test('the list follows the work: a missing W-4, a draft run, an approved run wai
   d = data();
   assert.equal(d.nextPayroll.stage, 'approved');
   assert.ok(d.todos.some((t) => t.id.startsWith('pay_')), 'pay your team');
-  assert.equal(d.todos.filter((t) => t.severity === 'urgent').length >= 1, true);
+  assert.equal(d.todos.find((t) => t.id.startsWith('pay_'))!.severity, 'soon', 'pay day is still ahead');
 });
 
 test('reports are plain CSV: the register by pay date, hours and tips, and a roster that masks SSNs', () => {
@@ -75,4 +80,24 @@ test('reports are plain CSV: the register by pay date, hours and tips, and a ros
   const r = roster(store, company.id);
   assert.ok(r.content.includes('***-**-') && !r.content.includes('512-34'));
   assert.throws(() => payrollRegister(store, company.id, '2026-12-01', '2026-01-01'), ApiError);
+});
+
+test('the week at the restaurant: wages with overtime at time and a half, overtime as a share of hours, by position and by place', () => {
+  const { store, company, mk, data } = make();
+  const a = mk('Ana'); const b = mk('Ben');
+  const d0 = data().hours.weekStart;
+  const day = (n: number) => new Date(Date.parse(`${d0}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+  const rate = (id: string) => (store.employees.get(id)!.payType as { rateCents: number }).rateCents;
+  const hourly = rate(a.id);
+  recordShift(store, company.id, { employeeId: a.id, workDate: day(0), minutes: 1440 });
+  recordShift(store, company.id, { employeeId: a.id, workDate: day(1), minutes: 1260 }); // 45 hours
+  recordShift(store, company.id, { employeeId: b.id, workDate: day(0), minutes: 1200 }); // 20 hours
+  const w = data().week;
+  assert.equal(w.workers, 2);
+  assert.equal(w.overtimeShare, 7.7, '5 of 65 hours');
+  assert.equal(w.wagesCents, Math.round(hourly * 40 + hourly * 1.5 * 5 + hourly * 20), 'forty hours plain, five at time and a half, twenty plain');
+  assert.equal(w.byRole.length, 1);
+  assert.deepEqual([w.byRole[0]!.role, w.byRole[0]!.people, w.byRole[0]!.minutes], ['line_cook', 2, 3900]);
+  assert.equal(w.byPlace.reduce((n, p) => n + p.minutes, 0), 3900);
+  assert.equal(typeof data().company.nicheLabel, 'string');
 });

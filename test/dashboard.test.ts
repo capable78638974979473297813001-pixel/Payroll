@@ -35,12 +35,12 @@ test('the design\'s restaurant gets cards for what it said: tips, a tip pool, Mi
   const c = svc.get(svc['store'].companies.all()[0]!.id).config;
   assert.deepEqual(c.tabs.map((t) => t.label), ['Overview', 'Payroll', 'People', 'Time and tips', 'Onboarding', 'Taxes', 'Reports', 'Help', 'Settings']);
   const o = types(c);
-  assert.deepEqual(o.slice(0, 4), ['next_payroll_hero', 'todo_list', 'cost_trend', 'tax_due']);
+  assert.deepEqual(o.slice(0, 6), ['setup_guide', 'next_payroll_hero', 'todo_list', 'week_snapshot', 'cost_trend', 'tax_due']);
   // The overview is the sections the setup built, eight of them for the design's restaurant, the pay run wide.
   const mods = c.tabs.find((t) => t.id === 'overview')!.widgets.filter((w) => w.type === 'module');
   assert.deepEqual(mods.map((w) => w.settings.module), ['pay_run', 'team', 'hours_tips', 'federal_taxes', 'new_hire_forms', 'state_mi', 'locations', 'contractors']);
   assert.deepEqual(mods.map((w) => w.span), [8, 4, 4, 4, 4, 4, 4, 4]);
-  for (const t of ['pos_status', 'tips_panel']) assert.ok(types(c, 'time').includes(t), t);
+  for (const t of ['pos_status', 'tips_panel', 'labor_by_role']) assert.ok(types(c, 'time').includes(t), t);
   for (const t of ['locations_card', 'contractors_card']) assert.ok(types(c, 'people').includes(t), t);
 });
 

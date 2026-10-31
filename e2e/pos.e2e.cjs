@@ -41,7 +41,7 @@ const fake = http.createServer((req, res) => {
     // the home suggests connecting, and Settings has the section
     await page.goto(`${server.base}/app`);
     await page.waitForSelector('[data-type=todo_list]');
-    assert.ok((await page.locator('[data-type=todo_list]').textContent()).includes('Connect your point of sale'));
+    assert.ok((await page.locator('[data-step=hours]').textContent()).includes('Connect where hours and tips come from'), 'the setup guide asks for it');
     assert.ok((await page.locator('[data-testid=pos-none]').textContent()).includes('entered by hand'), 'the dashboard says hours are typed in until a system is connected');
     await page.goto(`${server.base}/app/settings/pos`);
     await page.waitForSelector('[data-provider=toast]');
