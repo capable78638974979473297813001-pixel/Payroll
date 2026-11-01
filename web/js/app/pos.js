@@ -87,18 +87,9 @@ export async function pull(from, to) {
   return s;
 }
 
-/** Provider-owned approval. No merchant token fields in the restaurant flow. */
+/** Provider-owned approval, with a guided credential option for restaurant-owned access. */
 export async function beginProvider(provider, onDone = () => navigate('/app')) {
-  if (!provider.signIn) {
-    const setup = provider.setup;
-    const m = modal({ title: `Set up ${provider.name}`, body: h('div', { class: 'stack' },
-      h('p', {}, `Totali’s ${provider.name} app has not been configured on this server. Restaurant sign-in becomes available after the Totali administrator completes provider setup.`),
-      setup ? h('div', {}, h('p', {}, setup.requirement), h('a', { href: setup.setupUrl, target: '_blank', rel: 'noopener noreferrer', class: 'link' }, `Open ${provider.name} app setup`),
-        h('details', {}, h('summary', {}, 'For the Totali administrator'), h('p', {}, 'Add these provider-issued values in Render → Environment, then redeploy. Do not enter restaurant passwords here.'), h('ul', {}, ...setup.environmentKeys.map(key => h('li', {}, h('code', {}, key)))),
-          setup.callbackPath ? h('p', {}, 'Register this HTTPS callback on the provider app: ', h('code', {}, location.origin + setup.callbackPath)) : h('p', {}, 'Toast must approve Totali’s partner integration before restaurants can add it.'))) : null),
-      actions: [Button({ onClick: () => m.close() }, 'Close')] });
-    return;
-  }
+  if (!provider.signIn) return credentialConnection(provider, onDone);
   if (provider.id !== 'toast') {
     const result = await api.get(`${base()}/pos/${provider.id}/start`);
     location.assign(result.url);
@@ -117,14 +108,56 @@ export async function beginProvider(provider, onDone = () => navigate('/app')) {
   verify.addEventListener('click', async () => { setLoading(verify, true); try { await api.post(`${base()}/pos/toast/complete`); m.close(); await refreshData(); onDone(); } catch (e) { error.replaceChildren(Alert('error', e.message)); setLoading(verify, false); } });
 }
 
+/** Values stay in the open dialog until the owner explicitly verifies this connection. */
+export function credentialConnection(provider, onDone = () => navigate('/app')) {
+  const guide = provider.guide;
+  const fields = provider.fields.map(spec => {
+    const help = guide?.fields[spec.name];
+    const field = Field({ ...spec, label: spec.name === 'environment' ? 'Environment' : spec.name === 'region' ? 'Region' : spec.label, type: spec.secret ? 'password' : 'text', autocomplete: 'off', maxlength: 500,
+      select: Boolean(spec.options), value: spec.options?.[0]?.value || '', options: spec.options,
+      hint: help?.hint || spec.hint, placeholder: help?.placeholder || '', rightSlot: spec.secret ? 'Show' : undefined });
+    field.input.required = !spec.optional;
+    field.input.spellcheck = false;
+    return { spec, field };
+  });
+  const error = h('div', { role: 'status' });
+  const go = Button({ type: 'submit', 'data-testid': 'verify-pos-credentials' }, 'Verify and connect');
+  const form = h('form', { class: 'f pos-credential-form', autocomplete: 'off' },
+    h('p', {}, `Connect your own restaurant’s ${provider.name} account. Follow the steps, then paste each value into its matching box.`),
+    guide ? h('section', { class: 'pos-connection-guide', 'aria-label': `${provider.name} connection instructions` },
+      h('a', { href: guide.url, target: '_blank', rel: 'noopener noreferrer', class: 'btn ghost' }, `Open ${provider.name}`),
+      h('ol', {}, ...guide.steps.map(step => h('li', {}, step))),
+      h('p', { class: 'fine' }, guide.note), h('div', { class: 'acts' }, ...guide.docs.map(doc => h('a', { href: doc.url, target: '_blank', rel: 'noopener noreferrer', class: 'link' }, doc.label)))) : null,
+    h('h3', {}, `Paste your ${provider.name} details`),
+    ...fields.map(({field}) => field.el),
+    h('p', { class: 'fine' }, 'Totali checks these details with your provider before saving them encrypted. Access tokens and secrets are never shown again after connection.'), error,
+    h('div', { class: 'acts' }, go));
+  let closed = false;
+  const m = modal({ title: `Connect ${provider.name}`, body: form, onClose: () => { closed = true; for (const {field} of fields) field.value = ''; }, actions: [Button({variant:'ghost',onClick:()=>m.close()}, 'Cancel')] });
+  form.addEventListener('submit', async e => {
+    e.preventDefault(); error.replaceChildren();
+    let valid = true;
+    for(const {spec,field} of fields) { field.setError(null); if(!spec.optional && !field.value.trim()) { field.setError(`Paste your ${spec.label.toLowerCase()}.`); valid = false; } }
+    if(!valid) return;
+    const body = {provider: provider.id};
+    for(const {spec,field} of fields) if(field.value.trim()) body[spec.name] = field.value.trim();
+    setLoading(go,true);
+    try { await api.post(`${base()}/pos/connect`,body); m.close(); await refreshData(); toast('success',`${provider.name} connected. Match your employees, then import the pay period.`); onDone(); }
+    catch(e) { if(closed) return; const field = fields.find(f=>f.spec.name===e.details?.field); if(field)field.field.setError(e.message); error.replaceChildren(Alert('error','Connection was not saved.',e.message)); setLoading(go,false); }
+    finally { for(const key of Object.keys(body)) if(key !== 'provider') delete body[key]; }
+  });
+  return m;
+}
+
 export function providerButtons(cat, onDone) {
   return h('div', { class: 'pos-provider-list' }, ...['square','clover','toast','sevenshifts'].map(id => {
     const provider = cat.providers.find(p => p.id === id);
     if (!provider) return null;
     const error = h('div', {});
-    const connect = Button({ variant: 'secondary', type: 'button', 'data-provider': id }, provider.signIn ? `Connect ${provider.name}` : `Set up ${provider.name}`);
+    const connect = Button({ variant: 'secondary', type: 'button', 'data-provider': id }, `Connect ${provider.name}`);
     connect.addEventListener('click', async () => { setLoading(connect, true); try { await beginProvider(provider, onDone); } catch (e) { error.replaceChildren(Alert('error', e.message)); } finally { setLoading(connect, false); } });
-    return h('section', { class: 'pos-provider-option' }, h('div', {}, h('strong', {}, provider.name), h('small', {}, provider.signIn ? (id === 'toast' ? 'Approve in Toast’s marketplace' : `Approve access at ${provider.name}`) : 'Provider app setup required')), connect, error);
+    const manual = provider.signIn ? Button({ variant: 'ghost', size: 'sm', onClick: () => credentialConnection(provider, onDone) }, 'Use IDs and tokens instead') : null;
+    return h('section', { class: 'pos-provider-option' }, h('div', {}, h('strong', {}, provider.name), h('small', {}, provider.signIn ? (id === 'toast' ? 'Approve in Toast’s marketplace' : `Approve access at ${provider.name}`) : 'Guided setup with your IDs and tokens')), h('div', { class: 'pos-provider-actions' }, connect, manual), error);
   }));
 }
 

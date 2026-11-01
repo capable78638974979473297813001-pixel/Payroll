@@ -92,3 +92,4 @@ body{background:var(--rest-paper)}
 .restaurant-app .restaurant-connect-link>span{font-size:12px!important;line-height:1.5;display:block}.restaurant-app .restaurant-connect-link small{display:block;font-size:10px!important;margin-top:5px}
 
 @media(min-width:651px){.rest-hero{min-height:720px}.rest-floating-payroll{top:210px}}
+.pos-provider-actions{display:flex;flex-direction:column;align-items:end;gap:8px}.pos-connection-guide{padding:18px;background:#f4f5f0;border:1px solid #dddeda;border-radius:4px}.pos-connection-guide ol{padding-left:22px;margin:20px 0;display:grid;gap:14px;line-height:1.65;font-size:13px}.pos-connection-guide .acts{gap:12px;flex-wrap:wrap}.pos-credential-form>.fld{margin:0 0 6px}.pos-credential-form h3{font-size:17px;margin:22px 0 10px}.pos-credential-form .help{font-size:12px;line-height:1.5}.pos-credential-form>.acts{justify-content:flex-end}

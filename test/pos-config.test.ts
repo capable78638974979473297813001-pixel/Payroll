@@ -33,3 +33,15 @@ test('missing setup is actionable for each provider without exposing secret valu
   assert.equal(providerSetup('square').callbackPath,'/v1/pos/square/callback');
   assert.equal(providerSetup('toast').callbackPath,null);
 });
+
+test('every provider includes complete merchant instructions and matching field guidance', () => {
+  const catalog = new PosService(new Store()).catalog('fixture');
+  for(const provider of catalog.providers) {
+    assert.ok(provider.guide, provider.name);
+    assert.ok(provider.guide.steps.length >= 4);
+    assert.ok(provider.guide.docs.length >= 1);
+    assert.equal(new URL(provider.guide.url).protocol,'https:');
+    for(const field of provider.fields.filter(f=>!f.options)) assert.ok(provider.guide.fields[field.name]?.hint, `${provider.name}: ${field.name}`);
+    assert.ok(!provider.guide.steps.some(s=>s.includes('SQUARE_APP_SECRET')));
+  }
+});
