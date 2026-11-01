@@ -32,3 +32,11 @@ No provider was tested against a live merchant account in this change. Unconfigu
 - [Toast partner integration setup](https://support.toasttab.com/en/article/Set-Up-Toast-Partner-Integrations)
 
 Visual direction: [NN/g on generic AI prototypes](https://www.nngroup.com/articles/ai-prototyping/) and [Carbon table guidance](https://github.com/carbon-design-system/carbon-website/blob/main/src/pages/components/data-table/usage.mdx). The implementation uses restrained surfaces, consistent hierarchy, direct task labels and full-width data tables with search and progressive disclosure.
+
+## When every provider says setup is required
+
+The server has not loaded complete provider app credentials. A restaurant's sign-in cannot issue Totali's application credentials. Create/register the production application first, set its issued ID and secret in the running Render service's Environment, and redeploy. Toast additionally needs its approved marketplace entry URL. Blueprint changes do not supply credentials or necessarily update an existing manually created service.
+
+Square also accepts `SQUARE_APPLICATION_ID` and `SQUARE_APPLICATION_SECRET`; Clover accepts `CLOVER_CLIENT_ID` and `CLOVER_CLIENT_SECRET`. The documented `*_APP_*` names take precedence. Values are trimmed, and blank/partial pairs never enable a provider. Production startup warnings identify all four incomplete configurations by variable name without printing values. The connection setup dialog links the official provider setup and shows the exact callback address and deployment variable names.
+
+Registering a developer account does not guarantee production or partner approval. Finish the provider's review and verify the first live restaurant approval before claiming an integration is live. Never replace credentials with placeholders, or mark a provider connected merely because a button was clicked.

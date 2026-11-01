@@ -45,6 +45,16 @@ services:
         sync: false
       - key: SQUARE_APP_SECRET
         sync: false
+      - key: SEVENSHIFTS_CLIENT_ID
+        sync: false
+      - key: SEVENSHIFTS_CLIENT_SECRET
+        sync: false
+      - key: TOAST_PARTNER_CLIENT_ID
+        sync: false
+      - key: TOAST_PARTNER_CLIENT_SECRET
+        sync: false
+      - key: TOAST_PARTNER_ENTRY_URL
+        sync: false
       - key: SUPPORT_EMAIL
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
