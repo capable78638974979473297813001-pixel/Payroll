@@ -1,3 +1,4 @@
+import { loadPosApps } from '../pos/config.ts';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { ApiError, badRequest, forbidden, notFound, unauthorized } from '../lib/errors.ts';
 import * as v from '../lib/validate.ts';
@@ -154,7 +155,7 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
   const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
   const google = deps.google !== undefined ? deps.google : (() => { const g = googleFromEnv(); return g ? new GoogleAuth(g, fetch, now) : null; })();
   const OAUTH_COOKIE = 'totali_oauth';
-  const oauth = deps.oauth ?? { ...(process.env.SEVENSHIFTS_CLIENT_ID && process.env.SEVENSHIFTS_CLIENT_SECRET ? { sevenshifts: { appId: process.env.SEVENSHIFTS_CLIENT_ID, secret: process.env.SEVENSHIFTS_CLIENT_SECRET } } : {}), ...(process.env.TOAST_PARTNER_CLIENT_ID && process.env.TOAST_PARTNER_CLIENT_SECRET && process.env.TOAST_PARTNER_ENTRY_URL ? { toast: { appId: process.env.TOAST_PARTNER_CLIENT_ID, secret: process.env.TOAST_PARTNER_CLIENT_SECRET, entryUrl: process.env.TOAST_PARTNER_ENTRY_URL } } : {}), ...(process.env.CLOVER_APP_ID && process.env.CLOVER_APP_SECRET ? { clover: { appId: process.env.CLOVER_APP_ID, secret: process.env.CLOVER_APP_SECRET } } : {}), ...(process.env.SQUARE_APP_ID && process.env.SQUARE_APP_SECRET ? { square: { appId: process.env.SQUARE_APP_ID, secret: process.env.SQUARE_APP_SECRET } } : {}) };
+  const oauth = deps.oauth ?? loadPosApps();
   const pos = new PosService(store, now, deps.posFetch ?? globalThis.fetch, config.devTools ? deps.posHosts ?? {} : {}, oauth);
   const taxCache = new Map<string, { at: number; value: unknown }>();
   const contractors = new ContractorService(store, mailer, now);

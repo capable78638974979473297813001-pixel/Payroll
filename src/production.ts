@@ -1,3 +1,4 @@
+import { posSetupWarnings } from './pos/config.ts';
 /**
  * What has to be true before Totali runs for real customers. It runs when the server starts in production and refuses to
  * start if something that would lose or leak data, or break sign-in or billing, is missing. A warning is something to know
@@ -35,7 +36,6 @@ export function productionProblems(env: NodeJS.ProcessEnv): Problems {
   }
   if (!has('SUPPORT_EMAIL')) warnings.push('SUPPORT_EMAIL is not set: Help messages go to hello@omnia.tax.');
   if (!has('GOOGLE_CLIENT_ID')) warnings.push('Sign in with Google is off (GOOGLE_CLIENT_ID is not set).');
-  if (!has('SQUARE_APP_ID')) warnings.push('Sign in with Square is off (SQUARE_APP_ID is not set): owners paste a token instead.');
-  if (!has('CLOVER_APP_ID')) warnings.push('Sign in with Clover is off (CLOVER_APP_ID is not set).');
+  warnings.push(...posSetupWarnings(env));
   return { errors, warnings };
 }

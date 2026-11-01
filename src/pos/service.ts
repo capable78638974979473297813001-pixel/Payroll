@@ -1,3 +1,4 @@
+import { providerSetup } from './config.ts';
 import { randomBytes } from 'node:crypto';
 import { ApiError, badRequest, conflict, notFound } from '../lib/errors.ts';
 import * as v from '../lib/validate.ts';
@@ -73,7 +74,7 @@ export class PosService {
 
   catalog(companyId: string) {
     const c = this.connectionOf(companyId);
-    return { providers: PROVIDERS.map(p => ({ ...p, signIn: p.id !== 'file' && Boolean(this.oauth[p.id]), approvalFlow: p.id === 'toast' ? 'marketplace' : 'oauth', setupRequired: p.id === 'toast' ? 'Toast partner approval and marketplace listing' : p.id === 'sevenshifts' ? '7shifts partner OAuth client' : `${p.name} app registration` })), connection: c ? this.view(c) : null };
+    return { providers: PROVIDERS.map(p => ({ ...p, setup: p.id !== 'file' ? providerSetup(p.id) : null, signIn: p.id !== 'file' && Boolean(this.oauth[p.id]), approvalFlow: p.id === 'toast' ? 'marketplace' : 'oauth', setupRequired: p.id === 'toast' ? 'Toast partner approval and marketplace listing' : p.id === 'sevenshifts' ? '7shifts partner OAuth client' : `${p.name} app registration` })), connection: c ? this.view(c) : null };
   }
 
   /** Check the details against the other system first. Only details that work are kept, and they are kept encrypted. */
