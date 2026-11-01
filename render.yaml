@@ -45,6 +45,14 @@ services:
         sync: false
       - key: SQUARE_APP_SECRET
         sync: false
+      - key: SQUARE_APPLICATION_ID
+        sync: false
+      - key: SQUARE_APPLICATION_SECRET
+        sync: false
+      - key: SQUARE_ENVIRONMENT
+        sync: false
+      - key: SQUARE_REDIRECT_URL
+        sync: false
       - key: SEVENSHIFTS_CLIENT_ID
         sync: false
       - key: SEVENSHIFTS_CLIENT_SECRET

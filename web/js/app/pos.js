@@ -95,7 +95,7 @@ export async function beginProvider(provider, onDone = () => navigate('/app')) {
       h('p', {}, `Totali’s ${provider.name} app has not been configured on this server. Restaurant sign-in becomes available after the Totali administrator completes provider setup.`),
       setup ? h('div', {}, h('p', {}, setup.requirement), h('a', { href: setup.setupUrl, target: '_blank', rel: 'noopener noreferrer', class: 'link' }, `Open ${provider.name} app setup`),
         h('details', {}, h('summary', {}, 'For the Totali administrator'), h('p', {}, 'Add these provider-issued values in Render → Environment, then redeploy. Do not enter restaurant passwords here.'), h('ul', {}, ...setup.environmentKeys.map(key => h('li', {}, h('code', {}, key)))),
-          setup.callbackPath ? h('p', {}, 'Register this HTTPS callback on the provider app: ', h('code', {}, location.origin + setup.callbackPath)) : h('p', {}, 'Toast must approve Totali’s partner integration before restaurants can add it.'))) : null),
+          setup.callbackPath ? h('p', {}, 'Register this HTTPS callback on the provider app: ', h('code', {}, setup.redirectUrl || (location.origin + setup.callbackPath))) : h('p', {}, 'Toast must approve Totali’s partner integration before restaurants can add it.'))) : null),
       actions: [Button({ onClick: () => m.close() }, 'Close')] });
     return;
   }
@@ -122,9 +122,11 @@ export function providerButtons(cat, onDone) {
     const provider = cat.providers.find(p => p.id === id);
     if (!provider) return null;
     const error = h('div', {});
-    const connect = Button({ variant: 'secondary', type: 'button', 'data-provider': id }, provider.signIn ? `Connect ${provider.name}` : `Set up ${provider.name}`);
+    const label = id === 'square' ? (provider.signIn ? 'Connect Square' : 'Set up Square') : (provider.signIn ? `Connect ${provider.name}` : `Set up ${provider.name}`);
+    const connect = Button({ variant: 'secondary', type: 'button', 'data-provider': id, ...(id === 'square' ? { 'data-testid': 'connect-square' } : {}) }, label);
     connect.addEventListener('click', async () => { setLoading(connect, true); try { await beginProvider(provider, onDone); } catch (e) { error.replaceChildren(Alert('error', e.message)); } finally { setLoading(connect, false); } });
-    return h('section', { class: 'pos-provider-option' }, h('div', {}, h('strong', {}, provider.name), h('small', {}, provider.signIn ? (id === 'toast' ? 'Approve in Toast’s marketplace' : `Approve access at ${provider.name}`) : 'Provider app setup required')), connect, error);
+    const hint = provider.signIn ? (id === 'square' ? 'Sandbox only. One click approves read access at Square.' : id === 'toast' ? 'Approve in Toast’s marketplace' : `Approve access at ${provider.name}`) : 'Provider app setup required';
+    return h('section', { class: 'pos-provider-option' }, h('div', {}, h('strong', {}, provider.name), h('small', {}, hint)), connect, error);
   }));
 }
 

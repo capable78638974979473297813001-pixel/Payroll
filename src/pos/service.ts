@@ -1,20 +1,19 @@
-import { providerSetup } from './config.ts';
+import { providerSetup, squareRedirectUrl } from './config.ts';
 import { randomBytes } from 'node:crypto';
 import { ApiError, badRequest, conflict, notFound } from '../lib/errors.ts';
 import * as v from '../lib/validate.ts';
 import { newId } from '../lib/ids.ts';
-import { decryptField, encryptField } from '../lib/crypto.ts';
+import { decryptField, encryptField, safeEqual } from '../lib/crypto.ts';
 import { recordShift } from '../domain/timekeeping.ts';
 import { daysBetween } from '../lib/dates.ts';
 import type { Store } from '../store/store.ts';
 import type { Employee } from '../domain/types.ts';
-import { getJson, PosError, str, num, type Fetch } from './http.ts';
+import { getJson, PosError, redactSecrets, str, num, type Fetch } from './http.ts';
 import { sevenToken } from './sevenAuth.ts';
 import { approvedToastLocation, toastApprovalUrl, type ToastPartner } from './toastPartner.ts';
 import { CLOVER_HOSTS } from './clover.ts';
-import { SQUARE_HOSTS } from './square.ts';
+import { SQUARE_HOSTS, SQUARE_OAUTH_SCOPES, SQUARE_OAUTH_STATE_MS, SQUARE_VERSION, squareAdapter } from './square.ts';
 import { toastAdapter } from './toast.ts';
-import { squareAdapter } from './square.ts';
 import { sevenShiftsAdapter } from './sevenshifts.ts';
 import { cloverAdapter } from './clover.ts';
 import { zoneFor } from './zone.ts';
@@ -23,7 +22,22 @@ import type { PosAdapter, PosConnection, PosProviderId, PosProviderInfo, PosSumm
 
 const ENV = { name: 'environment', label: 'Which Toast or Square', optional: true, options: [{ value: 'production', label: 'My real restaurant' }, { value: 'sandbox', label: 'A test account' }] };
 
-export type OAuthApps = Partial<Record<'clover' | 'square' | 'sevenshifts', { appId: string; secret: string }>> & { toast?: ToastPartner };
+export type OAuthApp = { appId: string; secret: string };
+/** Square Connect is sandbox-only. A production environment never satisfies this type. */
+export type SquareOAuthApp = OAuthApp & { environment: 'sandbox'; redirectUrl: string };
+export type OAuthApps = { clover?: OAuthApp; square?: SquareOAuthApp; sevenshifts?: OAuthApp; toast?: ToastPartner };
+/** The signed-in browser that started Connect. The callback must be the same session. */
+export type OAuthSession = { userId: string; sessionId: string };
+
+function withBearer(init: RequestInit | undefined, token: string): RequestInit {
+  const headers: Record<string, string> = {};
+  const src = init?.headers;
+  if (src && typeof src === 'object' && !Array.isArray(src) && !(src instanceof Headers)) {
+    for (const [k, v] of Object.entries(src)) if (typeof v === 'string') headers[k] = v;
+  }
+  headers.authorization = `Bearer ${token}`;
+  return { ...init, headers };
+}
 
 export const PROVIDERS: PosProviderInfo[] = [
   { id: 'toast', name: 'Toast', brings: ['Your staff', 'Hours from the time clock', 'Card tips and declared cash tips'],
@@ -51,7 +65,9 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
  */
 export class PosService {
   private store: Store; private now: () => Date; private f: Fetch; private hosts: Partial<Record<PosProviderId, string>>; private lastSync = new Map<string, number>();
-  private oauth: OAuthApps; private pending = new Map<string, { companyId: string; provider: PosProviderId; until: number }>();
+  private oauth: OAuthApps; private pending = new Map<string, { companyId: string; provider: PosProviderId; until: number; userId?: string; sessionId?: string }>();
+  private usedStates = new Map<string, number>();
+  private squareRefreshInflight = new Map<string, Promise<Record<string, string>>>();
   private toastPending = new Map<string, { reference: string; until: number }>();
   constructor(store: Store, now: () => Date = () => new Date(), f: Fetch = globalThis.fetch, hosts: Partial<Record<PosProviderId, string>> = {}, oauth: OAuthApps = {}) {
     this.store = store; this.now = now; this.f = f; this.hosts = hosts; this.oauth = oauth;
@@ -74,7 +90,15 @@ export class PosService {
 
   catalog(companyId: string) {
     const c = this.connectionOf(companyId);
-    return { providers: PROVIDERS.map(p => ({ ...p, setup: p.id !== 'file' ? providerSetup(p.id) : null, signIn: p.id !== 'file' && Boolean(this.oauth[p.id]), approvalFlow: p.id === 'toast' ? 'marketplace' : 'oauth', setupRequired: p.id === 'toast' ? 'Toast partner approval and marketplace listing' : p.id === 'sevenshifts' ? '7shifts partner OAuth client' : `${p.name} app registration` })), connection: c ? this.view(c) : null };
+    const square = this.squareApp();
+    return { providers: PROVIDERS.map(p => {
+      if (p.id === 'file') return { ...p, setup: null, signIn: false, approvalFlow: 'oauth' as const, setupRequired: 'Spreadsheet imports' };
+      const setup = providerSetup(p.id);
+      if (p.id === 'square') setup.redirectUrl = square?.redirectUrl ?? setup.redirectUrl;
+      const signIn = p.id === 'square' ? square !== null : p.id === 'toast' ? Boolean(this.oauth.toast) : p.id === 'clover' ? Boolean(this.oauth.clover) : Boolean(this.oauth.sevenshifts);
+      const setupRequired = p.id === 'toast' ? 'Toast partner approval and marketplace listing' : p.id === 'sevenshifts' ? '7shifts partner OAuth client' : p.id === 'square' ? 'Square sandbox application (SQUARE_ENVIRONMENT=sandbox)' : `${p.name} app registration`;
+      return { ...p, setup, signIn, approvalFlow: p.id === 'toast' ? 'marketplace' as const : 'oauth' as const, setupRequired };
+    }), connection: c ? this.view(c) : null };
   }
 
   /** Check the details against the other system first. Only details that work are kept, and they are kept encrypted. */
@@ -100,13 +124,35 @@ export class PosService {
   // ------------------------------------------------------------------ the owner signs in at Clover or Square and approves Totali's app
 
   private apiHost(provider: PosProviderId, region?: string) {
+    if (provider === 'square') return SQUARE_HOSTS.sandbox;
     if (this.hosts[provider]) return this.hosts[provider]!;
-    return provider === 'square' ? SQUARE_HOSTS.production : CLOVER_HOSTS[(region as keyof typeof CLOVER_HOSTS) ?? 'na'] ?? CLOVER_HOSTS.na;
+    return CLOVER_HOSTS[(region as keyof typeof CLOVER_HOSTS) ?? 'na'] ?? CLOVER_HOSTS.na;
+  }
+
+  /** Sandbox application only. A missing redirect, or any environment other than sandbox, keeps the button off. */
+  private squareApp(): SquareOAuthApp | null {
+    const app = this.oauth.square;
+    if (!app || app.environment !== 'sandbox' || !app.appId || !app.secret) return null;
+    const redirectUrl = squareRedirectUrl({ SQUARE_REDIRECT_URL: app.redirectUrl });
+    if (!redirectUrl || redirectUrl !== app.redirectUrl) return null;
+    return app;
+  }
+
+  private sweepSquareState() {
+    const now = this.now().getTime();
+    for (const [k, v] of this.pending) if (v.until < now) this.pending.delete(k);
+    this.sweepUsedStates();
+  }
+
+  private sweepUsedStates() {
+    const now = this.now().getTime();
+    for (const [k, until] of this.usedStates) if (until < now) this.usedStates.delete(k);
   }
 
   /** Where to send the owner to approve Totali. Works once Totali's own app is registered with that vendor. */
-  oauthStart(companyId: string, provider: PosProviderId, redirectUri: string) {
-    const app = provider === 'clover' || provider === 'square' || provider === 'sevenshifts' ? this.oauth[provider] : undefined;
+  oauthStart(companyId: string, provider: PosProviderId, redirectUri: string, session?: OAuthSession | null) {
+    if (provider === 'square') return this.squareStart(companyId, session ?? null);
+    const app = provider === 'clover' || provider === 'sevenshifts' ? this.oauth[provider] : undefined;
     if (!app) throw conflict('sign_in_not_set_up', `Sign in with ${providerName(provider)} isn’t set up on this server yet.`);
     if (this.connectionOf(companyId)) throw conflict('one_source', 'Disconnect the current source first. Two sources would both report the same shift.');
     for (const [k, v] of this.pending) if (v.until < this.now().getTime()) this.pending.delete(k);
@@ -114,17 +160,27 @@ export class PosService {
     this.pending.set(state, { companyId, provider, until: this.now().getTime() + 15 * 60_000 });
     const q = encodeURIComponent;
     if (provider === 'sevenshifts') return { state, url: `https://app.7shifts.com/generate_token?client_id=${q(app.appId)}&state=${state}` };
-    if (provider === 'square') {
-      const host = this.hosts.square ?? SQUARE_HOSTS.production;
-      return { state, url: `${host}/oauth2/authorize?client_id=${q(app.appId)}&scope=${['EMPLOYEES_READ', 'TIMECARDS_READ', 'PAYMENTS_READ', 'MERCHANT_PROFILE_READ'].join('+')}&session=false&state=${state}` };
-    }
     const host = this.hosts.clover ?? 'https://www.clover.com';
     return { state, url: `${host}/oauth/v2/authorize?client_id=${q(app.appId)}&redirect_uri=${q(redirectUri)}&state=${state}` };
   }
 
+  private squareStart(companyId: string, session: OAuthSession | null) {
+    const app = this.squareApp();
+    if (!app) throw conflict('sign_in_not_set_up', 'Connect Square isn’t set up on this server. It stays off unless SQUARE_ENVIRONMENT is sandbox.');
+    if (this.connectionOf(companyId)) throw conflict('one_source', 'Disconnect the current source first. Two sources would both report the same shift.');
+    if (!session?.userId || !session.sessionId) throw badRequest('Sign in to connect Square.');
+    this.sweepSquareState();
+    const state = randomBytes(24).toString('base64url');
+    this.pending.set(state, { companyId, provider: 'square', userId: session.userId, sessionId: session.sessionId, until: this.now().getTime() + SQUARE_OAUTH_STATE_MS });
+    const q = encodeURIComponent;
+    const url = `${SQUARE_HOSTS.sandbox}/oauth2/authorize?client_id=${q(app.appId)}&scope=${SQUARE_OAUTH_SCOPES.join('+')}&session=false&state=${q(state)}&redirect_uri=${q(app.redirectUrl)}`;
+    return { state, url };
+  }
+
   /** The vendor sends the owner back with a code. Exchange it for tokens and keep them encrypted. */
-  async oauthFinish(provider: PosProviderId, query: URLSearchParams, signedInCompanyId: string | null) {
-    const app = provider === 'clover' || provider === 'square' || provider === 'sevenshifts' ? this.oauth[provider] : undefined;
+  async oauthFinish(provider: PosProviderId, query: URLSearchParams, signedInCompanyId: string | null, session?: OAuthSession | null) {
+    if (provider === 'square') return this.squareFinish(query, signedInCompanyId, session ?? null);
+    const app = provider === 'clover' || provider === 'sevenshifts' ? this.oauth[provider] : undefined;
     if (!app) throw conflict('sign_in_not_set_up', `Sign in with ${providerName(provider)} isn’t set up on this server yet.`);
     const state = query.get('state') ?? '';
     const p = this.pending.get(state);
@@ -138,9 +194,6 @@ export class PosService {
       const companyGuid = query.get('guid') ?? '', companyId = query.get('company_id') ?? '';
       if (!/^[a-zA-Z0-9-]{8,100}$/.test(companyGuid) || !/^\d{1,20}$/.test(companyId)) throw badRequest('7shifts did not return a valid company grant.');
       creds = { ...(await sevenToken(this.f, app, this.now().getTime(), this.hosts.sevenshifts)), companyGuid, companyId };
-    } else if (provider === 'square') {
-      const t = await getJson(this.f, 'Square', `${this.apiHost('square')}/oauth2/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: app.appId, client_secret: app.secret, code, grant_type: 'authorization_code' }) });
-      creds = this.squareTokens({ environment: this.hosts.square ? 'sandbox' : 'production' }, t);
     } else {
       const merchantId = query.get('merchant_id');
       if (!merchantId) throw badRequest('Clover didn’t say which restaurant approved.');
@@ -152,6 +205,40 @@ export class PosService {
     const conn: PosConnection = { id: newId('pos'), companyId: p.companyId, provider, label: checked.label, credentialsEncrypted: encryptField(JSON.stringify(stored)), employeeMap: {}, connectedAt: this.iso() };
     this.store.tx(() => { if (this.connectionOf(p.companyId)) throw conflict('one_source', 'A source is already connected.'); this.store.posConnections.put(conn); });
     return this.view(conn);
+  }
+
+  private async squareFinish(query: URLSearchParams, signedInCompanyId: string | null, session: OAuthSession | null) {
+    const app = this.squareApp();
+    if (!app) throw conflict('sign_in_not_set_up', 'Connect Square isn’t set up on this server. It stays off unless SQUARE_ENVIRONMENT is sandbox.');
+    this.sweepUsedStates();
+    const state = query.get('state') ?? '';
+    const p = state ? this.pending.get(state) : undefined;
+    if (!p || p.provider !== 'square') {
+      if (state && this.usedStates.has(state)) throw badRequest('That Square sign-in was already used. Start again from Settings.');
+      throw badRequest('That Square sign-in link is not valid. Start again from Settings.');
+    }
+    this.pending.delete(state);
+    this.usedStates.set(state, this.now().getTime() + 60 * 60_000);
+    if (p.until < this.now().getTime()) throw badRequest('That Square sign-in link has expired. Start again from Settings.');
+    if (!signedInCompanyId || !safeEqual(signedInCompanyId, p.companyId)) throw new ApiError(403, 'wrong_company', 'Sign in to the same Totali account you started from, and try again.');
+    if (!p.userId || !p.sessionId || !session?.userId || !session.sessionId || !safeEqual(session.userId, p.userId) || !safeEqual(session.sessionId, p.sessionId)) {
+      throw new ApiError(403, 'wrong_session', 'Sign in to the same Totali session you started from, and try again.');
+    }
+    const code = query.get('code') ?? '';
+    if (query.get('error') || !code) throw badRequest('Square didn’t approve the connection.');
+    const known = [app.secret, code];
+    const t = await this.squareToken({ client_id: app.appId, client_secret: app.secret, code, grant_type: 'authorization_code', redirect_uri: app.redirectUrl }, known);
+    const creds = this.squareTokens({ environment: 'sandbox' }, t);
+    try {
+      const checked = await this.adapter('square', creds).check();
+      const stored = checked.creds ?? creds;
+      const conn: PosConnection = { id: newId('pos'), companyId: p.companyId, provider: 'square', label: checked.label, credentialsEncrypted: encryptField(JSON.stringify(stored)), employeeMap: {}, connectedAt: this.iso() };
+      this.store.tx(() => { if (this.connectionOf(p.companyId)) throw conflict('one_source', 'A source is already connected.'); this.store.posConnections.put(conn); });
+      return this.view(conn);
+    } catch (e) {
+      await this.revokeSquareToken(app, creds.accessToken).catch(() => undefined);
+      throw e;
+    }
   }
 
   toastStart(companyId: string) {
@@ -184,7 +271,71 @@ export class PosService {
   private squareTokens(base: Record<string, string>, t: Record<string, unknown>): Record<string, string> {
     if (!str(t.access_token)) throw new PosError('Square didn’t give an access token.');
     const exp = Date.parse(str(t.expires_at));
-    return { ...base, accessToken: str(t.access_token), accessExpiresAt: String(Number.isFinite(exp) ? Math.floor(exp / 1000) : 0), refreshToken: str(t.refresh_token) };
+    return { ...base, accessToken: str(t.access_token), accessExpiresAt: String(Number.isFinite(exp) ? Math.floor(exp / 1000) : 0), refreshToken: str(t.refresh_token) || base.refreshToken || '' };
+  }
+
+  private async squareToken(body: Record<string, string>, known: readonly string[]): Promise<Record<string, unknown>> {
+    try {
+      return await getJson(this.f, 'Square', `${SQUARE_HOSTS.sandbox}/oauth2/token`, { method: 'POST', headers: { 'content-type': 'application/json', 'square-version': SQUARE_VERSION }, body: JSON.stringify(body) });
+    } catch (e) {
+      throw new PosError(redactSecrets(e instanceof Error ? e.message : 'Square refused the connection.', known));
+    }
+  }
+
+  private refreshSquare(c: PosConnection, creds: Record<string, string>): Promise<Record<string, string>> {
+    const existing = this.squareRefreshInflight.get(c.id);
+    if (existing) return existing;
+    const job = this.refreshSquareOnce(c, creds).finally(() => { this.squareRefreshInflight.delete(c.id); });
+    this.squareRefreshInflight.set(c.id, job);
+    return job;
+  }
+
+  private async refreshSquareOnce(c: PosConnection, creds: Record<string, string>): Promise<Record<string, string>> {
+    const app = this.squareApp();
+    if (!app || creds.environment !== 'sandbox' || !creds.refreshToken) throw new PosError('Square sandbox is not configured, so the connection cannot be renewed.');
+    const known = [app.secret, creds.accessToken, creds.refreshToken];
+    const t = await this.squareToken({ client_id: app.appId, client_secret: app.secret, grant_type: 'refresh_token', refresh_token: creds.refreshToken }, known);
+    const next = this.squareTokens(creds, { ...t, refresh_token: str(t.refresh_token) || creds.refreshToken });
+    this.store.tx(() => {
+      const latest = this.store.posConnections.get(c.id);
+      if (!latest || latest.companyId !== c.companyId) return;
+      this.store.posConnections.put({ ...latest, credentialsEncrypted: encryptField(JSON.stringify(next)) });
+    });
+    return next;
+  }
+
+  private squareAuthedFetch(c: PosConnection, creds: Record<string, string>): Fetch {
+    let current = creds;
+    return (async (url: string, init?: RequestInit) => {
+      const first = await this.f(url, withBearer(init, current.accessToken));
+      if (first.status !== 401 || current.environment !== 'sandbox' || !current.refreshToken) return first;
+      await first.body?.cancel?.();
+      current = await this.refreshSquare(c, current);
+      return this.f(url, withBearer(init, current.accessToken));
+    }) as Fetch;
+  }
+
+  private async revokeSquareToken(app: SquareOAuthApp, accessToken: string): Promise<void> {
+    if (!accessToken) return;
+    const known = [app.secret, accessToken];
+    let res: Response;
+    try {
+      res = await this.f(`${SQUARE_HOSTS.sandbox}/oauth2/revoke`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'square-version': SQUARE_VERSION, authorization: `Client ${app.secret}` },
+        body: JSON.stringify({ client_id: app.appId, access_token: accessToken, revoke_only_access_token: false }),
+        signal: AbortSignal.timeout(25_000),
+      });
+    } catch {
+      throw new PosError('Couldn’t reach Square to revoke access. The connection was kept.');
+    }
+    if (res.status === 401 || res.status === 404) return;
+    if (!res.ok) {
+      let detail = '';
+      try { detail = redactSecrets(await res.text(), known).replace(/\s+/g, ' ').slice(0, 160); } catch { detail = ''; }
+      if (/\bEAAA[A-Za-z0-9_-]{8,}\b/.test(detail)) detail = '';
+      throw new PosError(`Square refused to revoke the connection (${res.status}).${detail ? ` ${detail}` : ''} The saved tokens were kept.`);
+    }
   }
 
   /** The adapter for a connection, with a short-lived OAuth token renewed first when it is about to run out. */
@@ -202,18 +353,29 @@ export class PosService {
       creds = this.cloverTokens(creds, t);
       this.store.tx(() => this.store.posConnections.put({ ...c, credentialsEncrypted: encryptField(JSON.stringify(creds)) }));
     }
-    if (c.provider === 'square' && creds.refreshToken && this.oauth.square && Number(creds.accessExpiresAt) * 1000 < nowMs + 86_400_000) {
-      const t = await getJson(this.f, 'Square', `${this.apiHost('square')}/oauth2/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_id: this.oauth.square.appId, client_secret: this.oauth.square.secret, grant_type: 'refresh_token', refresh_token: creds.refreshToken }) });
-      creds = this.squareTokens(creds, { ...t, refresh_token: str(t.refresh_token) || creds.refreshToken });
-      this.store.tx(() => this.store.posConnections.put({ ...c, credentialsEncrypted: encryptField(JSON.stringify(creds)) }));
+    if (c.provider === 'square' && creds.refreshToken && creds.environment === 'sandbox' && this.squareApp()) {
+      if (Number(creds.accessExpiresAt) * 1000 < nowMs + 86_400_000) creds = await this.refreshSquare(c, creds);
+      return squareAdapter(creds, this.squareAuthedFetch(c, creds), this.hosts.square);
     }
     return this.adapter(c.provider, creds);
   }
 
-  disconnect(companyId: string) {
+  async disconnect(companyId: string) {
     const c = this.connectionOf(companyId);
     if (!c) throw notFound('Connection');
-    this.store.tx(() => this.store.posConnections.delete(c.id));
+    if (c.provider === 'square') {
+      const creds = this.creds(c);
+      if (creds.refreshToken) {
+        if (creds.environment !== 'sandbox') throw new PosError('This Square connection is not a sandbox connection. Totali will not contact Square production, and the saved tokens were kept.');
+        const app = this.squareApp();
+        if (!app) throw new PosError('Square sandbox is not configured, so this connection cannot be revoked. It was kept.');
+        await this.revokeSquareToken(app, creds.accessToken);
+      }
+    }
+    this.store.tx(() => {
+      const latest = this.store.posConnections.get(c.id);
+      if (latest?.companyId === companyId) this.store.posConnections.delete(latest.id);
+    });
     return { ok: true };
   }
 

@@ -71,7 +71,7 @@ Totali is not a POS and does not take shifts or tips from anyone typing them in 
 | System | What it reads | How it signs in |
 | --- | --- | --- |
 | Toast | staff (`/labor/v1/employees`), hours and both kinds of tips from time entries (`/labor/v1/timeEntries`) | the restaurant's own API credentials made in Toast Web (client ID, secret, restaurant GUID) |
-| Square | team members, Labor API timecards with declared cash tips, card tips from payments by team member | an access token from the owner's Square developer account |
+| Square | team members, Labor API timecards with declared cash tips, card tips from payments by team member | Connect Square, sandbox OAuth only (`SQUARE_ENVIRONMENT=sandbox`) |
 | Clover | employees, shifts (epoch milliseconds, overrides honored, cash tips collected), card tips from payments by employee | a merchant ID and an access token from a Clover app the merchant installed. **Clover issues production tokens only through apps it approves**, so Totali needs its own Clover app registered before an owner can use this; the OAuth hand-off is not built |
 | 7shifts | users and time punches by business date | an access token from Company Settings, Developer Tools |
 
@@ -83,7 +83,7 @@ The Overview is built around the restaurant: a *Get set up* list (company detail
 
 The dashboard shows what is connected: the *Hours and tips* card (Overview and Time) says which system the hours come from, when they were last pulled, how many shifts and tips came in, and who is left out; the Time and tips checklist shows Hours and Tip entry as automatic; and the to-do list nudges owners to connect, or to match people.
 
-Getting live access to the systems whose APIs are partner-gated (Clover first) is a set of applications only the company can make. What each needs, who to contact, and the text to paste are in `docs/PARTNER_APPLICATIONS.md`. Clover's and Square's sign-in are already built: once Clover approves Totali's app (and for Square, once you register an app in the Square Developer Dashboard with `{PUBLIC_BASE_URL}/v1/pos/square/callback` as its redirect), set `CLOVER_APP_ID` / `CLOVER_APP_SECRET` and `SQUARE_APP_ID` / `SQUARE_APP_SECRET` and the owner gets a *Sign in with* button instead of pasting a token. Toast and 7shifts only offer a one-click sign-in to approved partners, so for now an owner pastes credentials they make themselves.
+Getting live access to the systems whose APIs are partner-gated (Clover first) is a set of applications only the company can make. What each needs, who to contact, and the text to paste are in `docs/PARTNER_APPLICATIONS.md`. Clover's sign-in and Square's Connect button are built. Clover still needs Clover to approve Totali's app (`CLOVER_APP_ID` / `CLOVER_APP_SECRET`, redirect `{PUBLIC_BASE_URL}/v1/pos/clover/callback`). Square is sandbox only: register the sandbox app with redirect `https://totali.tax/v1/pos/square/callback`, set `SQUARE_APPLICATION_ID`, `SQUARE_APPLICATION_SECRET` and `SQUARE_ENVIRONMENT=sandbox`, and the owner gets a one-click *Connect Square* button. Any other `SQUARE_ENVIRONMENT` leaves that button off. Toast and 7shifts only offer a one-click sign-in to approved partners, so for now an owner pastes credentials they make themselves.
 
 ### What isn't built yet
 

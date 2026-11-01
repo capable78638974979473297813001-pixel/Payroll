@@ -48,7 +48,7 @@ would lose data or break sign-in or billing is missing (`src/production.ts`). It
 ## 5. Sign-in and connections
 
 - [ ] **Google:** an OAuth client with `https://YOUR-SITE/v1/auth/google/callback`. Set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, or leave them off and the button hides.
-- [ ] **Square:** an application with redirect `https://YOUR-SITE/v1/pos/square/callback`; `SQUARE_APP_ID` / `SQUARE_APP_SECRET`. See `docs/PARTNER_APPLICATIONS.md`.
+- [ ] **Square (sandbox only):** a sandbox application with redirect `https://totali.tax/v1/pos/square/callback`; `SQUARE_APPLICATION_ID` / `SQUARE_APPLICATION_SECRET` / `SQUARE_ENVIRONMENT=sandbox`. See `docs/PARTNER_APPLICATIONS.md`.
 - [ ] **Clover:** the application in `docs/PARTNER_APPLICATIONS.md`. It takes weeks. Until then Clover restaurants use the report import.
 - [ ] Try one real pull from Toast, Square and 7shifts. They have only been tested against fakes.
 
