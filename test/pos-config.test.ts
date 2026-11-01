@@ -7,7 +7,7 @@ import { Store } from '../src/store/store.ts';
 test('all four apps require complete trimmed provider credentials', () => {
   assert.deepEqual(loadPosApps({}), {});
   assert.deepEqual(loadPosApps({ SQUARE_APP_ID: 'id', SQUARE_APP_SECRET: '  ' }), {});
-  const env = { SQUARE_APP_ID: ' square-id ', SQUARE_APP_SECRET: ' square-secret ', CLOVER_APP_ID: 'clover-id', CLOVER_APP_SECRET: 'clover-secret', SEVENSHIFTS_CLIENT_ID: 'seven-id', SEVENSHIFTS_CLIENT_SECRET: 'seven-secret', TOAST_PARTNER_CLIENT_ID: 'toast-id', TOAST_PARTNER_CLIENT_SECRET: 'toast-secret', TOAST_PARTNER_ENTRY_URL: 'https://pos.toasttab.com/integrations' };
+  const env = { SQUARE_APP_ID: ' square-id ', SQUARE_APP_SECRET: ' square-secret ', SQUARE_ENVIRONMENT: 'sandbox', CLOVER_APP_ID: 'clover-id', CLOVER_APP_SECRET: 'clover-secret', SEVENSHIFTS_CLIENT_ID: 'seven-id', SEVENSHIFTS_CLIENT_SECRET: 'seven-secret', TOAST_PARTNER_CLIENT_ID: 'toast-id', TOAST_PARTNER_CLIENT_SECRET: 'toast-secret', TOAST_PARTNER_ENTRY_URL: 'https://pos.toasttab.com/integrations' };
   const apps = loadPosApps(env);
   assert.equal(apps.square!.appId, 'square-id');
   assert.equal(apps.square!.secret, 'square-secret');
@@ -20,8 +20,9 @@ test('all four apps require complete trimmed provider credentials', () => {
   assert.equal(loadPosApps({...env, TOAST_PARTNER_ENTRY_URL: ''}).toast,undefined);
 });
 test('standard vendor credential aliases work, canonical names take precedence', () => {
-  assert.deepEqual(loadPosApps({ SQUARE_APPLICATION_ID: 'square-id', SQUARE_APPLICATION_SECRET: 'square-secret', CLOVER_CLIENT_ID: 'clover-id', CLOVER_CLIENT_SECRET: 'clover-secret' }),{square:{appId:'square-id',secret:'square-secret'},clover:{appId:'clover-id',secret:'clover-secret'}});
-  assert.equal(loadPosApps({SQUARE_APP_ID:'canonical',SQUARE_APPLICATION_ID:'alias',SQUARE_APP_SECRET:'secret'}).square!.appId,'canonical');
+  assert.deepEqual(loadPosApps({ SQUARE_APPLICATION_ID: 'square-id', SQUARE_APPLICATION_SECRET: 'square-secret', SQUARE_ENVIRONMENT: 'sandbox', CLOVER_CLIENT_ID: 'clover-id', CLOVER_CLIENT_SECRET: 'clover-secret' }),{square:{appId:'square-id',secret:'square-secret',environment:'sandbox',redirectUrl:'https://totali.tax/v1/pos/square/callback'},clover:{appId:'clover-id',secret:'clover-secret'}});
+  assert.equal(loadPosApps({ SQUARE_APPLICATION_ID: 'square-id', SQUARE_APPLICATION_SECRET: 'square-secret' }).square, undefined);
+  assert.equal(loadPosApps({SQUARE_APP_ID:'canonical',SQUARE_APPLICATION_ID:'alias',SQUARE_APP_SECRET:'secret',SQUARE_ENVIRONMENT:'sandbox'}).square!.appId,'canonical');
 });
 test('missing setup is actionable for each provider without exposing secret values', () => {
   const warnings=posSetupWarnings({SQUARE_APP_ID:'present-id'});

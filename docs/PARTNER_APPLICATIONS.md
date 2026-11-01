@@ -91,15 +91,15 @@ Ask NCR which API exposes labor and time clock data for Aloha Cloud, and whether
 
 What exists works without a partnership: a restaurant makes **standard API access** credentials in Toast Web and pastes them in. Becoming a Toast integration partner would let owners connect without making credentials, and Toast's help centre has an article titled "Become a Toast Integration Partner" that I could not open. Toast documents that a restaurant's relationship with an integration partner is separate from its relationship with Toast, and one third-party page says restaurants pay a *Toast Partner Connect* fee to enable third-party integrations.
 
-## Square (do this, it is self-serve)
+## Square (sandbox only, self-serve)
 
-Sign in with Square is built. To switch it on:
-1. In the Square Developer Dashboard, create an application.
-2. On its OAuth page set the redirect URL to `https://YOUR-SITE/v1/pos/square/callback`.
-3. Copy the production Application ID and Application Secret to the server as `SQUARE_APP_ID` and `SQUARE_APP_SECRET`.
-4. The *Sign in with Square* button appears by itself. Totali asks for `EMPLOYEES_READ`, `TIMECARDS_READ`, `PAYMENTS_READ` and `MERCHANT_PROFILE_READ`, and renews the 30-day token before it runs out.
+Connect Square is built, and it talks only to Square sandbox. To switch it on:
+1. In the Square Developer Dashboard, open the sandbox application (application id `sandbox-sq0idb-cdO9zp6TwXpggEEG3CmFEQ` for this project; the secret stays in the host's secret store, never in git).
+2. On its OAuth page set the redirect URL to exactly `https://totali.tax/v1/pos/square/callback`.
+3. Set `SQUARE_APPLICATION_ID`, `SQUARE_APPLICATION_SECRET`, and `SQUARE_ENVIRONMENT=sandbox`. Optional: `SQUARE_REDIRECT_URL` if the callback origin is not `https://totali.tax` (the path must stay `/v1/pos/square/callback`).
+4. The *Connect Square* button appears. Totali asks for `EMPLOYEES_READ`, `TIMECARDS_READ`, `MERCHANT_PROFILE_READ`, and `PAYMENTS_READ` (card tips are on payments, not on the timecard). It renews the token before it runs out and again if Square answers 401. Disconnect revokes the token at Square, then deletes the copy stored here.
 
-A restaurant with more than one Square location can't use the button yet; it has to use an access token and enter the location ID.
+Any `SQUARE_ENVIRONMENT` other than `sandbox` leaves the button off. Totali does not call `connect.squareup.com` for this flow. A restaurant with more than one Square location still has to say which location; Connect Square does not guess.
 
 ## What I can't do for you
 
