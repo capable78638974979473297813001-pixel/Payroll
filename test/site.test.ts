@@ -46,23 +46,13 @@ test('the site answers a load balancer, tells search engines what to leave alone
   assert.equal(xml.includes('/app'), false, 'private pages are not listed');
 });
 
-test('the front page and the legal pages are served, and a missing file is a 404, not the app', async () => {
-  for (const p of ['/', '/terms', '/privacy']) { const r = await fetch(base + p); assert.equal(r.status, 200, p); assert.match(await r.text(), /Totali: payroll for restaurants/); }
+test('every page of the site says only "In development", and a missing file is a 404', async () => {
+  for (const p of ['/', '/signup', '/terms', '/app']) {
+    const r = await fetch(base + p);
+    const t = await r.text();
+    assert.equal(r.status, 200, p);
+    assert.match(t, />In development</, p);
+    assert.equal(/<script|<a /i.test(t), false, 'nothing else on the page');
+  }
   assert.equal((await fetch(base + '/assets/nope.css')).status, 404);
-});
-
-test('with the holding page on, every page says only "In development" and the API still answers', async () => {
-  const held = createApp({ store, banks: new BankService(store, new FakeStripe()), ach: new AchService(store, new BankService(store, new FakeStripe()), new SandboxBank(), config.ach.config), config: { ...config, holdingPage: true }, mailer, accounts: new AccountService(store, mailer) });
-  await new Promise<void>((r) => held.server.listen(0, '127.0.0.1', r));
-  const b = `http://127.0.0.1:${(held.server.address() as AddressInfo).port}`;
-  try {
-    for (const p of ['/', '/signup', '/terms', '/app']) {
-      const r = await fetch(b + p);
-      const t = await r.text();
-      assert.equal(r.status, 200, p); assert.match(t, />In development</); assert.equal(t.includes('payroll for restaurants'), false, p);
-      assert.equal(r.headers.get('x-robots-tag'), 'noindex');
-    }
-    assert.equal((await fetch(b + '/ready')).status, 200);
-    assert.match(await (await fetch(b + '/robots.txt')).text(), /Disallow: \/\n/);
-  } finally { held.server.close(); }
 });

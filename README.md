@@ -19,6 +19,8 @@ Everything else (the niches, tip and wage rules, pay runs, API) is Totali's own,
 
 ## The web app
 
+**Right now the site is one page that says "In development".** The whole interface (landing, sign-up, dashboards, payroll screens) was removed from `web/`; the API and everything behind it still work. The last commit that has the interface is tagged `app-ui-before-holding-page`: `git checkout app-ui-before-holding-page -- web e2e` brings it back. The sections below describe that interface.
+
 `npm start`, then open http://localhost:8787. The server serves the app from `web/` (plain ES modules, no build step), built from the screens in `design/totali/`.
 
 **What you can do in it:** create an account (email code, or Google), pick an industry, answer a few questions and watch the dashboard build, then run payroll: enter hours and tips (or import a spreadsheet), review every paycheck, approve, open pay stubs, and download the payment file for your own bank. Invite new hires by email; they fill in their W-4, state form, I-9 section 1 and direct deposit on their phone from a private link. Time and tips by day, the tip pool, contractors with W-9s and a year-end export, job costing, crews and workers' comp classes, settings (including editing your setup answers), company setup, billing (card on file through Stripe) and help.

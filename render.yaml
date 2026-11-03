@@ -17,8 +17,6 @@ services:
         value: 22.18.0
       - key: NODE_ENV
         value: production
-      - key: TOTALI_HOLDING_PAGE    # 1: the site is one page saying "In development". Set to 0 to show the app.
-        value: "1"
       - key: TOTALI_TRUST_PROXY     # Render sits behind its own proxy
         value: "1"
       - key: TOTALI_DATA_FILE

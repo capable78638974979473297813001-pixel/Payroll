@@ -110,7 +110,6 @@ test('Connect Square is sandbox only and uses the existing callback route', () =
   for (const file of ['src/pos/config.ts', 'src/pos/service.ts', 'src/pos/square.ts', 'src/api/app.ts', 'src/pos/http.ts']) {
     assert.equal(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8').includes('sandbox-sq0idb-cdO9zp6TwXpggEEG3CmFEQ'), false, file);
   }
-  assert.match(readFileSync(new URL('../web/js/app/pos.js', import.meta.url), 'utf8'), /Connect Square/);
 });
 
 test('authorize redirect, callback, bad expired and reused state, and no production host', async () => {

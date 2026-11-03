@@ -23,8 +23,6 @@ export interface Config {
   devTools?: boolean;
   /** Where the web app's files are. Defaults to web/ in the repo. */
   webRoot?: string;
-  /** Serve one page that says "In development" instead of the web app. The API keeps working. On by default in production. */
-  holdingPage?: boolean;
   /** Pay employees automatically once a run is funded and the hold has passed. */
   autoDisburse: boolean;
   /** Requests per minute per client address. 0 turns the limiter off. */
@@ -87,7 +85,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(publicBaseUrl(env) ? { publicBaseUrl: publicBaseUrl(env) } : {}),
     devTools: env.TOTALI_DEV === '1' && env.NODE_ENV !== 'production',
     ...((env.TOTALI_WEB_ROOT ?? '').trim() ? { webRoot: (env.TOTALI_WEB_ROOT ?? '').trim() } : {}),
-    holdingPage: env.TOTALI_HOLDING_PAGE ? env.TOTALI_HOLDING_PAGE === '1' : env.NODE_ENV === 'production',
     autoDisburse: env.TOTALI_AUTO_DISBURSE === '1',
     rateLimitPerMinute: int(env, 'TOTALI_RATE_LIMIT_PER_MIN', 600, 0, 1_000_000),
     trustProxy: env.TOTALI_TRUST_PROXY === '1',
