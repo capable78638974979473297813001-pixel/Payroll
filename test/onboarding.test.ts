@@ -9,7 +9,7 @@ import { saveWeek } from '../src/domain/weekEntry.ts';
 import { ApiError } from '../src/lib/errors.ts';
 import { createCompanyFromSetup } from '../src/builder/finish.ts';
 import type { User } from '../src/accounts/types.ts';
-import { ROUTING } from './helpers.ts';
+import { ROUTING, posReady } from './helpers.ts';
 
 const D = '2026-10-30';
 const NOW = new Date(`${D}T15:00:00Z`);
@@ -49,6 +49,7 @@ test('the three forms fill in the employee, and the pay run leaves them out unti
   const r = await svc.invite(company.id, 'https://app.example', hireBody);
   const tok = tokenOf(r.link);
   saveWeek(store, company, { periodStart: '2026-11-02', periodEnd: '2026-11-08', entries: [{ employeeId: r.employee.id, regularMinutes: 1200 }] });
+  posReady(store, company.id, '2026-11-02', '2026-11-08');
   let run = draftPayRun(store, company.id, { periodStart: '2026-11-02', periodEnd: '2026-11-08', checkDate: '2026-11-13' });
   assert.equal(run.paychecks.length, 0);
   assert.ok(run.issues.some((i) => i.code === 'w4_missing'));

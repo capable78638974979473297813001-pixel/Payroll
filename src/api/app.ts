@@ -1,3 +1,5 @@
+import { loadPosApps } from '../pos/config.ts';
+import { redactSecrets } from '../pos/http.ts';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { ApiError, badRequest, forbidden, notFound, unauthorized } from '../lib/errors.ts';
 import * as v from '../lib/validate.ts';
@@ -6,6 +8,7 @@ import type { Store } from '../store/store.ts';
 import { assertAdmin, assertCompanyAccess, authenticate, type Principal } from '../domain/auth.ts';
 import { companyView, createCompany, updateCompany } from '../domain/companies.ts';
 import type { Employee } from '../domain/types.ts';
+import { posWorkspace } from '../pos/readiness.ts';
 import { PosService, type OAuthApps } from '../pos/service.ts';
 import type { PosProviderId } from '../pos/types.ts';
 import { addEmployee, employeeView, importYtd, requireEmployee, setPayoutAccounts, terminateEmployee, updateEmployee } from '../domain/employees.ts';
@@ -95,6 +98,8 @@ function cookieValue(header: string | undefined, name: string): string | undefin
 interface Ctx {
   req: IncomingMessage;
   user: User | null;
+  /** The session row behind the cookie, when this request is a signed-in browser. */
+  sessionId: string | null;
   params: Record<string, string>;
   query: URLSearchParams;
   raw: string;
@@ -155,7 +160,7 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
   const ownerEmail = (c: Ctx) => { const p = c.principal; const u = p && p.kind === 'company' && p.userId ? store.users.get(p.userId) : undefined; return u ? u.email : ''; };
   const google = deps.google !== undefined ? deps.google : (() => { const g = googleFromEnv(); return g ? new GoogleAuth(g, fetch, now) : null; })();
   const OAUTH_COOKIE = 'totali_oauth';
-  const oauth = deps.oauth ?? { ...(process.env.CLOVER_APP_ID && process.env.CLOVER_APP_SECRET ? { clover: { appId: process.env.CLOVER_APP_ID, secret: process.env.CLOVER_APP_SECRET } } : {}), ...(process.env.SQUARE_APP_ID && process.env.SQUARE_APP_SECRET ? { square: { appId: process.env.SQUARE_APP_ID, secret: process.env.SQUARE_APP_SECRET } } : {}) };
+  const oauth = deps.oauth ?? loadPosApps();
   const pos = new PosService(store, now, deps.posFetch ?? globalThis.fetch, config.devTools ? deps.posHosts ?? {} : {}, oauth);
   const taxCache = new Map<string, { at: number; value: unknown }>();
   const contractors = new ContractorService(store, mailer, now);
@@ -458,14 +463,21 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
     route('GET', `${C}/reports/hours`, 'company', (c) => { const [a, b] = range(c); const f = hoursReport(store, c.params.cid, a, b); return new Text(f.content, f.fileName); }),
     route('GET', `${C}/reports/roster`, 'company', (c) => { const f = roster(store, c.params.cid); return new Text(f.content, f.fileName); }),
     route('GET', `${C}/reports/wc`, 'company', (c) => { const r = wcReport(store, store.companies.require(c.params.cid, 'Company'), Number(c.query.get('year') ?? now().getUTCFullYear())); return c.query.get('format') === 'csv' ? new Text(r.csv, r.fileName) : { year: r.year, rows: r.rows, note: r.note }; }),
+    route('GET', `${C}/pos/workspace`, 'company', (c) => { const [a,b] = range(c); if (a > b) throw badRequest('start must be on or before end'); return posWorkspace(store, c.params.cid, a, b); }),
     route('GET', `${C}/pos`, 'company', (c) => pos.catalog(c.params.cid)),
     route('POST', `${C}/pos/connect`, 'company', async (c) => pos.connect(c.params.cid, c.json()), 201),
     route('DELETE', `${C}/pos`, 'company', (c) => pos.disconnect(c.params.cid)),
-    route('GET', `${C}/pos/:provider/start`, 'company', (c) => ({ url: pos.oauthStart(c.params.cid, c.params.provider as PosProviderId, `${siteBase(c.req)}/v1/pos/${c.params.provider}/callback`).url })),
+    route('POST', `${C}/pos/toast/start`, 'company', (c) => pos.toastStart(c.params.cid)),
+    route('POST', `${C}/pos/toast/complete`, 'company', async (c) => pos.toastComplete(c.params.cid)),
+    route('GET', `${C}/pos/:provider/start`, 'company', (c) => {
+      const session = c.sessionId && c.user ? { userId: c.user.id, sessionId: c.sessionId } : null;
+      return { url: pos.oauthStart(c.params.cid, c.params.provider as PosProviderId, `${siteBase(c.req)}/v1/pos/${c.params.provider}/callback`, session).url };
+    }),
     route('GET', '/v1/pos/:provider/callback', 'none', async (c) => {
       const back = (q: string) => new Reply({}, { location: `/app/settings/pos?${q}` }, 302);
-      try { await pos.oauthFinish(c.params.provider as PosProviderId, c.query, c.user?.companyId ?? null); return back('pos=connected'); }
-      catch (e) { return back(`pos_error=${encodeURIComponent(e instanceof Error ? e.message : 'Could not connect.')}`); }
+      const session = c.sessionId && c.user ? { userId: c.user.id, sessionId: c.sessionId } : null;
+      try { await pos.oauthFinish(c.params.provider as PosProviderId, c.query, c.user?.companyId ?? null, session); return back('pos=connected'); }
+      catch (e) { return back(`pos_error=${encodeURIComponent(redactSecrets(e instanceof Error ? e.message : 'Could not connect.'))}`); }
     }),
     route('GET', `${C}/pos/people`, 'company', async (c) => pos.people(c.params.cid)),
     route('POST', `${C}/pos/report`, 'company', (c) => pos.importReport(c.params.cid, c.json())),
@@ -723,11 +735,13 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
 
       const raw = method === 'GET' || method === 'DELETE' ? '' : await readBody(req);
       let user: User | null = null;
+      let sessionId: string | null = null;
       const sessionToken = req.headers.authorization ? undefined : cookieValue(req.headers.cookie, SESSION_COOKIE);
       if (sessionToken) {
         const found = accounts.resolveSession(sessionToken);
         if (found) {
           user = found.user;
+          sessionId = found.session.id;
           principal = user.companyId && user.emailVerifiedAt ? { kind: 'company', companyId: user.companyId, via: 'session', userId: user.id } : { kind: 'user', userId: user.id, via: 'session' };
           // A signed-in browser must prove the request came from our own pages.
           if (method !== 'GET' && method !== 'HEAD' && r.auth !== 'none') requireCsrf(req);
@@ -753,6 +767,7 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
       const ctx: Ctx = {
         req,
         user,
+        sessionId,
         params,
         query: url.searchParams,
         raw,
@@ -773,7 +788,7 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
     } catch (e) {
       if (e instanceof ApiError) send(e.status, { error: { code: e.code, message: e.message, ...(e.details !== undefined ? { details: e.details } : {}) } }, e.status === 429 ? { 'retry-after': String((e.details as { retryAfterSeconds?: number })?.retryAfterSeconds ?? 60) } : {});
       else {
-        log(`unhandled error on ${req.method} ${req.url}: ${(e as Error).stack ?? e}`);
+        log(redactSecrets(`unhandled error on ${req.method} ${req.url}: ${(e as Error).stack ?? e}`));
         send(500, { error: { code: 'internal_error', message: 'Something went wrong on our side. Nothing was changed if this was a write that failed before completing.' } });
       }
     } finally {

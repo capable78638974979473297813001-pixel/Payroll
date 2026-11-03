@@ -23,15 +23,17 @@ Everything else (the niches, tip and wage rules, pay runs, API) is Totali's own,
 
 **What you can do in it:** create an account (email code, or Google), pick an industry, answer a few questions and watch the dashboard build, then run payroll: enter hours and tips (or import a spreadsheet), review every paycheck, approve, open pay stubs, and download the payment file for your own bank. Invite new hires by email; they fill in their W-4, state form, I-9 section 1 and direct deposit on their phone from a private link. Time and tips by day, the tip pool, contractors with W-9s and a year-end export, job costing, crews and workers' comp classes, settings (including editing your setup answers), company setup, billing (card on file through Stripe) and help.
 
-**The look.** One design system, set in tokens at the top of `web/assets/style.css` and overridden last by `web/css/revamp.css`: a warm paper background, deep green accent, one type scale, hairline rules instead of boxed cards. The public pages (landing, sign up, sign in, Terms, Privacy) use `web/css/landing.css`; the landing page markup is `web/js/pages/landing.markup.js`. Change the colors and radius in `web/js/theme.js` and `src/dashboard/defaults.ts` together (the first is the browser's copy of the second).
+**The restaurant experience.** The landing page, login/recovery screens and signed-in app share a restaurant-focused design in `web/css/restaurant.css`. The app uses sidebar navigation and a focused home with the next payroll, run-by date, setup tasks, weekly hours, reported tips, labor by role and POS status. Everything comes from the existing company-scoped dashboard API. The detailed customizable dashboard is still available through *Customize view*; *Simple overview* returns to the focused home. Saved dashboard documents and themes are retained.
 
-**Customizable.** Every dashboard is a saved document: cards, sizes, order, tabs, colors, fonts, corners, density, navigation and the owner's own words are all settable (press *Customize*). There are no templates; two businesses start from what they said and diverge from there.
+**Payroll flow.** Run payroll opens directly on the next available period’s hours. Change periods beside the grid; valid edits save before switching. Paycheck tips and cash tips already received have separate fields and CSV columns. Review shows gross, employee tax and the amount still owed in the paycheck; expand any person’s breakdown for details. The total to set aside comes from the backend’s `fundingRequiredCents`, so cash already received is not funded twice. Every approval requires a final acknowledgement. Bank-file preparation and bank release remain separate from payroll approval.
+
+**Sign-in.** The redesigned screens retain the existing scrypt, verified-email, Google, password-recovery and session-revocation services. “Keep me signed in” is off initially for shared restaurant computers. Google appears only when configured. There is no employee sign-in link until employee accounts are supported.
 
 ### Run it locally
 
 ```bash
 cp .env.example .env
-TOTALI_DEV=1 npm start     # with no RESEND_API_KEY, emailed codes and links appear in the app instead of being sent
+npm run dev              # development email outbox; temporary data-encryption key if none is set
 ```
 
 ### Browser tests
@@ -52,7 +54,7 @@ Before real customers, follow `docs/LAUNCH.md` (what only you can do, in order).
 
 1. Render, *New*, *Blueprint*, pick this repo and branch. It asks for the secret values.
 2. **`TOTALI_DATA_KEY`**: 32 random bytes, base64 (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`). It encrypts SSNs and bank numbers. Back it up somewhere other than the disk; losing it makes them unrecoverable.
-3. **`PUBLIC_BASE_URL`**: the site's address, with `https://`. It makes cookies `Secure` and decides where links in emails point. Without it the server refuses to build email links.
+3. **`PUBLIC_BASE_URL`**: optional on Render, which supplies `RENDER_EXTERNAL_URL` automatically. Set it to your `https://` address when using a custom domain. The same resolved URL is used by startup checks, Secure cookies, email links and OAuth callbacks. Outside Render, set it explicitly.
 4. **`RESEND_API_KEY`** and **`RESEND_FROM`**: email. Verify your domain in Resend and use an address on it; until then Resend only delivers to its account owner.
 5. Optional: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (add `{PUBLIC_BASE_URL}/v1/auth/google/callback` as a redirect URI; the button is hidden without them), `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` / `STRIPE_WEBHOOK_SECRET` (the subscription and bank linking; point a Stripe webhook at `/v1/stripe/webhook` for `setup_intent.succeeded`), `SUPPORT_EMAIL` (where Help messages go).
 
@@ -69,7 +71,7 @@ Totali is not a POS and does not take shifts or tips from anyone typing them in 
 | System | What it reads | How it signs in |
 | --- | --- | --- |
 | Toast | staff (`/labor/v1/employees`), hours and both kinds of tips from time entries (`/labor/v1/timeEntries`) | the restaurant's own API credentials made in Toast Web (client ID, secret, restaurant GUID) |
-| Square | team members, Labor API timecards with declared cash tips, card tips from payments by team member | an access token from the owner's Square developer account |
+| Square | team members, Labor API timecards with declared cash tips, card tips from payments by team member | Connect Square, sandbox OAuth only (`SQUARE_ENVIRONMENT=sandbox`) |
 | Clover | employees, shifts (epoch milliseconds, overrides honored, cash tips collected), card tips from payments by employee | a merchant ID and an access token from a Clover app the merchant installed. **Clover issues production tokens only through apps it approves**, so Totali needs its own Clover app registered before an owner can use this; the OAuth hand-off is not built |
 | 7shifts | users and time punches by business date | an access token from Company Settings, Developer Tools |
 
@@ -81,7 +83,7 @@ The Overview is built around the restaurant: a *Get set up* list (company detail
 
 The dashboard shows what is connected: the *Hours and tips* card (Overview and Time) says which system the hours come from, when they were last pulled, how many shifts and tips came in, and who is left out; the Time and tips checklist shows Hours and Tip entry as automatic; and the to-do list nudges owners to connect, or to match people.
 
-Getting live access to the systems whose APIs are partner-gated (Clover first) is a set of applications only the company can make. What each needs, who to contact, and the text to paste are in `docs/PARTNER_APPLICATIONS.md`. Clover's and Square's sign-in are already built: once Clover approves Totali's app (and for Square, once you register an app in the Square Developer Dashboard with `{PUBLIC_BASE_URL}/v1/pos/square/callback` as its redirect), set `CLOVER_APP_ID` / `CLOVER_APP_SECRET` and `SQUARE_APP_ID` / `SQUARE_APP_SECRET` and the owner gets a *Sign in with* button instead of pasting a token. Toast and 7shifts only offer a one-click sign-in to approved partners, so for now an owner pastes credentials they make themselves.
+Getting live access to the systems whose APIs are partner-gated (Clover first) is a set of applications only the company can make. What each needs, who to contact, and the text to paste are in `docs/PARTNER_APPLICATIONS.md`. Clover's sign-in and Square's Connect button are built. Clover still needs Clover to approve Totali's app (`CLOVER_APP_ID` / `CLOVER_APP_SECRET`, redirect `{PUBLIC_BASE_URL}/v1/pos/clover/callback`). Square is sandbox only: register the sandbox app with redirect `https://totali.tax/v1/pos/square/callback`, set `SQUARE_APPLICATION_ID`, `SQUARE_APPLICATION_SECRET` and `SQUARE_ENVIRONMENT=sandbox`, and the owner gets a one-click *Connect Square* button. Any other `SQUARE_ENVIRONMENT` leaves that button off. Toast and 7shifts only offer a one-click sign-in to approved partners, so for now an owner pastes credentials they make themselves.
 
 ### What isn't built yet
 

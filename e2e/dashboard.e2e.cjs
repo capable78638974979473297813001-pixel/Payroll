@@ -15,25 +15,14 @@ const typesOnPage = (page) => page.locator('.grid.cards > .card[data-widget]').e
     await signUpAndVerify(page, server.base, { business: 'Maple & Main Diner' });
     await buildCompany(page, server.base);
 
-    // ---- the starting dashboard follows the business
-    assert.deepEqual(await page.locator('.nav .tabs a').allTextContents(), ['Overview', 'Payroll', 'People', 'Time and tips', 'Onboarding', 'Taxes', 'Reports']);
-    assert.deepEqual(await page.locator('.nav .rt2 a.hl').allTextContents(), ['Help', 'Settings']);
-    const start = await typesOnPage(page);
-    assert.deepEqual(start.slice(0, 4), ['setup_guide', 'next_payroll_hero', 'todo_list', 'week_snapshot']);
-    assert.equal(start.filter((t) => t === 'module').length, 8, 'the design\'s eight sections');
-    assert.equal(await page.locator('.nav .org').textContent(), 'MMaple & Main Diner', 'the initial mark and the business name');
+    // ---- restaurant overview is operational rather than a wall of configurable cards
+    assert.deepEqual(await page.locator('.restaurant-sidebar > .restaurant-nav a').allTextContents(), ['Overview', 'Payroll', 'People', 'Time and tips', 'Onboarding', 'Taxes', 'Reports']);
+    assert.ok(await page.locator('[data-testid=restaurant-overview]').isVisible());
+    assert.ok((await page.locator('.restaurant-switcher b').textContent()).includes('Maple & Main Diner'));
+    assert.ok((await page.locator('.restaurant-payday').textContent()).includes('Run it by'));
+    assert.ok((await page.locator('.restaurant-home-grid').textContent()).includes('Add your company details'));
+    assert.ok((await page.locator('.restaurant-metrics').textContent()).includes('Hours recorded'));
     assert.equal(await cssVar(page, '--d-accent'), '#1e5b47');
-    // the setup's answers are on the page, and the Michigan items from the builder
-    assert.ok((await page.locator('[data-type=built_from]').textContent()).includes('Detroit and Ferndale'));
-    assert.ok((await page.locator('[data-module=new_hire_forms]').textContent()).includes('MI-W4'));
-    assert.ok((await page.locator('[data-module=state_mi]').textContent()).includes('Detroit city income tax'));
-    // empty states, not errors
-    assert.ok((await page.locator('[data-module=pay_run]').textContent()).includes('Run payroll'));
-    assert.ok((await page.locator('[data-module=federal_taxes]').textContent()).includes('after your first pay run'));
-    assert.ok((await page.locator('[data-type=next_payroll_hero]').textContent()).includes('Run it by'), 'the home says when to run payroll by');
-    const guide = await page.locator('[data-type=setup_guide]').textContent();
-    assert.ok(guide.includes('Get set up') && guide.includes('Add your company details') && guide.includes('Run your first payroll'), 'and the steps to get going, in order');
-    assert.equal(await page.locator('[data-step=company] a.btn').count(), 1, 'with the next one marked');
     await shot('dash-start', true);
 
     // ---- customize: look
@@ -65,8 +54,8 @@ const typesOnPage = (page) => page.locator('.grid.cards > .card[data-widget]').e
     await page.fill('input[name=term_team]', 'Crew');
     await page.fill('input[name=term_people]', 'Staff');
     assert.ok((await page.locator('[data-module=team] .card-title').textContent()).includes('Crew'), 'the card uses the new word');
-    assert.ok((await page.locator('.nav .tabs [data-tab=people]').textContent()).includes('Staff'));
-    assert.equal(await page.locator('.nav .org .sub').textContent(), 'Breakfast all day');
+    assert.ok((await page.locator('.restaurant-sidebar > .restaurant-nav [data-tab=people]').textContent()).includes('Staff'));
+    assert.equal(await page.locator('.restaurant-switcher .sub').textContent(), 'Breakfast all day');
 
     // ---- cards: add, resize, reorder, settings, remove
     await page.click('[data-testid=open-add]');
@@ -122,10 +111,10 @@ const typesOnPage = (page) => page.locator('.grid.cards > .card[data-widget]').e
     await page.click('[data-testid=open-tabs]');
     await page.fill('input[name=newTab]', 'Bar');
     await page.click('[data-testid=add-tab]');
-    assert.ok(await page.locator('.nav .tabs [data-tab=bar]').isVisible());
+    assert.ok(await page.locator('.restaurant-sidebar > .restaurant-nav [data-tab=bar]').isVisible());
     await page.fill('input[name=newTab]', 'Contractors');
     await page.click('[data-testid=add-tab]');
-    assert.ok(await page.locator('.nav .tabs [data-tab=contractors-tab]').isVisible(), 'a reserved name gets a safe id');
+    assert.ok(await page.locator('.restaurant-sidebar > .restaurant-nav [data-tab=contractors-tab]').isVisible(), 'a reserved name gets a safe id');
     assert.equal(await page.locator('[data-tab-row=settings] button[aria-label*="Remove"]').count(), 0, 'Settings cannot be removed');
 
     // ---- save, reload, and it is all still there
@@ -142,8 +131,8 @@ const typesOnPage = (page) => page.locator('.grid.cards > .card[data-widget]').e
     await page.waitForSelector('[data-testid=grid]');
     assert.equal(await cssVar(page, '--d-accent'), '#9f1239');
     assert.equal(await page.locator('.dash').first().getAttribute('data-nav'), 'side');
-    assert.equal(await page.locator('.nav .org').textContent(), 'MMaple & MainBreakfast all day');
-    assert.ok(await page.locator('.nav .tabs [data-tab=bar]').isVisible());
+    assert.equal(await page.locator('.restaurant-switcher b').textContent(), 'Maple & Main');
+    assert.ok(await page.locator('.restaurant-sidebar > .restaurant-nav [data-tab=bar]').isVisible());
     assert.ok((await typesOnPage(page)).includes('note'));
     await shot('dash-saved', true);
 
@@ -177,7 +166,7 @@ const typesOnPage = (page) => page.locator('.grid.cards > .card[data-widget]').e
     await page.click('button:has-text("Start over")');
     await page.click('.modal button:has-text("Start over")');
     await page.waitForSelector('.editbar', { state: 'detached' });
-    assert.equal(await page.locator('.nav .org').textContent(), 'MMaple & Main Diner');
+    assert.equal(await page.locator('.restaurant-switcher b').textContent(), 'Maple & Main Diner');
     console.log('dashboard customization: ok');
   } finally {
     if (problems.length) console.log('browser problems:\n' + problems.join('\n'));

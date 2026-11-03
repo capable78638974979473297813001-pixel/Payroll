@@ -290,16 +290,19 @@ test('Sign in with Square: approve at Square, exchange the code, keep the tokens
     [/POST .*\/v2\/team-members\/search/, () => ({ team_members: [{ id: 'tm1', given_name: 'Ana', family_name: 'Cruz' }] })],
   ]);
   const { store, company, advance } = make(f.f);
-  const svc = new PosService(store, () => new Date(t), f.f, {}, { square: { appId: 'SQ-APP', secret: 'SQ-SECRET' } });
+  const square = { appId: 'SQ-APP', secret: 'SQ-SECRET', environment: 'sandbox' as const, redirectUrl: 'https://totali.tax/v1/pos/square/callback' };
+  const session = { userId: 'usr_owner', sessionId: 'ses_owner' };
+  const svc = new PosService(store, () => new Date(t), f.f, {}, { square });
   assert.equal(svc.catalog(company.id).providers.find((p) => p.id === 'square')!.signIn, true);
-  const { url, state } = svc.oauthStart(company.id, 'square', 'unused');
-  assert.equal(url, `https://connect.squareup.com/oauth2/authorize?client_id=SQ-APP&scope=EMPLOYEES_READ+TIMECARDS_READ+PAYMENTS_READ+MERCHANT_PROFILE_READ&session=false&state=${state}`);
+  const { url, state } = svc.oauthStart(company.id, 'square', 'unused', session);
+  assert.equal(url, `https://connect.squareupsandbox.com/oauth2/authorize?client_id=SQ-APP&scope=EMPLOYEES_READ+TIMECARDS_READ+MERCHANT_PROFILE_READ+PAYMENTS_READ&session=false&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(square.redirectUrl)}`);
   await assert.rejects(svc.oauthFinish('clover', new URLSearchParams({ state, code: 'c' }), company.id), /isn’t set up|expired/, 'a state made for Square is not good for Clover');
-  const again = svc.oauthStart(company.id, 'square', 'unused');
-  const conn = await svc.oauthFinish('square', new URLSearchParams({ state: again.state, code: 'the-code' }), company.id);
+  const again = svc.oauthStart(company.id, 'square', 'unused', session);
+  const conn = await svc.oauthFinish('square', new URLSearchParams({ state: again.state, code: 'the-code' }), company.id, session);
   assert.deepEqual([conn.provider, conn.label], ['square', 'Square: Harbor Street']);
   const exchange = f.calls.find((c) => /oauth2\/token/.test(c.url))!;
-  assert.deepEqual(exchange.body, { client_id: 'SQ-APP', client_secret: 'SQ-SECRET', code: 'the-code', grant_type: 'authorization_code' });
+  assert.equal(exchange.url, 'https://connect.squareupsandbox.com/oauth2/token');
+  assert.deepEqual(exchange.body, { client_id: 'SQ-APP', client_secret: 'SQ-SECRET', code: 'the-code', grant_type: 'authorization_code', redirect_uri: square.redirectUrl });
   assert.equal(JSON.stringify(store.posConnections.all()).includes('sq-at-1'), false, 'tokens are stored encrypted');
   await svc.people(company.id);
   assert.equal(refreshes, 0);

@@ -31,8 +31,7 @@ const { startServer, openBrowser, signUpAndVerify, buildCompany, FULL } = requir
 
     // a bonus goes on the run and shows in the totals
     await page.goto(`${server.base}/app/payroll/run`);
-    await page.waitForSelector('[data-period]');
-    await page.click('.card .btn:has-text("Continue")');
+    await page.waitForSelector('[data-testid=pay-period]');
     await page.waitForSelector('table.tbl input');
     const reg = page.locator('tbody tr', { hasText: 'Priya' }).locator('input[data-key=reg]'); await reg.fill('40'); await reg.dispatchEvent('change');
     await page.click('[data-testid=add-extra]');
@@ -40,7 +39,7 @@ const { startServer, openBrowser, signUpAndVerify, buildCompany, FULL } = requir
     await page.fill('.modal input[name=amount]', '250.00');
     await page.click('.modal button:has-text("Add")');
     await page.waitForSelector('[data-adjustment="0"]:has-text("Holiday bonus")');
-    await page.click('.btn:has-text("Continue to review")');
+    await page.click('.btn:has-text("Review payroll")');
     await page.waitForURL('**/app/payroll/runs/**');
     await page.waitForSelector('h3:has-text("Every paycheck")');
     const gross = await page.locator('tbody tr[data-employee]').first().textContent();

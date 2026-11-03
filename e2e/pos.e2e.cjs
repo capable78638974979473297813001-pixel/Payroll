@@ -82,16 +82,14 @@ const fake = http.createServer((req, res) => {
 
     // the dashboard now says where hours come from, and the Time and tips list says they are automatic
     await page.goto(`${server.base}/app`);
-    await page.waitForSelector('[data-testid=pos-live]');
-    const live = await page.locator('[data-testid=pos-live]').textContent();
-    assert.ok(live.includes('7shifts') && live.includes('last pulled today') && live.includes('2 shifts for 2 people'), live);
-    assert.ok((await page.locator('[data-module=hours_tips] [data-item=hours_entry]').textContent()).includes('From 7shifts'));
+    await page.waitForSelector('.restaurant-pos-status');
+    const live = await page.locator('.restaurant-pos-status').textContent();
+    assert.ok(live.includes('7shifts') && live.includes('Last import'), live);
     if (shots) await page.screenshot({ path: `${shots}/pos-dashboard.png`, fullPage: true });
 
     // Run payroll reads the same hours, and has its own button
     await page.goto(`${server.base}/app/payroll/run`);
-    await page.waitForSelector('[data-period]');
-    await page.click('.card .btn:has-text("Continue")');
+    await page.waitForSelector('[data-testid=pay-period]');
     await page.waitForSelector('table.tbl input');
     await page.waitForSelector('[data-testid=pull-hours]');
     const ana = page.locator('tbody tr', { hasText: 'Ana' }).locator('input[data-key=reg]');

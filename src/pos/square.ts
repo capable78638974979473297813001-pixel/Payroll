@@ -5,17 +5,33 @@ import { localDate } from './zone.ts';
 /**
  * Square, with an access token from the owner's own Square developer account (or an OAuth token).
  * Needs permission to read EMPLOYEES, TIMECARDS and PAYMENTS.
- *   POST /v2/team-members/search      staff
- *   POST /v2/labor/timecards/search   clocked shifts and declared cash tips (the successor to SearchShifts)
- *   GET  /v2/payments                 card tips, which belong to the team member on the payment
+ *   POST /v2/team-members/search      staff (EMPLOYEES_READ)
+ *   POST /v2/labor/timecards/search   clocked shifts and declared cash tips (TIMECARDS_READ)
+ *   GET  /v2/payments                 card tips, which belong to the team member on the payment (PAYMENTS_READ)
+ *   GET  /v2/locations                which restaurant this token can see (MERCHANT_PROFILE_READ)
+ *
+ * PAYMENTS_READ is required for tips. A timecard carries declared cash tips only. Card tips live on the payment.
  */
 export const SQUARE_HOSTS = { production: 'https://connect.squareup.com', sandbox: 'https://connect.squareupsandbox.com' } as const;
+export const SQUARE_VERSION = '2026-09-16';
+/** Read-only. PAYMENTS_READ is how card tips are attributed to the person who rang the sale. */
+export const SQUARE_OAUTH_SCOPES = ['EMPLOYEES_READ', 'TIMECARDS_READ', 'MERCHANT_PROFILE_READ', 'PAYMENTS_READ'] as const;
+/** OAuth state is single-use and dies after this. Short on purpose. */
+export const SQUARE_OAUTH_STATE_MS = 10 * 60_000;
 const WHO = 'Square';
-const VERSION = '2026-09-16';
+
+/** Sandbox OAuth tokens never call Square production, even if a dev host override points there. */
+export function squareApiHost(creds: Record<string, string>, hostOverride?: string): string {
+  if (creds.environment === 'sandbox') {
+    if (hostOverride === SQUARE_HOSTS.production) throw new PosError('Square sandbox connections cannot call Square production.');
+    return hostOverride ?? SQUARE_HOSTS.sandbox;
+  }
+  return hostOverride ?? SQUARE_HOSTS.production;
+}
 
 export function squareAdapter(creds: Record<string, string>, f: Fetch, hostOverride?: string): PosAdapter {
-  const host = hostOverride ?? (creds.environment === 'sandbox' ? SQUARE_HOSTS.sandbox : SQUARE_HOSTS.production);
-  const headers = { authorization: `Bearer ${creds.accessToken}`, 'square-version': VERSION, 'content-type': 'application/json' };
+  const host = squareApiHost(creds, hostOverride);
+  const headers = { authorization: `Bearer ${creds.accessToken}`, 'square-version': SQUARE_VERSION, 'content-type': 'application/json' };
   let locationId = creds.locationId ?? '';
   const call = (method: 'GET' | 'POST', path: string, body?: unknown) => getJson(f, WHO, `${host}${path}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
   const location = async () => {

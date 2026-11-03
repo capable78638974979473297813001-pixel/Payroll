@@ -72,8 +72,7 @@ const CSV = [
 
     // Run payroll offers the same import
     await page.goto(`${server.base}/app/payroll/run`);
-    await page.waitForSelector('[data-period]');
-    await page.click('.card .btn:has-text("Continue")');
+    await page.waitForSelector('[data-testid=pay-period]');
     await page.waitForSelector('[data-testid=pull-hours]:has-text("Import a report")');
     console.log('report import: ok');
   } finally {

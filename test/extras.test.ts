@@ -9,7 +9,7 @@ import { draftPayRun, recalculatePayRun } from '../src/payroll/payRuns.ts';
 import { ApiError } from '../src/lib/errors.ts';
 import type { User } from '../src/accounts/types.ts';
 import type { Answers } from '../src/builder/catalog.ts';
-import './helpers.ts';
+import { posReady } from './helpers.ts';
 
 const D = '2026-10-30'; const NOW = new Date(`${D}T15:00:00Z`);
 const BASE: Answers = { state: 'TX', locations: [{ name: 'Main', city: 'Austin', state: 'TX' }], team: '1-10', tips: { on: true, pool: 'hours' }, frequency: { value: 'weekly', weekday: 'friday' }, contractors: { on: false } };
@@ -18,6 +18,7 @@ const make = (extra: Partial<Answers> = {}) => {
   const company = createCompanyFromSetup(store, { id: 'u1', businessName: 'Harbor' } as User, 'restaurant', { ...BASE, ...extra }, D, NOW);
   const emp = addEmployee(store, company.id, { firstName: 'Ana', lastName: 'Cruz', roleKey: 'line_cook', hireDate: '2026-01-05', payType: { kind: 'hourly', rateCents: 2000 }, ssn: '512-34-9001' });
   saveWeek(store, company, { periodStart: '2026-10-19', periodEnd: '2026-10-25', entries: [{ employeeId: emp.id, regularMinutes: 2400 }] });
+  posReady(store, company.id, '2026-10-19', '2026-10-25');
   return { store, company, emp };
 };
 const pc = (store: Store, id: string, empId: string) => store.payRuns.get(id)!.paychecks.find((p) => p.employeeId === empId)!;
