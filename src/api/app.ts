@@ -43,6 +43,8 @@ import { AccountService, publicUser } from '../accounts/accounts.ts';
 import { OutboxMailer, type Mailer } from '../mail/mailer.ts';
 import type { User } from '../accounts/types.ts';
 import { SECURITY_HEADERS, serveStatic } from '../web/static.ts';
+
+const HOLDING_PAGE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Totali</title><style>html,body{height:100%;margin:0}body{display:grid;place-items:center;background:#faf8f3;color:#1b1b18;font:400 20px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}</style></head><body><p>In development</p></body></html>';
 import { fileURLToPath } from 'node:url';
 import { assertIndustry, build, checkAnswer, INDUSTRY_CARDS, normalizeAnswers, questionsFor, TEAM_SIZES } from '../builder/catalog.ts';
 import { createCompanyFromSetup } from '../builder/finish.ts';
@@ -181,7 +183,7 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
       store.tx(() => store.counters.put({ id: 'ready-probe', value: now().getTime() }));
       return { ok: true };
     }),
-    route('GET', '/robots.txt', 'none', (c) => new Text(`User-agent: *\nAllow: /$\nAllow: /terms\nAllow: /privacy\nAllow: /signup\nAllow: /login\nDisallow: /app\nDisallow: /setup\nDisallow: /v1/\n${config.publicBaseUrl ? `Sitemap: ${config.publicBaseUrl}/sitemap.xml\n` : ''}`, undefined, 'text/plain; charset=utf-8')),
+    route('GET', '/robots.txt', 'none', (c) => new Text(`User-agent: *\nAllow: /$\nAllow: /terms\nAllow: /privacy\nAllow: /signup\nAllow: /login\nDisallow: /app\nDisallow: /setup\nDisallow: /v1/\n${config.holdingPage ? 'Disallow: /\n' : ''}${config.publicBaseUrl ? `Sitemap: ${config.publicBaseUrl}/sitemap.xml\n` : ''}`, undefined, 'text/plain; charset=utf-8')),
     route('GET', '/sitemap.xml', 'none', (c) => {
       const base = config.publicBaseUrl ?? siteBase(c.req);
       const day = now().toISOString().slice(0, 10);
@@ -690,6 +692,12 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
       const url = new URL(req.url ?? '/', 'http://localhost');
       // The app itself: every GET outside the API is a file in web/, or a page the front end routes.
       if ((method === 'GET' || method === 'HEAD') && !url.pathname.startsWith('/v1/') && !['/health', '/ready', '/robots.txt', '/sitemap.xml'].includes(url.pathname)) {
+        if (config.holdingPage) {
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...SECURITY_HEADERS });
+          res.end(method === 'HEAD' ? undefined : HOLDING_PAGE);
+          status = 200;
+          return;
+        }
         if (serveStatic(webRoot, req, res, url.pathname)) {
           status = 200;
           return;

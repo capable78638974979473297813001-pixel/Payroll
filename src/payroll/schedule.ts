@@ -73,7 +73,7 @@ export function suggestPeriods(company: Company, today: string, runs: PayRun[], 
   const out: SuggestedPeriod[] = [];
   let p = periodContaining(company, today, runs);
   for (let i = 0; i < n; i++) {
-    if (notBefore && p.periodEnd < notBefore) break;
+    if (i > 0 && notBefore && p.periodEnd < notBefore) break;
     const run = live.find((r) => r.periodStart === p.periodStart && r.periodEnd === p.periodEnd) ?? live.find((r) => r.periodStart <= p.periodEnd && r.periodEnd >= p.periodStart);
     out.push({ ...p, state: run ? (run.status === 'completed' ? 'paid' : 'in_progress') : 'open', ...(run ? { runId: run.id } : {}), current: p.periodEnd >= today });
     p = previousPeriod(company, p, runs);
