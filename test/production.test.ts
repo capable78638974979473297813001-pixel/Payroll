@@ -27,6 +27,8 @@ test('production starts only when it will not lose data or break sign-in and bil
   assert.match(productionProblems({ ...GOOD, TOTALI_DEV: '1' }).errors.join(), /TOTALI_DEV/);
   assert.match(productionProblems({ ...GOOD, TOTALI_ACH_MODE: 'sandbox' }).errors.join(), /simulated bank/);
   assert.match(productionProblems({ ...GOOD, TOTALI_ADMIN_TOKEN: 'short' }).errors.join(), /too short/);
+  assert.ok(productionProblems(GOOD).warnings.some((w) => /BOFA_WEBHOOK_USER and BOFA_WEBHOOK_KEY/.test(w)));
+  assert.equal(productionProblems({ ...GOOD, BOFA_WEBHOOK_USER: 'cashpro-user', BOFA_WEBHOOK_KEY: 'cashpro-key' }).warnings.some((w) => /BOFA_WEBHOOK_USER/.test(w)), false);
 });
 
 test('missing Stripe is a warning, not a reason to stop, and a test key is called out', () => {

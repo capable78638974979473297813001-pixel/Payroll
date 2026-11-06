@@ -54,6 +54,7 @@ import { stateFacts } from '../builder/facts.ts';
 import { statesWithRuleset } from '../../engine/src/registry.ts';
 import { DashboardService } from '../dashboard/service.ts';
 import { dashboardData } from '../dashboard/data.ts';
+import { handleBofaAuth, handleBofaWebhook, scrubBofaLog, type BofaResult } from '../bofa/notify.ts';
 
 const MAX_BODY = 1_000_000;
 /** Failed authentications allowed per client address per minute before everything from it is refused. */
@@ -112,7 +113,7 @@ interface Route {
   method: string;
   re: RegExp;
   keys: string[];
-  auth: 'none' | 'admin' | 'company' | 'user';
+  auth: 'none' | 'admin' | 'company' | 'user' | 'bofa';
   handler: Handler;
   status: number;
 }
@@ -179,6 +180,12 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
       try { host = new URL(origin).host; } catch { /* malformed */ }
       if (host !== req.headers.host) throw forbidden('Cross-origin request refused.');
     }
+  };
+  /** CashPro answers with its own status codes. A 200 is the route default; anything else overrides it. */
+  const bofaReply = (c: Ctx, result: BofaResult) => {
+    if (result.log) log(scrubBofaLog(result.log));
+    if (result.authFailure && config.rateLimitPerMinute > 0) limiter.hit(`auth:${c.ip}`, AUTH_FAILURES_PER_MINUTE, now().getTime());
+    return result.status === 200 ? result.body : new Reply(result.body, {}, result.status);
   };
 
   const routes: Route[] = [
@@ -424,6 +431,9 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
     route('POST', `${C}/billing/checkout/finish`, 'company', async (c) => billing.finishCheckout(c.params.cid, c.json().sessionId)),
     route('POST', `${C}/billing/portal`, 'company', async (c) => billing.portal(c.params.cid, siteBase(c.req))),
     route('POST', '/v1/stripe/webhook', 'none', async (c) => billing.webhook(c.raw, String(c.req.headers['stripe-signature'] ?? '') || undefined, (process.env.STRIPE_WEBHOOK_SECRET ?? '').trim() || undefined)),
+    // CashPro calls these with the User ID and key we gave them. The handler checks that itself.
+    route('POST', '/api/bofa/auth', 'bofa', (c) => bofaReply(c, handleBofaAuth({ env: process.env, nowMs: now().getTime(), raw: c.raw, headers: c.req.headers }))),
+    route('POST', '/api/bofa/webhook', 'bofa', (c) => bofaReply(c, handleBofaWebhook({ env: process.env, store, nowMs: now().getTime(), raw: c.raw, headers: c.req.headers }))),
     route('GET', `${C}/tax-accounts`, 'company', (c) => taxAccountsView(store.companies.require(c.params.cid, 'Company'))),
     route('PUT', `${C}/tax-accounts`, 'company', (c) => saveTaxAccounts(store, c.params.cid, c.json())),
     route('POST', `${C}/support`, 'company', async (c) => {
@@ -701,8 +711,11 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
       if (config.rateLimitPerMinute > 0 && wait) throw new ApiError(429, 'rate_limited', `Too many requests. Try again in ${wait} seconds.`, { retryAfterSeconds: wait });
 
       const url = new URL(req.url ?? '/', 'http://localhost');
+      const pathOnly = url.pathname.replace(/\/+$/, '') || '/';
+      const isBofaApi = pathOnly === '/api/bofa/auth' || pathOnly === '/api/bofa/webhook';
       // The app itself: every GET outside the API is a file in web/, or a page the front end routes.
-      if ((method === 'GET' || method === 'HEAD') && !url.pathname.startsWith('/v1/') && !['/health', '/ready', '/robots.txt', '/sitemap.xml'].includes(url.pathname)) {
+      // CashPro's two URLs are API routes with no file extension, so they must not fall through to the holding page.
+      if ((method === 'GET' || method === 'HEAD') && !isBofaApi && !url.pathname.startsWith('/v1/') && !['/health', '/ready', '/robots.txt', '/sitemap.xml'].includes(url.pathname)) {
         if (serveStatic(webRoot, req, res, url.pathname)) {
           status = 200;
           return;
@@ -729,7 +742,7 @@ export function createApp(deps: { oauth?: OAuthApps; posFetch?: typeof fetch; po
       const raw = method === 'GET' || method === 'DELETE' ? '' : await readBody(req);
       let user: User | null = null;
       let sessionId: string | null = null;
-      const sessionToken = req.headers.authorization ? undefined : cookieValue(req.headers.cookie, SESSION_COOKIE);
+      const sessionToken = r.auth === 'bofa' || req.headers.authorization ? undefined : cookieValue(req.headers.cookie, SESSION_COOKIE);
       if (sessionToken) {
         const found = accounts.resolveSession(sessionToken);
         if (found) {
