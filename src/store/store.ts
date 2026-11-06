@@ -5,6 +5,7 @@ import { notFound } from '../lib/errors.ts';
 import type { EmailCode, Session, User } from '../accounts/types.ts';
 import type { PosConnection } from '../pos/types.ts';
 import type { DashboardDoc } from '../dashboard/service.ts';
+import type { BofaNotification } from '../bofa/notify.ts';
 import type { AchFile, ApiKey, AuditEntry, BankAccount, BankLink, Company, Contractor, Counter, Job, Employee, HouseDay, LedgerEntry, MoneyLeg, PayRun, Shift, TaxDeposit } from '../domain/types.ts';
 
 /**
@@ -97,6 +98,8 @@ export class Store {
   readonly posConnections = new Collection<PosConnection>(this, 'posConnections');
   /** Stripe event ids already applied, so a retry is not applied twice. */
   readonly stripeEvents = new Collection<{ id: string; at: string }>(this, 'stripeEvents');
+  /** CashPro payment-status notifications, one row per distinct payload. */
+  readonly bofaNotifications = new Collection<BofaNotification>(this, 'bofaNotifications');
 
   private readonly collections: Record<string, Collection<Doc>>;
   private db: DatabaseSync | undefined;
@@ -104,7 +107,7 @@ export class Store {
 
   constructor(path?: string) {
     this.collections = Object.fromEntries(
-      [this.companies, this.employees, this.shifts, this.houseDays, this.payRuns, this.legs, this.ledger, this.apiKeys, this.taxDeposits, this.bankAccounts, this.bankLinks, this.achFiles, this.counters, this.auditLog, this.users, this.emailCodes, this.sessions, this.dashboards, this.contractors, this.jobs, this.posConnections, this.stripeEvents].map((c) => [c.name, c as unknown as Collection<Doc>]),
+      [this.companies, this.employees, this.shifts, this.houseDays, this.payRuns, this.legs, this.ledger, this.apiKeys, this.taxDeposits, this.bankAccounts, this.bankLinks, this.achFiles, this.counters, this.auditLog, this.users, this.emailCodes, this.sessions, this.dashboards, this.contractors, this.jobs, this.posConnections, this.stripeEvents, this.bofaNotifications].map((c) => [c.name, c as unknown as Collection<Doc>]),
     );
     if (path) this.open(path);
   }

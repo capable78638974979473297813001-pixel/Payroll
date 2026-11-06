@@ -35,6 +35,7 @@ export function productionProblems(env: NodeJS.ProcessEnv): Problems {
     if (!has('STRIPE_PUBLISHABLE_KEY')) warnings.push('STRIPE_PUBLISHABLE_KEY is not set: owners cannot link a bank account.');
   }
   if (!has('SUPPORT_EMAIL')) warnings.push('SUPPORT_EMAIL is not set: Help messages go to hello@omnia.tax.');
+  if (!has('BOFA_WEBHOOK_USER') || !has('BOFA_WEBHOOK_KEY')) warnings.push('BOFA_WEBHOOK_USER and BOFA_WEBHOOK_KEY are not both set: Bank of America payment status notifications are refused.');
   if (!has('GOOGLE_CLIENT_ID')) warnings.push('Sign in with Google is off (GOOGLE_CLIENT_ID is not set).');
   warnings.push(...posSetupWarnings(env));
   return { errors, warnings };

@@ -64,20 +64,22 @@ test('rotation re-encrypts SSNs, bank numbers and ACH files under the new key, a
   const { company } = newCompany(store);
   const e = hire(store, company.id, { ssn: '512-34-7777' });
   const acct = bankAccount(store, { companyId: company.id, ownerKind: 'company', ownerId: company.id, accountNumber: '000555444333' });
-  store.tx(() =>
-    store.achFiles.put({ id: 'ach_1', companyId: company.id, kind: 'debit', rail: 'totali', fileName: 'f.ach', contentEncrypted: encryptField('FILE WITH 000555444333'), effectiveDate: '2026-06-09', entries: [], totals: { entryCount: 1, debitCents: 1, creditCents: 0 }, status: 'accepted', createdAt: 'x', updatedAt: 'x' }),
-  );
+  store.tx(() => {
+    store.achFiles.put({ id: 'ach_1', companyId: company.id, kind: 'debit', rail: 'totali', fileName: 'f.ach', contentEncrypted: encryptField('FILE WITH 000555444333'), effectiveDate: '2026-06-09', entries: [], totals: { entryCount: 1, debitCents: 1, creditCents: 0 }, status: 'accepted', createdAt: 'x', updatedAt: 'x' });
+    store.bofaNotifications.put({ id: 'bofa_1', receivedAt: '2026-11-06T00:00:00.000Z', transactionIdentification: 'TX1', endToEndIdentification: 'E2E', paymentStatus: 'Processing By Bank', payloadEncrypted: encryptField('{"accountNumber":"000555444333"}') });
+  });
 
   process.env.TOTALI_DATA_KEY = keyB;
   process.env.TOTALI_DATA_KEY_PREVIOUS = keyA;
   const first = rotateDataKey(store);
-  assert.deepEqual(first, { employees: 1, bankAccounts: 1, achFiles: 1 });
-  assert.deepEqual(rotateDataKey(store), { employees: 0, bankAccounts: 0, achFiles: 0 }, 'idempotent');
+  assert.deepEqual(first, { employees: 1, bankAccounts: 1, achFiles: 1, bofaNotifications: 1 });
+  assert.deepEqual(rotateDataKey(store), { employees: 0, bankAccounts: 0, achFiles: 0, bofaNotifications: 0 }, 'idempotent');
 
   delete process.env.TOTALI_DATA_KEY_PREVIOUS; // the old key is retired
   assert.equal(decryptField(store.employees.get(e.id)!.ssnEncrypted!), '512-34-7777');
   assert.equal(decryptField(store.bankAccounts.get(acct.id)!.accountNumberEncrypted), '000555444333');
   assert.equal(decryptField(store.achFiles.get('ach_1')!.contentEncrypted), 'FILE WITH 000555444333');
+  assert.equal(decryptField(store.bofaNotifications.get('bofa_1')!.payloadEncrypted), '{"accountNumber":"000555444333"}');
 });
 
 test('rotation is all or nothing: a value no configured key can open aborts it without changing anything', () => {

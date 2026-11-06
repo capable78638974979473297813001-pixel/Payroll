@@ -73,3 +73,9 @@ services:
         sync: false
       - key: STRIPE_PUBLISHABLE_KEY
         sync: false
+      # CashPro payment-status notifications. We choose both values and give them to Bank of America.
+      # Either one missing makes POST /api/bofa/auth and POST /api/bofa/webhook answer 503.
+      - key: BOFA_WEBHOOK_USER
+        sync: false
+      - key: BOFA_WEBHOOK_KEY
+        sync: false
